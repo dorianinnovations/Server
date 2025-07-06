@@ -19,7 +19,11 @@ const taskSchema = new mongoose.Schema({
   priority: { type: Number, default: 0, min: 0, max: 10 },
 });
 
-taskSchema.index({ runAt: 1, status: 1, priority: -1 });
+// Performance indexes
+taskSchema.index({ runAt: 1, status: 1, priority: -1 }); // Existing index
+taskSchema.index({ userId: 1, status: 1, priority: -1, runAt: 1 }); // Compound for user task processing
+taskSchema.index({ userId: 1, taskType: 1, status: 1 }); // For task type queries
+
 const Task = mongoose.model("Task", taskSchema);
 console.log("✓Task schema and model defined.");
 

@@ -13,15 +13,18 @@ const allowedOrigins = [
 
 export const corsMiddleware = cors({
   origin: (origin, callback) => {
+    console.log(`CORS request from origin: ${origin}`);
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `The CORS policy for this site does not allow access from the specified Origin.`;
+      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+      console.log(`CORS blocked: ${msg}`);
       return callback(new Error(msg), false);
     }
+    console.log(`CORS allowed for origin: ${origin}`);
     return callback(null, true);
   },
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "authorization"],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 });
 
@@ -55,8 +58,25 @@ export const completionRateLimiter = rateLimit({
   },
 });
 
-// Security and compression middleware
-export const securityMiddleware = [
-  helmet(), // Apply security headers
-  compression(), // Enable gzip compression for responses
-]; 
+// Enhanced compression middleware with optimized settings
+export const optimizedCompression = compression({
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  },
+  level: 6,    // Good balance of compression vs CPU
+  threshold: 1024, // Only compress responses > 1KB
+});
+
+// Security middleware
+export const securityMiddleware = helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+}); 
