@@ -32,7 +32,7 @@ export const createLLMService = () => {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "Referer": process.env.HTTP_REFERER || "http://localhost:3000",
+          "Referer": getRefererUrl(),
           "X-Title": "Numina Server",
         },
         data: {
@@ -93,7 +93,7 @@ export const createLLMService = () => {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "Referer": process.env.HTTP_REFERER || "http://localhost:3000",
+          "Referer": getRefererUrl(),
           "X-Title": "Numina Server",
         },
         data: {
@@ -123,7 +123,7 @@ export const createLLMService = () => {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "Referer": process.env.HTTP_REFERER || "http://localhost:3000",
+          "Referer": getRefererUrl(),
           "X-Title": "Numina Server",
         },
         data: {
