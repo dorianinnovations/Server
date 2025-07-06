@@ -2,23 +2,11 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import dotenv from "dotenv";
-import mongoose from "mongoose";
 import https from "https";
 
-// Load environment variables
-dotenv.config();
-
-// Validate required environment variables
-const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingEnvVars.length > 0) {
-  console.error('✗ Missing required environment variables:', missingEnvVars);
-  console.error('Please create a .env file with the required variables.');
-  console.error('You can use .env.template as a starting point.');
-  process.exit(1);
-}
+// Centralized configuration
+import "./config/environment.js";
+import connectDB from "./config/database.js";
 
 // Import routes
 import authRoutes from "./routes/auth.js";
@@ -47,9 +35,6 @@ import "./models/Task.js";
 
 const app = express();
 
-// --- Enhanced Performance Monitoring Middleware ---
-// Using the comprehensive performance middleware from middleware/performanceMiddleware.js
-
 // --- Memory Cleanup Middleware ---
 const memoryCleanupMiddleware = (req, res, next) => {
   res.on('finish', () => {
@@ -72,30 +57,12 @@ app.use(enhancedPerformanceMiddleware);
 app.use(corsMiddleware);
 app.use(express.json({ limit: "1mb" }));
 app.use(securityMiddleware);
-
-// Use optimized compression middleware
 app.use(optimizedCompression);
-
 app.use(memoryCleanupMiddleware);
-
-// --- Logging Middleware ---
 app.use(requestLogger);
 
-// --- Optimized Database Connection ---
-mongoose.connect(process.env.MONGO_URI, {
-  maxPoolSize: 50,           // Increased pool size
-  minPoolSize: 5,            // Maintain minimum connections
-  maxIdleTimeMS: 30000,      // Close idle connections
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-  family: 4,
-  bufferCommands: false,     // Disable mongoose buffering
-})
-.then(() => console.log("✓MongoDB connected with optimized pool settings"))
-.catch((err) => {
-  console.error("✗ MongoDB connection error:", err);
-  process.exit(1);
-});
+// --- Database Connection ---
+connectDB();
 
 // --- Global HTTPS Agent for Performance ---
 const globalHttpsAgent = new https.Agent({
