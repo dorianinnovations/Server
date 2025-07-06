@@ -32,6 +32,7 @@ import docsRoutes from "./routes/docs.js";
 import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
 import { requestLogger, errorLogger } from "./utils/logger.js";
 import { globalErrorHandler } from "./utils/errorHandler.js";
+import { performanceMiddleware as enhancedPerformanceMiddleware, completionPerformanceMiddleware } from "./middleware/performanceMiddleware.js";
 
 // Import utilities
 import { createCache, setupMemoryMonitoring } from "./utils/cache.js";
@@ -46,23 +47,8 @@ import "./models/Task.js";
 
 const app = express();
 
-// --- Performance Monitoring Middleware ---
-const performanceMiddleware = (req, res, next) => {
-  const start = Date.now();
-  
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    const memUsage = process.memoryUsage();
-    
-    console.log(`${req.method} ${req.path} - ${duration}ms - ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
-    
-    if (duration > 5000) {
-      console.warn(`🐌 SLOW REQUEST: ${req.method} ${req.path} took ${duration}ms`);
-    }
-  });
-  
-  next();
-};
+// --- Enhanced Performance Monitoring Middleware ---
+// Using the comprehensive performance middleware from middleware/performanceMiddleware.js
 
 // --- Memory Cleanup Middleware ---
 const memoryCleanupMiddleware = (req, res, next) => {
@@ -82,7 +68,7 @@ const memoryCleanupMiddleware = (req, res, next) => {
 };
 
 // --- Security and Middleware Configuration ---
-app.use(performanceMiddleware);
+app.use(enhancedPerformanceMiddleware);
 app.use(corsMiddleware);
 app.use(express.json({ limit: "1mb" }));
 app.use(securityMiddleware);
@@ -129,7 +115,7 @@ setupMemoryMonitoring();
 app.use("/", authRoutes);
 app.use("/", userRoutes);
 app.use("/", healthRoutes);
-app.use("/", completionRoutes);
+app.use("/", completionPerformanceMiddleware, completionRoutes);
 app.use("/", taskRoutes);
 app.use("/", docsRoutes);
 
