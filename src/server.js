@@ -1,7 +1,4 @@
 import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import compression from "compression";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import https from "https";
@@ -97,7 +94,9 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("✓MongoDB connected with optimized pool settings"))
 .catch((err) => {
   console.error("✗ MongoDB connection error:", err);
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') {
+    process.exit(1);
+  }
 });
 
 // --- Global HTTPS Agent for Performance ---
@@ -130,15 +129,5 @@ if (process.env.NODE_ENV !== 'test') {
 // --- Error Handling ---
 app.use(errorLogger);
 app.use(globalErrorHandler);
-
-// --- Server Start ---
-if (process.env.NODE_ENV !== 'test') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`✓API running → http://localhost:${PORT}`);
-    console.log(`✓Performance optimizations enabled`);
-    console.log(`✓Memory optimization enabled, initial RSS: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
-  });
-}
 
 export default app;
