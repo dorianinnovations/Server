@@ -118,6 +118,113 @@ router.post("/completion", protect, async (req, res) => {
     return res.status(400).json({ message: "Invalid or missing prompt." });
   }
 
+<<<<<<< HEAD
+=======
+  if (stream) {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found." });
+      }
+      const userProfile = user.profile ? JSON.stringify(user.profile) : "{}";
+      const recentEmotionalLogEntries = user.emotionalLog
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 3);
+      const formattedEmotionalLog = recentEmotionalLogEntries
+        .map((entry) => {
+          const date = entry.timestamp.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+          return `On ${date}, you expressed feeling ${entry.emotion}${
+            entry.intensity ? ` (intensity ${entry.intensity})` : ""
+          } because: ${entry.context || "no specific context provided"}.`;
+        })
+        .join("\n");
+      const [recentMemory] = await Promise.all([
+        ShortTermMemory.find(
+          { userId },
+          { role: 1, content: 1, _id: 0 }
+        )
+          .sort({ timestamp: -1 })
+          .limit(6)
+          .lean(),
+      ]);
+      recentMemory.reverse();
+      const historyBuilder = [];
+      for (const mem of recentMemory) {
+        historyBuilder.push(
+          `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
+        );
+      }
+      const conversationHistory = historyBuilder.join("\n");
+      const promptParts = [
+        `You are Numina, an empathetic and concise AI assistant. Your goal is to provide helpful responses, acknowledge user emotions, and proactively identify tasks.`,
+        `**User Profile:** ${userProfile}`,
+      ];
+      if (conversationHistory.length > 0) {
+        promptParts.push(`**Recent Conversation:**\n${conversationHistory}`);
+      }
+      if (formattedEmotionalLog.length > 0) {
+        promptParts.push(
+          `**Your Emotional History Summary (Top 3 Recent):**\n${formattedEmotionalLog}`
+        );
+      }
+      promptParts.push(`Instructions for your response:
+- Be direct and concise, but warm, sweet, witty, and playful.
+- Do not echo user's prompt or instructions.
+- Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format strictly as: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "promotion"}
+- Summarizing Past Emotions: Use human-readable format, not raw JSON.
+- Task Inference: If the user implies a task, format strictly as: TASK_INFERENCE: {"taskType": "summarize_emotions", "parameters": {"period": "last week"}}
+- Your primary conversational response should follow any EMOTION_LOG or TASK_INFERENCE output.`);
+      promptParts.push(
+        `<|im_start|>user\n${userPrompt}\n<|im_end|>\n<|im_start|>assistant`
+      );
+      const fullPrompt = promptParts.join("\n\n");
+
+      // Make streaming request to OpenRouter
+      const llamaRes = await llmService.makeStreamingRequest(fullPrompt, {
+        stop,
+        n_predict,
+        temperature,
+      });
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+      res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+
+      // Handle streaming data chunk by chunk
+      llamaRes.data.on('data', (chunk) => {
+        res.write(chunk);
+        res.flush && res.flush(); // Ensure immediate sending
+      });
+      llamaRes.data.on("end", () => {
+        res.end();
+      });
+      llamaRes.data.on("error", (err) => {
+        console.error("Stream error:", err.message);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+        }
+        res.write(`data: {"error": "${err.message}"}\n\n`);
+        res.end();
+      });
+    } catch (err) {
+      console.error("Streaming request failed:", err.message);
+      res.status(500).json({ 
+        status: "error", 
+        message: "Streaming failed: " + err.message
+      });
+    }
+    return;
+  }
+
+  // --- Non-streaming mode (existing logic) ---
+>>>>>>> 3f17339 (refactor: Swap configuration for claude open router setup)
   try {
     console.log(`✓Completion request received for user ${userId}.`);
     

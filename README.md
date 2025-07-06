@@ -34,7 +34,7 @@ src/
 - **Modular Architecture**: Clean separation of concerns with dedicated modules
 - **Advanced Authentication**: JWT-based auth with account locking and security features
 - **Enhanced User Profiles**: Rich user profiles with preferences and statistics
-- **LLM Integration**: Integration with external language model API
+- **LLM Integration**: Integration with Claude 3 Sonnet via OpenRouter API
 - **Memory Management**: Short-term conversation memory with TTL
 - **Emotional Intelligence**: Advanced emotional tracking with insights and analysis
 - **Task Scheduling**: Advanced task system with cron jobs and priority queues

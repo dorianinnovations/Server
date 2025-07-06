@@ -39,13 +39,13 @@ describe('Health Check Routes', () => {
       expect(health).toHaveProperty('server');
       expect(health).toHaveProperty('database');
       expect(health).toHaveProperty('llm_api');
-      expect(health).toHaveProperty('llm_api_url');
+      expect(health).toHaveProperty('llm_service');
     });
 
     it('should handle LLM API errors gracefully', async () => {
-      // Mock the LLM service to return an error
-      const originalEnv = process.env.LLAMA_CPP_API_URL;
-      process.env.LLAMA_CPP_API_URL = 'https://invalid-url-that-will-fail.com';
+      // Mock the OpenRouter service to return an error
+      const originalEnv = process.env.OPENROUTER_API_KEY;
+      process.env.OPENROUTER_API_KEY = 'invalid-key-that-will-fail';
 
       const response = await request(app)
         .get('/health')
@@ -56,7 +56,7 @@ describe('Health Check Routes', () => {
       expect(response.body.health.llm_api).toBe('unreachable');
 
       // Restore original environment
-      process.env.LLAMA_CPP_API_URL = originalEnv;
+      process.env.OPENROUTER_API_KEY = originalEnv;
     });
   });
 }); 
