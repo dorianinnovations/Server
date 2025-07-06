@@ -25,7 +25,7 @@ export const createLLMService = () => {
     const {
       stop = ["<|im_end|>", "\n<|im_start|>"],
       n_predict = 1024,
-      temperature = 0.7,
+      temperature = 0.3, // Reduced from 0.7 to 0.3 for better conversation quality
     } = options;
 
     // Optimize the parameters to improve speed with minimal quality loss
