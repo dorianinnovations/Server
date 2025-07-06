@@ -328,36 +328,57 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// --- LLM Completion Endpoint ---
+// Optimized metadata extraction function
+const extractMetadata = (content) => {
+  let inferredTask = null;
+  let inferredEmotion = null;
+  let cleanContent = content;
+
+  // Single-pass regex extraction for better performance
+  const emotionMatch = content.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
+  if (emotionMatch) {
+    try {
+      inferredEmotion = JSON.parse(emotionMatch[1]);
+      cleanContent = cleanContent.replace(emotionMatch[0], '');
+    } catch (e) {
+      console.error('Failed to parse emotion JSON:', e.message);
+    }
+  }
+
+  const taskMatch = content.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
+  if (taskMatch) {
+    try {
+      inferredTask = JSON.parse(taskMatch[1]);
+      cleanContent = cleanContent.replace(taskMatch[0], '');
+    } catch (e) {
+      console.error('Failed to parse task JSON:', e.message);
+    }
+  }
+
+  // Fast cleanup - single regex pass
+  cleanContent = cleanContent
+    .replace(/(?:EMOTION_LOG|TASK_INFERENCE):?[^\n]*/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+
+  return { inferredTask, inferredEmotion, cleanContent };
+};
+
+// --- Optimized LLM Completion Endpoint ---
 app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
-  // Comprehensive stop sequences to prevent runaway generation and hallucination
+  // Optimized stop sequences - reduced set for better performance
   const stop = req.body.stop || [
-    "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
-    "Human:", "\nHuman:", "\nhuman:", "human:",
-    "\n\nUser:", "\n\nHuman:", "\n\nuser:", "\n\nhuman:",
-    "Q:", "\nQ:", "\nQuestion:", "Question:",
-    "\n\n\n", // Prevent excessive newlines
-    "---", // Common separator
-    "***", // Another common separator
-    "```", // Code block endings
-    "</EXAMPLES>", // Ensure we don't continue past examples
-    "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
-    // Additional Mistral-specific stop sequences
+    "USER:", "\nUSER:", "\nUser:", 
+    "Human:", "\nHuman:",
+    "\n\n\n", "---", 
     "<s>", "</s>", "[INST]", "[/INST]",
-    "Assistant:", "\nAssistant:", "AI:",
-    // Prevent model from continuing examples
-    "Example:", "\nExample:", "For example:",
-    // Prevent repetitive patterns
-    "...", "etc.", "and so on",
-    // Prevent breaking into meta-commentary
-    "Note:", "Important:", "Remember:",
-    // Prevent generating fake sources or citations
-    "Source:", "Reference:", "According to:",
+    "Assistant:", "\nAssistant:",
+    "...", "etc.",
   ];
-  const n_predict = req.body.n_predict || 500; // Increased default for longer responses 
-  const temperature = req.body.temperature || 0.7;
+  const n_predict = Math.min(req.body.n_predict || 500, 1000);
+  const temperature = Math.min(req.body.temperature || 0.7, 0.85);
   const stream = req.body.stream || false; 
 
   if (!userPrompt || typeof userPrompt !== "string") {
@@ -365,104 +386,37 @@ app.post("/completion", protect, async (req, res) => {
   }
 
   try {
-    console.log(`✓Completion request received for user ${userId}.`);
-    const user = await User.findById(userId);
+    console.log(`⚡ Fast completion request for user ${userId}`);
+    
+    // Parallel data fetching for better performance
+    const [user, recentMemory] = await Promise.all([
+      User.findById(userId),
+      ShortTermMemory.find({ userId }, { role: 1, content: 1, _id: 0 })
+        .sort({ timestamp: -1 })
+        .limit(2) // Reduced to 2 for faster processing
+        .lean()
+    ]);
 
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const userProfile = user.profile ? JSON.stringify(user.profile) : "{}";
+    // Simplified prompt construction for faster processing
+    const conversationHistory = recentMemory.reverse()
+      .map(mem => `${mem.role}: ${mem.content}`)
+      .join('\n');
 
-    // Limit emotional log to a relevant number of recent entries to keep prompt concise
-    const recentEmotionalLogEntries = user.emotionalLog
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 2); // Get most recent 2 entries only
+    // Streamlined prompt - removed complex examples for faster processing
+    const fullPrompt = `<s>[INST] You are a helpful assistant. Provide natural responses.
 
-    const formattedEmotionalLog = recentEmotionalLogEntries
-      .map((entry) => {
-        const date = entry.timestamp.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        return `On ${date}, you expressed feeling ${entry.emotion}${
-          entry.intensity ? ` (intensity ${entry.intensity})` : ""
-        } because: ${entry.context || "no specific context provided"}.`;
-      })
-      .join("\n");
+If emotional content: EMOTION_LOG: {"emotion":"name","intensity":1-10,"context":"brief"}
+If task needed: TASK_INFERENCE: {"taskType":"name","parameters":{}}
 
-    // Use memory and user data in parallel with Promise.all for efficiency
-    const [recentMemory] = await Promise.all([
-      ShortTermMemory.find(
-        { userId },
-        { role: 1, content: 1, _id: 0 } // Project only needed fields
-      )
-        .sort({ timestamp: -1 })
-        .limit(3) // Reduce to 3 messages to keep prompt smaller
-        .lean(),
-    ]);
+${conversationHistory ? `Recent conversation:\n${conversationHistory}\n\n` : ''}
 
-    // Process in reverse chronological order without another array operation
-    recentMemory.reverse();
+User: ${userPrompt} [/INST]`;
 
-    // Pre-allocate approximate size for string builder pattern (more efficient than join)
-    const historyBuilder = [];
-    for (const mem of recentMemory) {
-      historyBuilder.push(
-        `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
-      );
-    }
-    const conversationHistory = historyBuilder.join("\n");
-
-    // --- Optimized Prompt Structure for Mistral 7B GGUF Q4 ---
-    let fullPrompt = `<s>[INST] You are a helpful, empathetic, and factual assistant. You provide thoughtful, comprehensive responses while maintaining accuracy and clarity.
-
-RESPONSE FORMAT:
-- Provide natural, conversational responses
-- If you detect emotional content, format it as: EMOTION_LOG: {"emotion":"emotion_name","intensity":1-10,"context":"brief_context"}
-- If you identify a task, format it as: TASK_INFERENCE: {"taskType":"task_name","parameters":{"key":"value"}}
-- Keep these special markers separate from your main response
-
-CONVERSATION EXAMPLES:`;
-
-    // Add conversation history as examples if it exists
-    if (conversationHistory.length > 0) {
-      const recentExchanges = conversationHistory.split('\n').slice(-4); // Last 2 exchanges
-      for (const exchange of recentExchanges) {
-        if (exchange.startsWith('user')) {
-          fullPrompt += `\nUser: ${exchange.substring(4)}`;
-        } else if (exchange.startsWith('assistant')) {
-          fullPrompt += `\nAssistant: ${exchange.substring(9)}`;
-        }
-      }
-          } else {
-        // Default examples optimized for Mistral 7B
-        fullPrompt += `
-User: I'm feeling anxious about tomorrow's presentation.
-Assistant: EMOTION_LOG: {"emotion":"anxiety","intensity":6,"context":"upcoming presentation"}
-I understand that feeling anxious about presentations is completely natural. Many people experience this, and it shows you care about doing well. What specific aspects of the presentation are making you feel most anxious? Is it the content, the audience, or perhaps the technical setup? Once we identify the main concerns, we can work on some practical strategies to help you feel more confident and prepared.
-
-User: Can you help me organize my work schedule for next week?
-Assistant: TASK_INFERENCE: {"taskType":"schedule_organization","parameters":{"scope":"weekly","context":"work"}}
-I'd be happy to help you organize your work schedule for next week. To provide the most helpful guidance, could you tell me about your current workload? Are there any specific priorities, deadlines, or meetings I should know about? Also, what time management challenges are you currently facing? With this information, I can suggest a structured approach that works best for your situation.
-
-User: Tell me about the benefits of regular exercise.
-Assistant: Regular exercise offers numerous benefits for both physical and mental health. Physically, it strengthens your cardiovascular system, improves muscle tone and bone density, and helps maintain a healthy weight. It also boosts your immune system, making you less susceptible to illness. 
-
-Mentally, exercise is a powerful mood enhancer. It releases endorphins, which are natural mood elevators, and can significantly reduce symptoms of anxiety and depression. Regular physical activity also improves cognitive function, including memory and concentration, and can help you sleep better at night.
-
-The key is finding activities you enjoy - whether it's walking, swimming, dancing, or playing sports. Even 30 minutes of moderate exercise most days of the week can make a significant difference in your overall well-being.`;
-      }
-
-    fullPrompt += `
-
-Remember: Provide helpful, accurate responses. Use the special markers only when relevant. Focus on being conversational and empathetic. [/INST]
-
-${userPrompt}`;
-
-    console.log("Full prompt constructed. Length:", fullPrompt.length);
-    // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
+    console.log("Fast prompt constructed. Length:", fullPrompt.length);
 
     const llamaCppApiUrl =
       process.env.LLAMA_CPP_API_URL ||
@@ -478,8 +432,9 @@ ${userPrompt}`;
     const httpsAgent =
       req.app.locals.httpsAgent ||
       new https.Agent({
-        rejectUnauthorized: false, // For ngrok certificates
-        keepAlive: true, // Enable keep-alive for connection reuse
+        rejectUnauthorized: false,
+        keepAlive: true,
+        timeout: 15000, // Reduced timeout for faster response
       });
 
     // Start a timer to measure LLM response time
@@ -487,38 +442,26 @@ ${userPrompt}`;
     let llmRes;
 
     try {
-      // Optimized parameters for Mistral 7B GGUF Q4 with extended length
+      // Optimized parameters for faster response
       const optimizedParams = {
         prompt: fullPrompt,
         stop: stop,
-        n_predict: Math.min(n_predict, 1000), // Significantly increased token limit
-        temperature: Math.min(temperature, 0.85), // Allow slightly higher temperature
-        top_k: 50, // Increased vocabulary for better diversity
-        top_p: 0.9, // More diverse sampling
-        repeat_penalty: 1.15, // Reduced to allow more natural repetition
-        frequency_penalty: 0.2, // Reduced for more natural flow
-        presence_penalty: 0.1, // Reduced to prevent over-diversification
-        stream: stream, // Add streaming parameter
-        // Mistral 7B specific optimizations
-        min_p: 0.05, // Lower threshold for better token diversity
-        typical_p: 0.95, // Higher typical sampling for coherence
-        mirostat: 2, // Enable mirostat sampling for better coherence
-        mirostat_tau: 4.0, // Optimized target entropy for Mistral
-        mirostat_eta: 0.15, // Higher learning rate for better adaptation
-        // Additional parameters for quality control
-        tfs_z: 1.0, // Tail free sampling
-        penalty_alpha: 0.6, // Contrastive search penalty
-        penalty_last_n: 128, // Context window for penalties
+        n_predict: n_predict,
+        temperature: temperature,
+        top_k: 40, // Reduced for faster sampling
+        top_p: 0.9,
+        repeat_penalty: 1.1, // Reduced for faster generation
+        stream: stream,
+        // Removed complex parameters for faster processing
       };
 
       if (stream) {
-        console.log('🚀 NGROK PRO STREAMING - Starting real-time token stream...');
+        console.log('🚀 OPTIMIZED STREAMING - Starting...');
         
         // Set streaming headers optimized for real-time
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
         
         try {
@@ -532,7 +475,7 @@ ${userPrompt}`;
             },
             data: optimizedParams, // includes stream: true
             httpsAgent: httpsAgent,
-            timeout: 60000, // Longer timeout for streaming
+            timeout: 30000, // Reduced timeout for faster response
             responseType: 'stream',
           });
           
@@ -544,10 +487,10 @@ ${userPrompt}`;
           
           console.log('📡 Stream connected, waiting for tokens...');
           
-          // Set up a timeout to prevent infinite streams (extended for longer responses)
+          // Set up a timeout to prevent infinite streams (optimized for responsiveness)
           const streamTimeout = setTimeout(() => {
             if (!streamEnded) {
-              console.log('⏰ Stream timeout reached, ending stream');
+              console.log('⏰ Stream timeout - ending for responsiveness');
               streamEnded = true;
               res.write('data: [DONE]\n\n');
               res.end();
@@ -555,7 +498,7 @@ ${userPrompt}`;
                 streamResponse.data.destroy();
               }
             }
-          }, 120000); // 2 minute timeout for longer responses
+          }, 45000); // 45 second timeout for faster responses
           
           streamResponse.data.on('data', (chunk) => {
             if (streamEnded) return;
@@ -570,7 +513,6 @@ ${userPrompt}`;
                   const jsonStr = line.substring(6).trim();
                   
                   if (jsonStr === '[DONE]') {
-                    console.log('🏁 Stream ended by llama.cpp');
                     streamEnded = true;
                     clearTimeout(streamTimeout);
                     break;
@@ -578,100 +520,40 @@ ${userPrompt}`;
                   
                   const parsed = JSON.parse(jsonStr);
                   
-                  // Check if stream should stop based on parsed data
-                  if (parsed.stop === true || parsed.stopped === true) {
-                    console.log('🛑 Stream stopped by model');
-                    streamEnded = true;
-                    clearTimeout(streamTimeout);
-                    break;
-                  }
-                  
-                  // Only process if there's actual content (not just token IDs)
+                  // Only process if there's actual content
                   if (parsed.content && parsed.content.trim()) {
                     fullContent += parsed.content;
-                    metadataBuffer += parsed.content;
                     tokenCount++;
                     
-                    console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
+                    // Fast stop sequence check
+                    let shouldStop = false;
+                    for (const stopSeq of stop) {
+                      if (fullContent.includes(stopSeq)) {
+                        shouldStop = true;
+                        streamEnded = true;
+                        clearTimeout(streamTimeout);
+                        break;
+                      }
+                    }
                     
-                                         // Check for stop sequences in the accumulated content
-                     let shouldStop = false;
-                     for (const stopSeq of stop) {
-                       if (metadataBuffer.includes(stopSeq) || fullContent.includes(stopSeq)) {
-                         console.log(`🛑 Stop sequence detected: "${stopSeq}" in buffer`);
-                         shouldStop = true;
-                         streamEnded = true;
-                         clearTimeout(streamTimeout);
-                         break;
-                       }
-                     }
-                     
-                     // Additional hallucination prevention checks
-                     if (!shouldStop) {
-                       // Check for repetitive patterns that might indicate hallucination
-                       const words = fullContent.split(' ');
-                       if (words.length > 20) {
-                         const lastTenWords = words.slice(-10).join(' ');
-                         const contentWithoutLast = words.slice(0, -10).join(' ');
-                         if (contentWithoutLast.includes(lastTenWords)) {
-                           console.log('🚨 Repetitive pattern detected, stopping stream');
-                           shouldStop = true;
-                           streamEnded = true;
-                           clearTimeout(streamTimeout);
-                         }
-                       }
-                       
-                       // Check for excessive punctuation which might indicate confusion
-                       const punctuationCount = (fullContent.match(/[.!?]{3,}/g) || []).length;
-                       if (punctuationCount > 3) {
-                         console.log('🚨 Excessive punctuation detected, stopping stream');
-                         shouldStop = true;
-                         streamEnded = true;
-                         clearTimeout(streamTimeout);
-                       }
-                     }
-                     
-                     // Additional safety check for excessive token generation (increased limit)
-                     if (tokenCount > 1000) {
-                       console.log(`🚨 Token limit exceeded (${tokenCount}), stopping stream`);
-                       shouldStop = true;
-                       streamEnded = true;
-                       clearTimeout(streamTimeout);
-                     }
+                    // Quick token limit check
+                    if (tokenCount > 800) { // Reduced for faster responses
+                      shouldStop = true;
+                      streamEnded = true;
+                      clearTimeout(streamTimeout);
+                    }
                     
                     if (shouldStop) break;
                     
-                                         // Look for metadata markers in accumulated buffer
-                     const hasMetadataStart = metadataBuffer.includes('EMOTION_LOG') || 
-                                            metadataBuffer.includes('TASK_INFERENCE');
-                     
-                     // If we detect metadata, don't send this token but continue collecting
-                     if (hasMetadataStart) {
-                       // Check if we have a complete JSON object
-                       const emotionMatch = metadataBuffer.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
-                       const taskMatch = metadataBuffer.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
-                       
-                       if (emotionMatch || taskMatch) {
-                         // We have complete metadata, clear the buffer but don't send
-                         console.log('🔍 Complete metadata detected:', emotionMatch ? 'EMOTION_LOG' : 'TASK_INFERENCE');
-                         metadataBuffer = '';
-                       } else {
-                         console.log('🔍 Partial metadata detected, buffering...');
-                       }
-                       // If incomplete metadata, just continue buffering
-                     } else {
-                       // No metadata detected, safe to send
-                       res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
-                       
-                       // Force flush for real-time delivery
-                       if (res.flush) res.flush();
-                       
-                       // Reset metadata buffer periodically to prevent overflow
-                       if (metadataBuffer.length > 500) {
-                         metadataBuffer = metadataBuffer.slice(-200);
-                         console.log('📝 Metadata buffer reset to prevent overflow');
-                       }
-                     }
+                    // Simplified metadata detection - don't buffer, just check
+                    if (parsed.content.includes('EMOTION_LOG') || parsed.content.includes('TASK_INFERENCE')) {
+                      // Skip sending metadata tokens
+                      continue;
+                    }
+                    
+                    // Send token immediately for faster response
+                    res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                    if (res.flush) res.flush();
                   }
                 } catch (e) {
                   console.error('JSON parse error in stream:', e);
@@ -685,14 +567,14 @@ ${userPrompt}`;
             if (!streamEnded) {
               streamEnded = true;
               clearTimeout(streamTimeout);
-              console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
+              console.log(`✅ Stream complete! ${tokenCount} tokens`);
               res.write('data: [DONE]\n\n');
               res.end();
             }
             
-            // Process the complete response for metadata and save to memory
+            // Process metadata asynchronously for better performance
             if (fullContent.trim()) {
-              processStreamResponse(fullContent, userPrompt, userId);
+              setImmediate(() => processStreamResponse(fullContent, userPrompt, userId));
             }
           });
           
@@ -700,13 +582,11 @@ ${userPrompt}`;
             if (!streamEnded) {
               streamEnded = true;
               clearTimeout(streamTimeout);
-              console.error('❌ Stream error:', error);
+              console.error('❌ Stream error:', error.message);
               
-              // Send a proper error response that client can handle
               res.write(`data: ${JSON.stringify({ 
                 error: true, 
-                message: "Stream connection error. Please try again.",
-                recoverable: true 
+                message: "Stream error. Please try again."
               })}\n\n`);
               res.end();
             }
@@ -756,7 +636,7 @@ ${userPrompt}`;
           },
           data: optimizedParams,
           httpsAgent: httpsAgent,
-          timeout: 120000, // 2 minutes timeout for longer LLM requests
+          timeout: 30000, // Reduced timeout for faster response
         });
       }
 
@@ -798,158 +678,46 @@ ${userPrompt}`;
 
     // Extract data from axios response
     const llmData = llmRes.data;
+    const rawContent = llmData.content || "";
 
-    let botReplyContent = llmData.content || ""; // Initialize as empty string
+    console.log("Raw LLM response:", rawContent);
 
-    console.log("Raw LLM Data Content (before cleaning):", botReplyContent);
+    // Fast metadata extraction
+    const { inferredTask, inferredEmotion, cleanContent } = extractMetadata(rawContent);
+    
+    // Final cleanup
+    const botReplyContent = sanitizeResponse(cleanContent);
 
-    // --- Optimized Parsing and Cleaning ---
-    // Strengthening the cleaning logic to completely remove TASK_INFERENCE and EMOTION_LOG markers from responses
-    // --- Begin Robust Parsing and Cleaning ---
-    console.log("Raw LLM response:", botReplyContent);
+    console.log("Cleaned Bot Reply Content:", botReplyContent);
 
-    // Declare variables to store parsed information
-    let inferredTask = null;
-    let inferredEmotion = null;
-
-    // Helper function for JSON extraction with error handling
-    const extractJsonPattern = (regex, content, logType) => {
-      const match = content.match(regex);
-      if (!match || !match[1]) {
-        return [null, content];
-      }
-
-      try {
-        // Extract JSON and remove the match from content
-        const jsonString = match[1].trim();
-        const parsed = JSON.parse(jsonString);
-        // Remove the entire pattern (marker + JSON)
-        const newContent = content.replace(match[0], "");
-
-        return [parsed, newContent];
-      } catch (jsonError) {
-        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
-        return [null, content];
-      }
-    };
-
-    // Extract and remove patterns with comprehensive patterns to catch all variations
-    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
-    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
-
-    // Process emotion first - use the first match if multiple exist
-    [inferredEmotion, botReplyContent] = extractJsonPattern(
-      emotionLogRegex,
-      botReplyContent,
-      "emotion log"
-    );
-
-    if (inferredEmotion) {
-      console.log("Parsed emotion:", inferredEmotion.emotion);
-    }
-
-    // Then process task - use the first match if multiple exist
-    [inferredTask, botReplyContent] = extractJsonPattern(
-      taskInferenceRegex,
-      botReplyContent,
-      "task inference"
-    );
-
-    if (inferredTask) {
-      console.log("Parsed task:", inferredTask.taskType);
-    } // Ensure ALL marker patterns are completely removed, even if parsing failed
-    // This is a more aggressive approach to ensure no markers leak to the UI
-    botReplyContent = botReplyContent
-      // Remove model tokens
-      .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "")
-      // Aggressively remove any marker patterns, even incomplete ones
-      .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-      .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-      // Remove even just the marker names without JSON
-      .replace(/TASK_INFERENCE:?/g, "")
-      .replace(/EMOTION_LOG:?/g, "")
-      // Remove code blocks that might contain markers
-      .replace(/```json[\s\S]*?```/g, "")
-      // Normalize newlines
-      .replace(/(\r?\n){2,}/g, "\n")
-      .trim();
-
-    // Double check for any remaining marker patterns
-    if (
-      botReplyContent.includes("TASK_INFERENCE") ||
-      botReplyContent.includes("EMOTION_LOG")
-    ) {
-      console.warn(
-        "WARNING: Markers still present after cleaning. Applying emergency cleanup."
-      );
-      // Emergency fallback: split by lines and filter out any line containing markers
-      botReplyContent = botReplyContent
-        .split("\n")
-        .filter(
-          (line) =>
-            !line.includes("TASK_INFERENCE") && !line.includes("EMOTION_LOG")
-        )
-        .join("\n")
-        .trim();
-    }
-
-    // Use the dedicated sanitizer for a final pass
-    botReplyContent = sanitizeResponse(botReplyContent);
-
-    console.log("Cleaned Bot Reply Content (for display):", botReplyContent);
-    // --- End Robust Parsing and Cleaning ---
-
-    // Prepare database operations to be executed in parallel
-    const dbOperations = [];
-
-    // Memory storage operations (both user and assistant messages)
-    dbOperations.push(
+    // Parallel database operations
+    const dbOperations = [
       ShortTermMemory.insertMany([
         { userId, content: userPrompt, role: "user" },
-        // Ensure content is never empty for the assistant's response
-        {
-          userId,
-          content:
-            botReplyContent ||
-            "I'm sorry, I wasn't able to provide a proper response.",
-          role: "assistant",
-        },
+        { userId, content: botReplyContent, role: "assistant" }
       ])
-    );
+    ];
 
-    // Process inferred emotion if present
-    if (inferredEmotion && inferredEmotion.emotion) {
-      const emotionToLog = {
-        emotion: inferredEmotion.emotion,
-        context: inferredEmotion.context || userPrompt,
-      };
-
-      // Add intensity if valid
-      if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
-        emotionToLog.intensity = inferredEmotion.intensity;
-      }
-
-      // Queue the emotion update
+    if (inferredEmotion?.emotion) {
       dbOperations.push(
         User.findByIdAndUpdate(userId, {
-          $push: { emotionalLog: emotionToLog },
+          $push: { 
+            emotionalLog: {
+              emotion: inferredEmotion.emotion,
+              intensity: inferredEmotion.intensity,
+              context: inferredEmotion.context || userPrompt
+            }
+          },
         })
       );
     }
 
-    // Process inferred task if present
-    if (inferredTask && inferredTask.taskType) {
-      const taskParameters =
-        typeof inferredTask.parameters === "object"
-          ? inferredTask.parameters
-          : {};
-
-      // Queue the task creation
+    if (inferredTask?.taskType) {
       dbOperations.push(
         Task.create({
           userId,
           taskType: inferredTask.taskType,
-          parameters: taskParameters,
+          parameters: inferredTask.parameters || {},
           status: "queued",
         })
       );
@@ -958,34 +726,12 @@ ${userPrompt}`;
     // Execute all database operations in parallel
     await Promise.all(dbOperations);
 
-    // Log results after operations complete
-    const summaryParts = ["Data saved:"];
-    summaryParts.push("- 2 memory entries (user and assistant)");
-
-    if (inferredEmotion && inferredEmotion.emotion) {
-      summaryParts.push(`- Emotion: ${inferredEmotion.emotion}`);
-    }
-
-    if (inferredTask && inferredTask.taskType) {
-      summaryParts.push(`- Task: ${inferredTask.taskType}`);
-    }
-
+    // Log results
+    const summaryParts = ["✅ Data saved:"];
+    summaryParts.push("memory entries");
+    if (inferredEmotion?.emotion) summaryParts.push(`emotion: ${inferredEmotion.emotion}`);
+    if (inferredTask?.taskType) summaryParts.push(`task: ${inferredTask.taskType}`);
     console.log(summaryParts.join(" "));
-
-    // Final safety check before sending response to client
-    botReplyContent = sanitizeResponse(botReplyContent);
-
-    // Validate that sanitization was successful
-    if (
-      botReplyContent.includes("TASK_INFERENCE") ||
-      botReplyContent.includes("EMOTION_LOG")
-    ) {
-      console.error(
-        "CRITICAL ERROR: Markers still present despite sanitization"
-      );
-      botReplyContent =
-        "I'm sorry, I wasn't able to provide a proper response. Please try again.";
-    }
 
     res.json({ content: botReplyContent });
   } catch (err) {
@@ -1180,138 +926,48 @@ setInterval(() => {
 
 // --- Helper Functions ---
 
-// Process streaming response for metadata and memory storage
+// Optimized stream processing function
 const processStreamResponse = async (fullContent, userPrompt, userId) => {
   try {
-    console.log("Processing complete stream response for metadata...");
-    
-    // Declare variables to store parsed information
-    let inferredTask = null;
-    let inferredEmotion = null;
+    const { inferredTask, inferredEmotion, cleanContent } = extractMetadata(fullContent);
+    const sanitizedContent = sanitizeResponse(cleanContent);
 
-    // Helper function for JSON extraction with error handling
-    const extractJsonPattern = (regex, content, logType) => {
-      const match = content.match(regex);
-      if (!match || !match[1]) {
-        return [null, content];
-      }
-
-      try {
-        // Extract JSON and remove the match from content
-        const jsonString = match[1].trim();
-        const parsed = JSON.parse(jsonString);
-        // Remove the entire pattern (marker + JSON)
-        const newContent = content.replace(match[0], "");
-
-        return [parsed, newContent];
-      } catch (jsonError) {
-        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
-        return [null, content];
-      }
-    };
-
-    // Extract and remove patterns with comprehensive patterns to catch all variations
-    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
-    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
-
-    let processedContent = fullContent;
-
-    // Process emotion first - use the first match if multiple exist
-    [inferredEmotion, processedContent] = extractJsonPattern(
-      emotionLogRegex,
-      processedContent,
-      "emotion log"
-    );
-
-    if (inferredEmotion) {
-      console.log("Parsed emotion from stream:", inferredEmotion.emotion);
-    }
-
-    // Then process task - use the first match if multiple exist
-    [inferredTask, processedContent] = extractJsonPattern(
-      taskInferenceRegex,
-      processedContent,
-      "task inference"
-    );
-
-    if (inferredTask) {
-      console.log("Parsed task from stream:", inferredTask.taskType);
-    }
-
-    // Sanitize the content for storage
-    const sanitizedContent = sanitizeResponse(processedContent);
-
-    // Prepare database operations to be executed in parallel
-    const dbOperations = [];
-
-    // Memory storage operations (both user and assistant messages)
-    dbOperations.push(
+    const dbOperations = [
       ShortTermMemory.insertMany([
         { userId, content: userPrompt, role: "user" },
-        {
-          userId,
-          content: sanitizedContent || "I'm sorry, I wasn't able to provide a proper response.",
-          role: "assistant",
-        },
+        { userId, content: sanitizedContent, role: "assistant" }
       ])
-    );
+    ];
 
-    // Process inferred emotion if present
-    if (inferredEmotion && inferredEmotion.emotion) {
-      const emotionToLog = {
-        emotion: inferredEmotion.emotion,
-        context: inferredEmotion.context || userPrompt,
-      };
-
-      // Add intensity if valid
-      if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
-        emotionToLog.intensity = inferredEmotion.intensity;
-      }
-
-      // Queue the emotion update
+    if (inferredEmotion?.emotion) {
       dbOperations.push(
         User.findByIdAndUpdate(userId, {
-          $push: { emotionalLog: emotionToLog },
+          $push: { 
+            emotionalLog: {
+              emotion: inferredEmotion.emotion,
+              intensity: inferredEmotion.intensity,
+              context: inferredEmotion.context || userPrompt
+            }
+          },
         })
       );
     }
 
-    // Process inferred task if present
-    if (inferredTask && inferredTask.taskType) {
-      const taskParameters =
-        typeof inferredTask.parameters === "object"
-          ? inferredTask.parameters
-          : {};
-
-      // Queue the task creation
+    if (inferredTask?.taskType) {
       dbOperations.push(
         Task.create({
           userId,
           taskType: inferredTask.taskType,
-          parameters: taskParameters,
+          parameters: inferredTask.parameters || {},
           status: "queued",
         })
       );
     }
 
-    // Execute all database operations in parallel
     await Promise.all(dbOperations);
-
-    // Log results after operations complete
-    const summaryParts = ["Stream data saved:"];
-    summaryParts.push("- 2 memory entries (user and assistant)");
-
-    if (inferredEmotion && inferredEmotion.emotion) {
-      summaryParts.push(`- Emotion: ${inferredEmotion.emotion}`);
-    }
-
-    if (inferredTask && inferredTask.taskType) {
-      summaryParts.push(`- Task: ${inferredTask.taskType}`);
-    }
-
-    console.log(summaryParts.join(" "));
+    console.log('✅ Stream metadata processed successfully');
   } catch (error) {
-    console.error('Error processing stream response:', error);
+    console.error('❌ Stream processing error:', error.message);
   }
 };
 

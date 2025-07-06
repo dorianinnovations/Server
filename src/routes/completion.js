@@ -1,5 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
+import { completionRateLimiter } from "../middleware/security.js";
 import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
@@ -11,170 +12,124 @@ const router = express.Router();
 
 // Create reusable HTTPS agent for better performance
 const httpsAgent = new https.Agent({
-  rejectUnauthorized: false, // For ngrok certificates
+  rejectUnauthorized: false,
   keepAlive: true,
-  timeout: 30000,
+  timeout: 15000, // Reduced timeout for faster response
+  maxSockets: 5,
 });
 
-router.post("/completion", protect, async (req, res) => {
+// Optimized metadata extraction function
+const extractMetadata = (content) => {
+  let inferredTask = null;
+  let inferredEmotion = null;
+  let cleanContent = content;
+
+  // Single-pass regex extraction for better performance
+  const emotionMatch = content.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
+  if (emotionMatch) {
+    try {
+      inferredEmotion = JSON.parse(emotionMatch[1]);
+      cleanContent = cleanContent.replace(emotionMatch[0], '');
+    } catch (e) {
+      console.error('Failed to parse emotion JSON:', e.message);
+    }
+  }
+
+  const taskMatch = content.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
+  if (taskMatch) {
+    try {
+      inferredTask = JSON.parse(taskMatch[1]);
+      cleanContent = cleanContent.replace(taskMatch[0], '');
+    } catch (e) {
+      console.error('Failed to parse task JSON:', e.message);
+    }
+  }
+
+  // Fast cleanup - single regex pass
+  cleanContent = cleanContent
+    .replace(/(?:EMOTION_LOG|TASK_INFERENCE):?[^\n]*/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+
+  return { inferredTask, inferredEmotion, cleanContent };
+};
+
+// Apply completion-specific rate limiting
+router.post("/completion", completionRateLimiter, protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
   
-  // Comprehensive stop sequences for Mistral 7B - matches working server.js
+  // Optimized stop sequences - reduced set for better performance
   const stop = req.body.stop || [
-    "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
-    "Human:", "\nHuman:", "\nhuman:", "human:",
-    "\n\nUser:", "\n\nHuman:", "\n\nuser:", "\n\nhuman:",
-    "Q:", "\nQ:", "\nQuestion:", "Question:",
-    "\n\n\n", "---", "***", "```",
-    "</EXAMPLES>", "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
-    // Mistral-specific stop sequences
+    "USER:", "\nUSER:", "\nUser:", 
+    "Human:", "\nHuman:",
+    "\n\n\n", "---", 
     "<s>", "</s>", "[INST]", "[/INST]",
-    "Assistant:", "\nAssistant:", "AI:",
-    "Example:", "\nExample:", "For example:",
-    "...", "etc.", "and so on",
-    "Note:", "Important:", "Remember:",
-    "Source:", "Reference:", "According to:",
+    "Assistant:", "\nAssistant:",
+    "...", "etc.",
   ];
   
-  const n_predict = req.body.n_predict || 500;
-  const temperature = req.body.temperature || 0.7;
+  const n_predict = Math.min(req.body.n_predict || 500, 1000);
+  const temperature = Math.min(req.body.temperature || 0.7, 0.85);
 
   if (!userPrompt || typeof userPrompt !== "string") {
     return res.status(400).json({ message: "Invalid or missing prompt." });
   }
 
   try {
-    console.log(`✓Completion request received for user ${userId}.`);
-    const user = await User.findById(userId);
+    console.log(`⚡ Fast completion request for user ${userId}`);
+    
+    // Parallel data fetching for better performance
+    const [user, recentMemory] = await Promise.all([
+      User.findById(userId),
+      ShortTermMemory.find({ userId }, { role: 1, content: 1, _id: 0 })
+        .sort({ timestamp: -1 })
+        .limit(2) // Reduced to 2 for faster processing
+        .lean()
+    ]);
 
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const userProfile = user.profile ? JSON.stringify(user.profile) : "{}";
+    // Simplified prompt construction for faster processing
+    const conversationHistory = recentMemory.reverse()
+      .map(mem => `${mem.role}: ${mem.content}`)
+      .join('\n');
 
-    // Limit emotional log to recent entries
-    const recentEmotionalLogEntries = user.emotionalLog
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 2);
+    // Streamlined prompt - removed complex examples for faster processing
+    const fullPrompt = `<s>[INST] You are a helpful assistant. Provide natural responses.
 
-    const formattedEmotionalLog = recentEmotionalLogEntries
-      .map((entry) => {
-        const date = entry.timestamp.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        return `On ${date}, you expressed feeling ${entry.emotion}${
-          entry.intensity ? ` (intensity ${entry.intensity})` : ""
-        } because: ${entry.context || "no specific context provided"}.`;
-      })
-      .join("\n");
+If emotional content: EMOTION_LOG: {"emotion":"name","intensity":1-10,"context":"brief"}
+If task needed: TASK_INFERENCE: {"taskType":"name","parameters":{}}
 
-    // Get recent conversation history
-    const [recentMemory] = await Promise.all([
-      ShortTermMemory.find(
-        { userId },
-        { role: 1, content: 1, _id: 0 }
-      )
-        .sort({ timestamp: -1 })
-        .limit(3)
-        .lean(),
-    ]);
+${conversationHistory ? `Recent conversation:\n${conversationHistory}\n\n` : ''}
 
-    recentMemory.reverse();
-
-    const historyBuilder = [];
-    for (const mem of recentMemory) {
-      historyBuilder.push(
-        `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
-      );
-    }
-    const conversationHistory = historyBuilder.join("\n");
-
-    // --- Proper Mistral 7B Prompt Format (matches working server.js) ---
-    let fullPrompt = `<s>[INST] You are a helpful, empathetic, and factual assistant. You provide thoughtful, comprehensive responses while maintaining accuracy and clarity.
-
-RESPONSE FORMAT:
-- Provide natural, conversational responses
-- If you detect emotional content, format it as: EMOTION_LOG: {"emotion":"emotion_name","intensity":1-10,"context":"brief_context"}
-- If you identify a task, format it as: TASK_INFERENCE: {"taskType":"task_name","parameters":{"key":"value"}}
-- Keep these special markers separate from your main response
-
-CONVERSATION EXAMPLES:`;
-
-    // Add conversation history as examples if it exists
-    if (conversationHistory.length > 0) {
-      const recentExchanges = conversationHistory.split('\n').slice(-4);
-      for (const exchange of recentExchanges) {
-        if (exchange.startsWith('user')) {
-          fullPrompt += `\nUser: ${exchange.substring(4)}`;
-        } else if (exchange.startsWith('assistant')) {
-          fullPrompt += `\nAssistant: ${exchange.substring(9)}`;
-        }
-      }
-    } else {
-      // Default examples optimized for Mistral 7B
-      fullPrompt += `
-User: I'm feeling anxious about tomorrow's presentation.
-Assistant: EMOTION_LOG: {"emotion":"anxiety","intensity":6,"context":"upcoming presentation"}
-I understand that feeling anxious about presentations is completely natural. Many people experience this, and it shows you care about doing well. What specific aspects of the presentation are making you feel most anxious? Is it the content, the audience, or perhaps the technical setup? Once we identify the main concerns, we can work on some practical strategies to help you feel more confident and prepared.
-
-User: Can you help me organize my work schedule for next week?
-Assistant: TASK_INFERENCE: {"taskType":"schedule_organization","parameters":{"scope":"weekly","context":"work"}}
-I'd be happy to help you organize your work schedule for next week. To provide the most helpful guidance, could you tell me about your current workload? Are there any specific priorities, deadlines, or meetings I should know about? Also, what time management challenges are you currently facing? With this information, I can suggest a structured approach that works best for your situation.
-
-User: Tell me about the benefits of regular exercise.
-Assistant: Regular exercise offers numerous benefits for both physical and mental health. Physically, it strengthens your cardiovascular system, improves muscle tone and bone density, and helps maintain a healthy weight. It also boosts your immune system, making you less susceptible to illness. 
-
-Mentally, exercise is a powerful mood enhancer. It releases endorphins, which are natural mood elevators, and can significantly reduce symptoms of anxiety and depression. Regular physical activity also improves cognitive function, including memory and concentration, and can help you sleep better at night.
-
-The key is finding activities you enjoy - whether it's walking, swimming, dancing, or playing sports. Even 30 minutes of moderate exercise most days of the week can make a significant difference in your overall well-being.`;
-    }
-
-    fullPrompt += `
-
-Remember: Provide helpful, accurate responses. Use the special markers only when relevant. Focus on being conversational and empathetic. [/INST]
-
-${userPrompt}`;
-
-    console.log("Full prompt constructed. Length:", fullPrompt.length);
+User: ${userPrompt} [/INST]`;
 
     const llamaCppApiUrl = process.env.LLAMA_CPP_API_URL || "http://localhost:8000/completion";
-    console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
 
-    // Optimized parameters for Mistral 7B GGUF Q4 (matches working server.js)
+    // Optimized parameters for faster response
     const optimizedParams = {
       prompt: fullPrompt,
       stop: stop,
-      n_predict: Math.min(n_predict, 1000),
-      temperature: Math.min(temperature, 0.85),
-      top_k: 50,
+      n_predict: n_predict,
+      temperature: temperature,
+      top_k: 40, // Reduced for faster sampling
       top_p: 0.9,
-      repeat_penalty: 1.15,
-      frequency_penalty: 0.2,
-      presence_penalty: 0.1,
+      repeat_penalty: 1.1, // Reduced for faster generation
       stream: stream,
-      min_p: 0.05,
-      typical_p: 0.95,
-      mirostat: 2,
-      mirostat_tau: 4.0,
-      mirostat_eta: 0.15,
-      tfs_z: 1.0,
-      penalty_alpha: 0.6,
-      penalty_last_n: 128,
+      // Removed complex parameters for faster processing
     };
 
     if (stream) {
-      console.log('🚀 STREAMING - Starting real-time token stream...');
+      console.log('🚀 OPTIMIZED STREAMING - Starting...');
       
-      // Set streaming headers
+      // Optimized streaming headers
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
-      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('X-Accel-Buffering', 'no');
 
       try {
@@ -183,12 +138,11 @@ ${userPrompt}`;
           url: llamaCppApiUrl,
           headers: {
             "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
             "Accept": "text/event-stream",
           },
           data: optimizedParams,
           httpsAgent: httpsAgent,
-          timeout: 60000,
+          timeout: 30000, // Reduced timeout for faster response
           responseType: 'stream',
         });
 
@@ -196,22 +150,16 @@ ${userPrompt}`;
         let buffer = '';
         let tokenCount = 0;
         let streamEnded = false;
-        let metadataBuffer = '';
         
-        console.log('📡 Stream connected, waiting for tokens...');
-        
-        // Timeout to prevent infinite streams
+        // Faster timeout for better responsiveness
         const streamTimeout = setTimeout(() => {
           if (!streamEnded) {
-            console.log('⏰ Stream timeout reached, ending stream');
+            console.log('⏰ Stream timeout - ending for responsiveness');
             streamEnded = true;
             res.write('data: [DONE]\n\n');
             res.end();
-            if (streamResponse.data && streamResponse.data.destroy) {
-              streamResponse.data.destroy();
-            }
           }
-        }, 120000); // 2 minute timeout
+        }, 45000); // Reduced to 45 seconds
 
         streamResponse.data.on('data', (chunk) => {
           if (streamEnded) return;
@@ -226,7 +174,6 @@ ${userPrompt}`;
                 const jsonStr = line.substring(6).trim();
                 
                 if (jsonStr === '[DONE]') {
-                  console.log('🏁 Stream ended by llama.cpp');
                   streamEnded = true;
                   clearTimeout(streamTimeout);
                   break;
@@ -234,25 +181,14 @@ ${userPrompt}`;
                 
                 const parsed = JSON.parse(jsonStr);
                 
-                if (parsed.stop === true || parsed.stopped === true) {
-                  console.log('🛑 Stream stopped by model');
-                  streamEnded = true;
-                  clearTimeout(streamTimeout);
-                  break;
-                }
-                
                 if (parsed.content && parsed.content.trim()) {
                   fullContent += parsed.content;
-                  metadataBuffer += parsed.content;
                   tokenCount++;
                   
-                  console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
-                  
-                  // Check for stop sequences
+                  // Fast stop sequence check
                   let shouldStop = false;
                   for (const stopSeq of stop) {
-                    if (metadataBuffer.includes(stopSeq) || fullContent.includes(stopSeq)) {
-                      console.log(`🛑 Stop sequence detected: "${stopSeq}"`);
+                    if (fullContent.includes(stopSeq)) {
                       shouldStop = true;
                       streamEnded = true;
                       clearTimeout(streamTimeout);
@@ -260,9 +196,8 @@ ${userPrompt}`;
                     }
                   }
                   
-                  // Safety check for excessive tokens
-                  if (tokenCount > 1000) {
-                    console.log(`🚨 Token limit exceeded (${tokenCount}), stopping stream`);
+                  // Quick token limit check
+                  if (tokenCount > 800) { // Reduced for faster responses
                     shouldStop = true;
                     streamEnded = true;
                     clearTimeout(streamTimeout);
@@ -270,29 +205,18 @@ ${userPrompt}`;
                   
                   if (shouldStop) break;
                   
-                  // Simplified metadata detection - only check for complete patterns
-                  const hasCompleteEmotion = metadataBuffer.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
-                  const hasCompleteTask = metadataBuffer.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
-                  
-                  if (hasCompleteEmotion || hasCompleteTask) {
-                    console.log('🔍 Complete metadata detected, clearing buffer');
-                    metadataBuffer = '';
-                  } else if (metadataBuffer.includes('EMOTION_LOG') || metadataBuffer.includes('TASK_INFERENCE')) {
-                    console.log('🔍 Partial metadata detected, buffering...');
-                    // Don't send this token, continue buffering
-                  } else {
-                    // Safe to send token
-                    res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
-                    if (res.flush) res.flush();
-                    
-                    // Reset buffer periodically
-                    if (metadataBuffer.length > 500) {
-                      metadataBuffer = metadataBuffer.slice(-200);
-                    }
+                  // Simplified metadata detection - don't buffer, just check
+                  if (parsed.content.includes('EMOTION_LOG') || parsed.content.includes('TASK_INFERENCE')) {
+                    // Skip sending metadata tokens
+                    continue;
                   }
+                  
+                  // Send token immediately for faster response
+                  res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                  if (res.flush) res.flush();
                 }
               } catch (e) {
-                console.error('JSON parse error in stream:', e);
+                console.error('JSON parse error:', e.message);
               }
             }
           }
@@ -302,13 +226,14 @@ ${userPrompt}`;
           if (!streamEnded) {
             streamEnded = true;
             clearTimeout(streamTimeout);
-            console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
+            console.log(`✅ Stream complete! ${tokenCount} tokens`);
             res.write('data: [DONE]\n\n');
             res.end();
           }
           
+          // Process metadata asynchronously for better performance
           if (fullContent.trim()) {
-            processStreamResponse(fullContent, userPrompt, userId);
+            setImmediate(() => processStreamResponse(fullContent, userPrompt, userId));
           }
         });
 
@@ -316,33 +241,22 @@ ${userPrompt}`;
           if (!streamEnded) {
             streamEnded = true;
             clearTimeout(streamTimeout);
-            console.error('❌ Stream error:', error);
+            console.error('❌ Stream error:', error.message);
             res.write(`data: ${JSON.stringify({ 
               error: true, 
-              message: "Stream connection error. Please try again.",
-              recoverable: true 
+              message: "Stream error. Please try again."
             })}\n\n`);
             res.end();
           }
         });
 
-        res.on('error', (error) => {
-          if (!streamEnded) {
-            streamEnded = true;
-            clearTimeout(streamTimeout);
-            console.error('❌ Response stream error:', error);
-            if (streamResponse.data && streamResponse.data.destroy) {
-              streamResponse.data.destroy();
-            }
-          }
-        });
-
+        // Handle client disconnect
         req.on('close', () => {
           if (!streamEnded) {
             streamEnded = true;
             clearTimeout(streamTimeout);
-            console.log('🔌 Client disconnected during stream');
-            if (streamResponse.data && streamResponse.data.destroy) {
+            console.log('🔌 Client disconnected');
+            if (streamResponse.data?.destroy) {
               streamResponse.data.destroy();
             }
           }
@@ -358,245 +272,125 @@ ${userPrompt}`;
       return;
     }
 
-    // --- Non-streaming mode ---
+    // --- Optimized Non-streaming mode ---
     try {
       const llmRes = await axios({
         method: "POST",
         url: llamaCppApiUrl,
         headers: {
           "Content-Type": "application/json",
-          "ngrok-skip-browser-warning": "true",
           "User-Agent": "numina-server/1.0",
-          Connection: "keep-alive",
         },
         data: optimizedParams,
         httpsAgent: httpsAgent,
-        timeout: 120000,
+        timeout: 30000, // Reduced timeout for faster response
       });
 
-      let botReplyContent = llmRes.data.content || "";
-      console.log("Raw LLM response:", botReplyContent);
+      const rawContent = llmRes.data.content || "";
+      
+      // Fast metadata extraction
+      const { inferredTask, inferredEmotion, cleanContent } = extractMetadata(rawContent);
+      
+      // Final cleanup
+      const botReplyContent = sanitizeResponse(cleanContent);
 
-      // Parse and clean response (matches server.js logic)
-      let inferredTask = null;
-      let inferredEmotion = null;
-
-      const extractJsonPattern = (regex, content, logType) => {
-        const match = content.match(regex);
-        if (!match || !match[1]) {
-          return [null, content];
-        }
-
-        try {
-          const jsonString = match[1].trim();
-          const parsed = JSON.parse(jsonString);
-          const newContent = content.replace(match[0], "");
-          return [parsed, newContent];
-        } catch (jsonError) {
-          console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
-          return [null, content];
-        }
-      };
-
-      const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
-      const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
-
-      [inferredEmotion, botReplyContent] = extractJsonPattern(
-        emotionLogRegex,
-        botReplyContent,
-        "emotion log"
-      );
-
-      [inferredTask, botReplyContent] = extractJsonPattern(
-        taskInferenceRegex,
-        botReplyContent,
-        "task inference"
-      );
-
-      // Clean up response
-      botReplyContent = botReplyContent
-        .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "")
-        .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-        .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-        .replace(/TASK_INFERENCE:?/g, "")
-        .replace(/EMOTION_LOG:?/g, "")
-        .replace(/```json[\s\S]*?```/g, "")
-        .replace(/(\r?\n){2,}/g, "\n")
-        .trim();
-
-      if (botReplyContent.includes("TASK_INFERENCE") || botReplyContent.includes("EMOTION_LOG")) {
-        console.warn("Markers detected - applying emergency cleanup");
-        botReplyContent = botReplyContent
-          .split("\n")
-          .filter(line => !line.includes("TASK_INFERENCE") && !line.includes("EMOTION_LOG"))
-          .join("\n")
-          .trim();
-      }
-
-      botReplyContent = sanitizeResponse(botReplyContent);
-
-      // Database operations
-      const dbOperations = [];
-
-      dbOperations.push(
+      // Parallel database operations
+      const dbOperations = [
         ShortTermMemory.insertMany([
           { userId, content: userPrompt, role: "user" },
-          {
-            userId,
-            content: botReplyContent || "I'm sorry, I wasn't able to provide a proper response.",
-            role: "assistant",
-          },
+          { userId, content: botReplyContent, role: "assistant" }
         ])
-      );
+      ];
 
-      if (inferredEmotion && inferredEmotion.emotion) {
-        const emotionToLog = {
-          emotion: inferredEmotion.emotion,
-          context: inferredEmotion.context || userPrompt,
-        };
-
-        if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
-          emotionToLog.intensity = inferredEmotion.intensity;
-        }
-
+      if (inferredEmotion?.emotion) {
         dbOperations.push(
           User.findByIdAndUpdate(userId, {
-            $push: { emotionalLog: emotionToLog },
+            $push: { 
+              emotionalLog: {
+                emotion: inferredEmotion.emotion,
+                intensity: inferredEmotion.intensity,
+                context: inferredEmotion.context || userPrompt
+              }
+            },
           })
         );
       }
 
-      if (inferredTask && inferredTask.taskType) {
-        const taskParameters = typeof inferredTask.parameters === "object" ? inferredTask.parameters : {};
-
+      if (inferredTask?.taskType) {
         dbOperations.push(
           Task.create({
             userId,
             taskType: inferredTask.taskType,
-            parameters: taskParameters,
+            parameters: inferredTask.parameters || {},
             status: "queued",
           })
         );
       }
 
+      // Execute all database operations in parallel
       await Promise.all(dbOperations);
-
-      // Final safety check
-      botReplyContent = sanitizeResponse(botReplyContent);
-
-      if (botReplyContent.includes("TASK_INFERENCE") || botReplyContent.includes("EMOTION_LOG")) {
-        console.error("CRITICAL ERROR: Markers still present despite sanitization");
-        botReplyContent = "I'm sorry, I wasn't able to provide a proper response. Please try again.";
-      }
 
       res.json({ content: botReplyContent });
 
     } catch (fetchError) {
-      console.error("Non-streaming LLM request failed:", fetchError.message);
+      console.error("LLM request failed:", fetchError.message);
       res.status(500).json({ 
         status: "error", 
-        message: "LLM request failed: " + fetchError.message
+        message: "Request failed: " + fetchError.message
       });
     }
 
   } catch (err) {
-    console.error("Completion request failed:", err.message);
-    res.status(500).json({ 
-      status: "error", 
-      message: "Completion failed: " + err.message
+    console.error("Completion error:", err.message);
+    res.status(500).json({
+      status: "error",
+      message: "Error processing request. Please try again.",
     });
   }
 });
 
-// Process stream response for metadata and database operations
+// Optimized stream processing function
 const processStreamResponse = async (fullContent, userPrompt, userId) => {
   try {
-    console.log("Processing stream response for metadata...");
-    
-    const extractJsonPattern = (regex, content, logType) => {
-      const match = content.match(regex);
-      if (!match || !match[1]) {
-        return [null, content];
-      }
+    const { inferredTask, inferredEmotion, cleanContent } = extractMetadata(fullContent);
+    const sanitizedContent = sanitizeResponse(cleanContent);
 
-      try {
-        const jsonString = match[1].trim();
-        const parsed = JSON.parse(jsonString);
-        return [parsed, content];
-      } catch (jsonError) {
-        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
-        return [null, content];
-      }
-    };
-
-    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
-    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
-
-    const [inferredEmotion] = extractJsonPattern(emotionLogRegex, fullContent, "emotion log");
-    const [inferredTask] = extractJsonPattern(taskInferenceRegex, fullContent, "task inference");
-
-    // Clean content for storage
-    let cleanContent = fullContent
-      .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-      .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-      .replace(/TASK_INFERENCE:?/g, "")
-      .replace(/EMOTION_LOG:?/g, "")
-      .replace(/(\r?\n){2,}/g, "\n")
-      .trim();
-
-    cleanContent = sanitizeResponse(cleanContent);
-
-    const dbOperations = [];
-
-    // Store conversation
-    dbOperations.push(
+    const dbOperations = [
       ShortTermMemory.insertMany([
         { userId, content: userPrompt, role: "user" },
-        {
-          userId,
-          content: cleanContent || "I'm sorry, I wasn't able to provide a proper response.",
-          role: "assistant",
-        },
+        { userId, content: sanitizedContent, role: "assistant" }
       ])
-    );
+    ];
 
-    // Store emotion if detected
-    if (inferredEmotion && inferredEmotion.emotion) {
-      const emotionToLog = {
-        emotion: inferredEmotion.emotion,
-        context: inferredEmotion.context || userPrompt,
-      };
-
-      if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
-        emotionToLog.intensity = inferredEmotion.intensity;
-      }
-
+    if (inferredEmotion?.emotion) {
       dbOperations.push(
         User.findByIdAndUpdate(userId, {
-          $push: { emotionalLog: emotionToLog },
+          $push: { 
+            emotionalLog: {
+              emotion: inferredEmotion.emotion,
+              intensity: inferredEmotion.intensity,
+              context: inferredEmotion.context || userPrompt
+            }
+          },
         })
       );
     }
 
-    // Store task if detected
-    if (inferredTask && inferredTask.taskType) {
-      const taskParameters = typeof inferredTask.parameters === "object" ? inferredTask.parameters : {};
-
+    if (inferredTask?.taskType) {
       dbOperations.push(
         Task.create({
           userId,
           taskType: inferredTask.taskType,
-          parameters: taskParameters,
+          parameters: inferredTask.parameters || {},
           status: "queued",
         })
       );
     }
 
     await Promise.all(dbOperations);
-    console.log("Stream response processing complete");
-
+    console.log('✅ Stream metadata processed successfully');
   } catch (error) {
-    console.error("Error processing stream response:", error);
+    console.error('❌ Stream processing error:', error.message);
   }
 };
 
