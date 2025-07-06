@@ -341,7 +341,7 @@ app.get("/health", async (req, res) => {
 app.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
-  // Comprehensive stop sequences to prevent runaway generation
+  // Comprehensive stop sequences to prevent runaway generation and hallucination
   const stop = req.body.stop || [
     "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
     "Human:", "\nHuman:", "\nhuman:", "human:",
@@ -353,8 +353,19 @@ app.post("/completion", protect, async (req, res) => {
     "```", // Code block endings
     "</EXAMPLES>", // Ensure we don't continue past examples
     "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
+    // Additional Mistral-specific stop sequences
+    "<s>", "</s>", "[INST]", "[/INST]",
+    "Assistant:", "\nAssistant:", "AI:",
+    // Prevent model from continuing examples
+    "Example:", "\nExample:", "For example:",
+    // Prevent repetitive patterns
+    "...", "etc.", "and so on",
+    // Prevent breaking into meta-commentary
+    "Note:", "Important:", "Remember:",
+    // Prevent generating fake sources or citations
+    "Source:", "Reference:", "According to:",
   ];
-  const n_predict = req.body.n_predict || 150; 
+  const n_predict = req.body.n_predict || 500; // Increased default for longer responses 
   const temperature = req.body.temperature || 0.7;
   const stream = req.body.stream || false; 
 
@@ -413,13 +424,16 @@ app.post("/completion", protect, async (req, res) => {
     }
     const conversationHistory = historyBuilder.join("\n");
 
-    // --- Clean, Concise Prompt ---
-    let fullPrompt = `You are a concise, factual and empathetic assistant.
-All text between the tags <EXAMPLES> and </EXAMPLES> is **reference only**.
-Do NOT continue or reply to any messages inside those tags.
-After </EXAMPLES> you will see "USER:" — respond only to that.
+    // --- Optimized Prompt Structure for Mistral 7B GGUF Q4 ---
+    let fullPrompt = `<s>[INST] You are a helpful, empathetic, and factual assistant. You provide thoughtful, comprehensive responses while maintaining accuracy and clarity.
 
-<EXAMPLES>`;
+RESPONSE FORMAT:
+- Provide natural, conversational responses
+- If you detect emotional content, format it as: EMOTION_LOG: {"emotion":"emotion_name","intensity":1-10,"context":"brief_context"}
+- If you identify a task, format it as: TASK_INFERENCE: {"taskType":"task_name","parameters":{"key":"value"}}
+- Keep these special markers separate from your main response
+
+CONVERSATION EXAMPLES:`;
 
     // Add conversation history as examples if it exists
     if (conversationHistory.length > 0) {
@@ -431,24 +445,30 @@ After </EXAMPLES> you will see "USER:" — respond only to that.
           fullPrompt += `\nAssistant: ${exchange.substring(9)}`;
         }
       }
-    } else {
-      // Default examples
-      fullPrompt += `
-User: I'm feeling anxious about tomorrow.
-Assistant:
-EMOTION_LOG: {"emotion":"anxiety","intensity":6,"context":"upcoming event"}
-That sounds stressful. What's happening tomorrow that's making you feel this way?
+          } else {
+        // Default examples optimized for Mistral 7B
+        fullPrompt += `
+User: I'm feeling anxious about tomorrow's presentation.
+Assistant: EMOTION_LOG: {"emotion":"anxiety","intensity":6,"context":"upcoming presentation"}
+I understand that feeling anxious about presentations is completely natural. Many people experience this, and it shows you care about doing well. What specific aspects of the presentation are making you feel most anxious? Is it the content, the audience, or perhaps the technical setup? Once we identify the main concerns, we can work on some practical strategies to help you feel more confident and prepared.
 
-User: Can you help me organize my schedule?
-Assistant:
-TASK_INFERENCE: {"taskType":"schedule_organization","parameters":{"scope":"daily"}}
-I'd be happy to help you organize your schedule. What specific areas would you like to focus on?`;
-    }
+User: Can you help me organize my work schedule for next week?
+Assistant: TASK_INFERENCE: {"taskType":"schedule_organization","parameters":{"scope":"weekly","context":"work"}}
+I'd be happy to help you organize your work schedule for next week. To provide the most helpful guidance, could you tell me about your current workload? Are there any specific priorities, deadlines, or meetings I should know about? Also, what time management challenges are you currently facing? With this information, I can suggest a structured approach that works best for your situation.
+
+User: Tell me about the benefits of regular exercise.
+Assistant: Regular exercise offers numerous benefits for both physical and mental health. Physically, it strengthens your cardiovascular system, improves muscle tone and bone density, and helps maintain a healthy weight. It also boosts your immune system, making you less susceptible to illness. 
+
+Mentally, exercise is a powerful mood enhancer. It releases endorphins, which are natural mood elevators, and can significantly reduce symptoms of anxiety and depression. Regular physical activity also improves cognitive function, including memory and concentration, and can help you sleep better at night.
+
+The key is finding activities you enjoy - whether it's walking, swimming, dancing, or playing sports. Even 30 minutes of moderate exercise most days of the week can make a significant difference in your overall well-being.`;
+      }
 
     fullPrompt += `
-</EXAMPLES>
 
-USER: ${userPrompt}`;
+Remember: Provide helpful, accurate responses. Use the special markers only when relevant. Focus on being conversational and empathetic. [/INST]
+
+${userPrompt}`;
 
     console.log("Full prompt constructed. Length:", fullPrompt.length);
     // console.log("Full prompt content:", fullPrompt); // Uncomment for debugging if needed
@@ -476,24 +496,28 @@ USER: ${userPrompt}`;
     let llmRes;
 
     try {
-      // Optimize the parameters to improve speed with minimal quality loss
+      // Optimized parameters for Mistral 7B GGUF Q4 with extended length
       const optimizedParams = {
         prompt: fullPrompt,
         stop: stop,
-        n_predict: Math.min(n_predict, 200), // Cap at 200 tokens to prevent runaway generation
-        temperature: Math.min(temperature, 0.8), // Cap temperature to reduce hallucination
-        top_k: 40, // Limit vocabulary to top 40 tokens
-        top_p: 0.8, // More focused sampling
-        repeat_penalty: 1.3, // Stronger penalty to reduce repetition
-        frequency_penalty: 0.4, // Stronger penalty for repeated tokens  
-        presence_penalty: 0.3, // Encourage diverse content
+        n_predict: Math.min(n_predict, 1000), // Significantly increased token limit
+        temperature: Math.min(temperature, 0.85), // Allow slightly higher temperature
+        top_k: 50, // Increased vocabulary for better diversity
+        top_p: 0.9, // More diverse sampling
+        repeat_penalty: 1.15, // Reduced to allow more natural repetition
+        frequency_penalty: 0.2, // Reduced for more natural flow
+        presence_penalty: 0.1, // Reduced to prevent over-diversification
         stream: stream, // Add streaming parameter
-        // Additional parameters for better control
-        min_p: 0.1, // Minimum probability threshold
-        typical_p: 0.9, // Typical sampling parameter
+        // Mistral 7B specific optimizations
+        min_p: 0.05, // Lower threshold for better token diversity
+        typical_p: 0.95, // Higher typical sampling for coherence
         mirostat: 2, // Enable mirostat sampling for better coherence
-        mirostat_tau: 5.0, // Target entropy
-        mirostat_eta: 0.1, // Learning rate
+        mirostat_tau: 4.0, // Optimized target entropy for Mistral
+        mirostat_eta: 0.15, // Higher learning rate for better adaptation
+        // Additional parameters for quality control
+        tfs_z: 1.0, // Tail free sampling
+        penalty_alpha: 0.6, // Contrastive search penalty
+        penalty_last_n: 128, // Context window for penalties
       };
 
       if (stream) {
@@ -529,16 +553,18 @@ USER: ${userPrompt}`;
           
           console.log('📡 Stream connected, waiting for tokens...');
           
-          // Set up a timeout to prevent infinite streams
+          // Set up a timeout to prevent infinite streams (extended for longer responses)
           const streamTimeout = setTimeout(() => {
             if (!streamEnded) {
               console.log('⏰ Stream timeout reached, ending stream');
               streamEnded = true;
               res.write('data: [DONE]\n\n');
               res.end();
-              streamResponse.data.destroy();
+              if (streamResponse.data && streamResponse.data.destroy) {
+                streamResponse.data.destroy();
+              }
             }
-          }, 45000); // 45 second timeout
+          }, 120000); // 2 minute timeout for longer responses
           
           streamResponse.data.on('data', (chunk) => {
             if (streamEnded) return;
@@ -580,7 +606,7 @@ USER: ${userPrompt}`;
                                          // Check for stop sequences in the accumulated content
                      let shouldStop = false;
                      for (const stopSeq of stop) {
-                       if (metadataBuffer.includes(stopSeq)) {
+                       if (metadataBuffer.includes(stopSeq) || fullContent.includes(stopSeq)) {
                          console.log(`🛑 Stop sequence detected: "${stopSeq}" in buffer`);
                          shouldStop = true;
                          streamEnded = true;
@@ -589,8 +615,33 @@ USER: ${userPrompt}`;
                        }
                      }
                      
-                     // Additional safety check for excessive token generation
-                     if (tokenCount > 300) {
+                     // Additional hallucination prevention checks
+                     if (!shouldStop) {
+                       // Check for repetitive patterns that might indicate hallucination
+                       const words = fullContent.split(' ');
+                       if (words.length > 20) {
+                         const lastTenWords = words.slice(-10).join(' ');
+                         const contentWithoutLast = words.slice(0, -10).join(' ');
+                         if (contentWithoutLast.includes(lastTenWords)) {
+                           console.log('🚨 Repetitive pattern detected, stopping stream');
+                           shouldStop = true;
+                           streamEnded = true;
+                           clearTimeout(streamTimeout);
+                         }
+                       }
+                       
+                       // Check for excessive punctuation which might indicate confusion
+                       const punctuationCount = (fullContent.match(/[.!?]{3,}/g) || []).length;
+                       if (punctuationCount > 3) {
+                         console.log('🚨 Excessive punctuation detected, stopping stream');
+                         shouldStop = true;
+                         streamEnded = true;
+                         clearTimeout(streamTimeout);
+                       }
+                     }
+                     
+                     // Additional safety check for excessive token generation (increased limit)
+                     if (tokenCount > 1000) {
                        console.log(`🚨 Token limit exceeded (${tokenCount}), stopping stream`);
                        shouldStop = true;
                        streamEnded = true;
@@ -659,8 +710,38 @@ USER: ${userPrompt}`;
               streamEnded = true;
               clearTimeout(streamTimeout);
               console.error('❌ Stream error:', error);
-              res.write('data: [ERROR]\n\n');
+              
+              // Send a proper error response that client can handle
+              res.write(`data: ${JSON.stringify({ 
+                error: true, 
+                message: "Stream connection error. Please try again.",
+                recoverable: true 
+              })}\n\n`);
               res.end();
+            }
+          });
+          
+          // Handle connection errors on the response stream
+          res.on('error', (error) => {
+            if (!streamEnded) {
+              streamEnded = true;
+              clearTimeout(streamTimeout);
+              console.error('❌ Response stream error:', error);
+              if (streamResponse.data && streamResponse.data.destroy) {
+                streamResponse.data.destroy();
+              }
+            }
+          });
+          
+          // Handle client disconnect
+          req.on('close', () => {
+            if (!streamEnded) {
+              streamEnded = true;
+              clearTimeout(streamTimeout);
+              console.log('🔌 Client disconnected during stream');
+              if (streamResponse.data && streamResponse.data.destroy) {
+                streamResponse.data.destroy();
+              }
             }
           });
           
@@ -684,7 +765,7 @@ USER: ${userPrompt}`;
           },
           data: optimizedParams,
           httpsAgent: httpsAgent,
-          timeout: 45000, // 45 seconds timeout for LLM requests
+          timeout: 120000, // 2 minutes timeout for longer LLM requests
         });
       }
 
