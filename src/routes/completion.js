@@ -5,6 +5,7 @@ import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
 import { sanitizeResponse } from "../utils/sanitize.js";
 import { createUserCache } from "../utils/cache.js";
+import { createLLMService } from "../services/llmService.js";
 import axios from "axios";
 import https from "https";
 
@@ -182,6 +183,7 @@ router.post("/completion", protect, async (req, res) => {
       const fullPrompt = promptParts.join("\n\n");
 
       // Make streaming request to OpenRouter
+      const llmService = createLLMService();
       const llamaRes = await llmService.makeStreamingRequest(fullPrompt, {
         stop,
         n_predict,
