@@ -86,6 +86,16 @@ router.post("/completion", protect, async (req, res) => {
       );
       const fullPrompt = promptParts.join("\n\n");
 
+      console.log('🚀 STREAMING - Starting real-time token stream...');
+      
+      // Set streaming headers optimized for real-time
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
       // Make streaming request to llama.cpp
       const llamaRes = await axios({
         method: "POST",
@@ -98,36 +108,189 @@ router.post("/completion", protect, async (req, res) => {
           stream: true,
         },
         responseType: "stream",
-        timeout: 30000, // 30 second timeout
+        timeout: 60000, // 1 minute timeout
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream'
         }
       });
 
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
-      res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+      let fullContent = '';
+      let buffer = '';
+      let tokenCount = 0;
+      let streamEnded = false;
+      let metadataBuffer = ''; // Buffer for metadata detection
+      
+      console.log('📡 Stream connected, waiting for tokens...');
+      
+      // Set up a timeout to prevent infinite streams
+      const streamTimeout = setTimeout(() => {
+        if (!streamEnded) {
+          console.log('⏰ Stream timeout reached, ending stream');
+          streamEnded = true;
+          res.write('data: [DONE]\n\n');
+          res.end();
+          if (llamaRes.data && llamaRes.data.destroy) {
+            llamaRes.data.destroy();
+          }
+        }
+      }, 60000); // 1 minute timeout
 
       // Handle streaming data chunk by chunk
       llamaRes.data.on('data', (chunk) => {
-        res.write(chunk);
-        res.flush && res.flush(); // Ensure immediate sending
-      });
-      llamaRes.data.on("end", () => {
-        res.end();
-      });
-      llamaRes.data.on("error", (err) => {
-        console.error("Stream error:", err.message);
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'text/plain' });
+        if (streamEnded) return;
+        
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line for next chunk
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line.length > 6) {
+            try {
+              const jsonStr = line.substring(6).trim();
+              
+              if (jsonStr === '[DONE]') {
+                console.log('🏁 Stream ended by llama.cpp');
+                streamEnded = true;
+                clearTimeout(streamTimeout);
+                break;
+              }
+              
+              const parsed = JSON.parse(jsonStr);
+              
+              // Check if stream should stop based on parsed data
+              if (parsed.stop === true || parsed.stopped === true) {
+                console.log('🛑 Stream stopped by model');
+                streamEnded = true;
+                clearTimeout(streamTimeout);
+                break;
+              }
+              
+              // Only process if there's actual content
+              if (parsed.content && parsed.content.trim()) {
+                fullContent += parsed.content;
+                metadataBuffer += parsed.content;
+                tokenCount++;
+                
+                console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
+                
+                // Check for stop sequences in the accumulated content
+                let shouldStop = false;
+                for (const stopSeq of stop) {
+                  if (metadataBuffer.includes(stopSeq) || fullContent.includes(stopSeq)) {
+                    console.log(`🛑 Stop sequence detected: "${stopSeq}"`);
+                    shouldStop = true;
+                    streamEnded = true;
+                    clearTimeout(streamTimeout);
+                    break;
+                  }
+                }
+                
+                // Additional safety check for excessive token generation
+                if (tokenCount > 1000) {
+                  console.log(`🚨 Token limit exceeded (${tokenCount}), stopping stream`);
+                  shouldStop = true;
+                  streamEnded = true;
+                  clearTimeout(streamTimeout);
+                }
+                
+                if (shouldStop) break;
+                
+                // Look for metadata markers in accumulated buffer
+                const hasMetadataStart = metadataBuffer.includes('EMOTION_LOG') || 
+                                       metadataBuffer.includes('TASK_INFERENCE');
+                
+                // If we detect metadata, don't send this token but continue collecting
+                if (hasMetadataStart) {
+                  // Check if we have a complete JSON object
+                  const emotionMatch = metadataBuffer.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
+                  const taskMatch = metadataBuffer.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
+                  
+                  if (emotionMatch || taskMatch) {
+                    // We have complete metadata, clear the buffer but don't send
+                    console.log('🔍 Complete metadata detected:', emotionMatch ? 'EMOTION_LOG' : 'TASK_INFERENCE');
+                    metadataBuffer = '';
+                  } else {
+                    console.log('🔍 Partial metadata detected, buffering...');
+                  }
+                  // If incomplete metadata, just continue buffering
+                } else {
+                  // No metadata detected, safe to send
+                  res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
+                  
+                  // Force flush for real-time delivery
+                  if (res.flush) res.flush();
+                  
+                  // Reset metadata buffer periodically to prevent overflow
+                  if (metadataBuffer.length > 500) {
+                    metadataBuffer = metadataBuffer.slice(-200);
+                    console.log('📝 Metadata buffer reset to prevent overflow');
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('JSON parse error in stream:', e);
+              // Skip invalid JSON
+            }
+          }
         }
-        res.write(`data: {"error": "${err.message}"}\n\n`);
-        res.end();
       });
+
+      llamaRes.data.on("end", () => {
+        if (!streamEnded) {
+          streamEnded = true;
+          clearTimeout(streamTimeout);
+          console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+        }
+        
+        // Process the complete response for metadata and save to memory
+        if (fullContent.trim()) {
+          processStreamResponse(fullContent, userPrompt, userId);
+        }
+      });
+
+      llamaRes.data.on("error", (err) => {
+        if (!streamEnded) {
+          streamEnded = true;
+          clearTimeout(streamTimeout);
+          console.error('❌ Stream error:', err);
+          
+          // Send a proper error response that client can handle
+          res.write(`data: ${JSON.stringify({ 
+            error: true, 
+            message: "Stream connection error. Please try again.",
+            recoverable: true 
+          })}\n\n`);
+          res.end();
+        }
+      });
+
+      // Handle connection errors on the response stream
+      res.on('error', (error) => {
+        if (!streamEnded) {
+          streamEnded = true;
+          clearTimeout(streamTimeout);
+          console.error('❌ Response stream error:', error);
+          if (llamaRes.data && llamaRes.data.destroy) {
+            llamaRes.data.destroy();
+          }
+        }
+      });
+      
+      // Handle client disconnect
+      req.on('close', () => {
+        if (!streamEnded) {
+          streamEnded = true;
+          clearTimeout(streamTimeout);
+          console.log('🔌 Client disconnected during stream');
+          if (llamaRes.data && llamaRes.data.destroy) {
+            llamaRes.data.destroy();
+          }
+        }
+      });
+
     } catch (err) {
       console.error("Streaming request failed:", err.message);
       res.status(500).json({ 
@@ -401,5 +564,115 @@ router.post("/completion", protect, async (req, res) => {
     });
   }
 });
+
+// Process streaming response for metadata and memory storage
+const processStreamResponse = async (fullContent, userPrompt, userId) => {
+  try {
+    console.log("Processing complete stream response for metadata...");
+    
+    // Helper function for JSON extraction with error handling
+    const extractJsonPattern = (regex, content, logType) => {
+      const match = content.match(regex);
+      if (!match || !match[1]) {
+        return [null, content];
+      }
+
+      try {
+        // Extract JSON and remove the match from content
+        const jsonString = match[1].trim();
+        const parsed = JSON.parse(jsonString);
+        // Remove the entire pattern (marker + JSON)
+        const newContent = content.replace(match[0], "");
+
+        return [parsed, newContent];
+      } catch (jsonError) {
+        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
+        return [null, content];
+      }
+    };
+
+    // Extract metadata from full content
+    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
+    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
+
+    let inferredEmotion = null;
+    let inferredTask = null;
+    let processedContent = fullContent;
+
+    // Process emotion first
+    [inferredEmotion, processedContent] = extractJsonPattern(
+      emotionLogRegex,
+      processedContent,
+      "emotion log"
+    );
+
+    // Then process task
+    [inferredTask, processedContent] = extractJsonPattern(
+      taskInferenceRegex,
+      processedContent,
+      "task inference"
+    );
+
+    // Clean up the content
+    processedContent = sanitizeResponse(processedContent);
+
+    // Prepare database operations
+    const dbOperations = [];
+
+    // Memory storage operations
+    dbOperations.push(
+      ShortTermMemory.insertMany([
+        { userId, content: userPrompt, role: "user" },
+        {
+          userId,
+          content: processedContent || "Stream response processed.",
+          role: "assistant",
+        },
+      ])
+    );
+
+    // Process inferred emotion if present
+    if (inferredEmotion && inferredEmotion.emotion) {
+      const emotionToLog = {
+        emotion: inferredEmotion.emotion,
+        context: inferredEmotion.context || userPrompt,
+      };
+
+      if (inferredEmotion.intensity >= 1 && inferredEmotion.intensity <= 10) {
+        emotionToLog.intensity = inferredEmotion.intensity;
+      }
+
+      dbOperations.push(
+        User.findByIdAndUpdate(userId, {
+          $push: { emotionalLog: emotionToLog },
+        })
+      );
+    }
+
+    // Process inferred task if present
+    if (inferredTask && inferredTask.taskType) {
+      const taskParameters =
+        typeof inferredTask.parameters === "object"
+          ? inferredTask.parameters
+          : {};
+
+      dbOperations.push(
+        Task.create({
+          userId,
+          taskType: inferredTask.taskType,
+          parameters: taskParameters,
+          status: "queued",
+        })
+      );
+    }
+
+    // Execute all database operations in parallel
+    await Promise.all(dbOperations);
+
+    console.log("Stream response processing completed successfully");
+  } catch (error) {
+    console.error('Error processing stream response:', error);
+  }
+};
 
 export default router; 
