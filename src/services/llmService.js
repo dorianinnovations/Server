@@ -3,6 +3,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Helper function to get a clean referer URL
+const getRefererUrl = () => {
+  const referer = process.env.HTTP_REFERER || "http://localhost:3000";
+  // Remove any potentially problematic characters
+  return referer.replace(/[^\w\-.:\/]/g, '');
+};
+
 export const createLLMService = () => {
   const openRouterApiUrl = "https://openrouter.ai/api/v1/chat/completions";
   
@@ -25,7 +32,7 @@ export const createLLMService = () => {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": process.env.HTTP_REFERER || "http://localhost:3000",
+          "Referer": process.env.HTTP_REFERER || "http://localhost:3000",
           "X-Title": "Numina Server",
         },
         data: {
@@ -86,7 +93,7 @@ export const createLLMService = () => {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": process.env.HTTP_REFERER || "http://localhost:3000",
+          "Referer": process.env.HTTP_REFERER || "http://localhost:3000",
           "X-Title": "Numina Server",
         },
         data: {
@@ -116,7 +123,7 @@ export const createLLMService = () => {
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": process.env.HTTP_REFERER || "http://localhost:3000",
+          "Referer": process.env.HTTP_REFERER || "http://localhost:3000",
           "X-Title": "Numina Server",
         },
         data: {
