@@ -1,226 +1,126 @@
-// Enhanced in-memory cache with smart caching capabilities
-export const createCache = () => {
-  const cache = {
-    items: new Map(),
-    maxSize: 500, // Increased cache size for better performance
-    ttl: 60 * 5 * 1000, // 5 minutes default TTL
-    hitCount: 0,
-    missCount: 0,
-    accessTimes: new Map(), // Track access times for LRU
+import { MEMORY_CONFIG } from "../config/constants.js";
 
-    set(key, value, customTtl) {
-      // Clean cache if it's getting too large using LRU strategy
-      if (this.items.size >= this.maxSize) {
-        this.evictLRU();
+// --- Enhanced Cache Implementation ---
+class MemoryCache {
+  constructor() {
+    this.cache = new Map();
+    this.expirationTimes = new Map();
+  }
+
+  set(key, value, ttl = MEMORY_CONFIG.CACHE_TTL) {
+    const expirationTime = Date.now() + ttl;
+    this.cache.set(key, value);
+    this.expirationTimes.set(key, expirationTime);
+    return this;
+  }
+
+  get(key) {
+    const expirationTime = this.expirationTimes.get(key);
+    if (expirationTime && Date.now() > expirationTime) {
+      this.delete(key);
+      return undefined;
+    }
+    return this.cache.get(key);
+  }
+
+  delete(key) {
+    this.cache.delete(key);
+    this.expirationTimes.delete(key);
+    return this;
+  }
+
+  clear() {
+    this.cache.clear();
+    this.expirationTimes.clear();
+    return this;
+  }
+
+  size() {
+    return this.cache.size;
+  }
+
+  keys() {
+    return Array.from(this.cache.keys());
+  }
+
+  // Clean up expired entries
+  cleanup() {
+    const now = Date.now();
+    for (const [key, expirationTime] of this.expirationTimes.entries()) {
+      if (now > expirationTime) {
+        this.delete(key);
       }
+    }
+  }
+}
 
-      const ttl = customTtl || this.ttl;
-      this.items.set(key, {
-        value,
-        expires: Date.now() + ttl,
-        created: Date.now(),
-        accessed: Date.now(),
-        accessCount: 1,
-      });
-      this.accessTimes.set(key, Date.now());
-    },
+// Global cache instance
+const globalCache = new MemoryCache();
 
-    get(key) {
-      const item = this.items.get(key);
-      if (!item) {
-        this.missCount++;
-        return null;
-      }
+// Factory function to create cache instances
+export const createCache = () => new MemoryCache();
 
-      if (Date.now() > item.expires) {
-        this.items.delete(key);
-        this.accessTimes.delete(key);
-        this.missCount++;
-        return null;
-      }
-
-      // Update access statistics
-      item.accessed = Date.now();
-      item.accessCount++;
-      this.accessTimes.set(key, Date.now());
-      this.hitCount++;
-
-      return item.value;
-    },
-
-    has(key) {
-      const item = this.items.get(key);
-      if (!item) return false;
-      
-      if (Date.now() > item.expires) {
-        this.items.delete(key);
-        this.accessTimes.delete(key);
-        return false;
-      }
-      
-      return true;
-    },
-
-    delete(key) {
-      const deleted = this.items.delete(key);
-      this.accessTimes.delete(key);
-      return deleted;
-    },
-
-    clear() {
-      this.items.clear();
-      this.accessTimes.clear();
-      this.hitCount = 0;
-      this.missCount = 0;
-    },
-
-    // LRU eviction strategy
-    evictLRU() {
-      const sortedByAccess = [...this.accessTimes.entries()]
-        .sort((a, b) => a[1] - b[1]);
-      
-      const keysToDelete = sortedByAccess.slice(0, Math.floor(this.maxSize * 0.2));
-      keysToDelete.forEach(([key]) => {
-        this.items.delete(key);
-        this.accessTimes.delete(key);
-      });
-    },
-
-    // Get cache statistics
-    getStats() {
-      const total = this.hitCount + this.missCount;
-      return {
-        size: this.items.size,
-        maxSize: this.maxSize,
-        hitCount: this.hitCount,
-        missCount: this.missCount,
-        hitRate: total > 0 ? (this.hitCount / total * 100).toFixed(2) + '%' : '0%',
-        memoryUsage: this.getMemoryUsage(),
-      };
-    },
-
-    getMemoryUsage() {
-      let totalSize = 0;
-      for (const [key, item] of this.items) {
-        totalSize += JSON.stringify(key).length + JSON.stringify(item).length;
-      }
-      return Math.round(totalSize / 1024) + 'KB';
-    },
-
-    // Cleanup expired items
-    cleanup() {
-      const now = Date.now();
-      for (const [key, item] of this.items) {
-        if (now > item.expires) {
-          this.items.delete(key);
-          this.accessTimes.delete(key);
-        }
-      }
-    },
-  };
-
-  // Setup periodic cleanup
-  setInterval(() => {
-    cache.cleanup();
-  }, 60 * 1000); // Cleanup every minute
-
-  return cache;
+// User-specific cache factory with user ID prefix
+export const createUserCache = (userId) => {
+  const userCache = new MemoryCache();
+  
+  // Override methods to prefix keys with user ID
+  const originalSet = userCache.set.bind(userCache);
+  const originalGet = userCache.get.bind(userCache);
+  const originalDelete = userCache.delete.bind(userCache);
+  
+  userCache.set = (key, value, ttl) => originalSet(`user:${userId}:${key}`, value, ttl);
+  userCache.get = (key) => originalGet(`user:${userId}:${key}`);
+  userCache.delete = (key) => originalDelete(`user:${userId}:${key}`);
+  
+  return userCache;
 };
 
-// Smart caching for user data
-export const createUserCache = () => {
-  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-  const cache = new Map();
+// Memory monitoring and garbage collection
+let gcCount = 0;
+let lastGcTime = Date.now();
 
-  return {
-    async getCachedUser(userId, fetchFunction) {
-      const key = `user:${userId}`;
-      const cached = cache.get(key);
-      
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached.data;
-      }
-      
-      const user = await fetchFunction();
-      cache.set(key, { data: user, timestamp: Date.now() });
-      return user;
-    },
-
-    async getCachedMemory(userId, fetchFunction) {
-      const key = `memory:${userId}`;
-      const cached = cache.get(key);
-      
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        return cached.data;
-      }
-      
-      const memory = await fetchFunction();
-      cache.set(key, { data: memory, timestamp: Date.now() });
-      return memory;
-    },
-
-    invalidateUser(userId) {
-      cache.delete(`user:${userId}`);
-      cache.delete(`memory:${userId}`);
-    },
-
-    clear() {
-      cache.clear();
-    },
-
-    getStats() {
-      return {
-        size: cache.size,
-        keys: [...cache.keys()],
-      };
-    },
-  };
-};
-
-// Enhanced memory monitoring with performance tracking
 export const setupMemoryMonitoring = () => {
-  let previousMemory = process.memoryUsage();
-  let gcCount = 0;
-
-  const monitoringInterval = setInterval(() => {
-    const memUsage = process.memoryUsage();
-    const memoryDiff = {
-      rss: memUsage.rss - previousMemory.rss,
-      heapUsed: memUsage.heapUsed - previousMemory.heapUsed,
-      heapTotal: memUsage.heapTotal - previousMemory.heapTotal,
-    };
-
-    console.log(
-      `Memory: ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS, ` +
-      `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB Heap ` +
-      `(${memoryDiff.rss > 0 ? '+' : ''}${Math.round(memoryDiff.rss / 1024 / 1024)}MB)`
-    );
-
-    // More aggressive GC for high memory usage
-    if (memUsage.heapUsed > 150 * 1024 * 1024) { // 150MB threshold
+  const monitorMemory = () => {
+    const memoryUsage = process.memoryUsage();
+    const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
+    const heapTotalMB = Math.round(memoryUsage.heapTotal / 1024 / 1024);
+    const rssMB = Math.round(memoryUsage.rss / 1024 / 1024);
+    
+    // Clean up expired cache entries
+    globalCache.cleanup();
+    
+    // Log memory usage periodically
+    if (Date.now() - lastGcTime > MEMORY_CONFIG.MEMORY_MONITORING_INTERVAL) {
+      console.log(
+        `Memory: ${heapUsedMB}MB/${heapTotalMB}MB heap, ${rssMB}MB RSS, Cache: ${globalCache.size()} items`
+      );
+      lastGcTime = Date.now();
+    }
+    
+    // Trigger garbage collection if memory usage is high
+    if (memoryUsage.heapUsed > MEMORY_CONFIG.GC_THRESHOLD) {
       console.log("High memory usage detected, triggering garbage collection");
       if (global.gc) {
         console.log("Running garbage collection");
         global.gc();
         gcCount++;
+        
+        // Log GC stats
+        const newMemoryUsage = process.memoryUsage();
+        const newHeapUsedMB = Math.round(newMemoryUsage.heapUsed / 1024 / 1024);
+        console.log(`GC has been triggered ${gcCount} times`);
+        console.log(`Memory after GC: ${newHeapUsedMB}MB heap`);
       }
     }
-
-    // Log GC statistics
-    if (gcCount > 0 && gcCount % 10 === 0) {
-      console.log(`GC has been triggered ${gcCount} times`);
-    }
-
-    previousMemory = memUsage;
-  }, 60 * 1000); // Check every minute
-
-  // Cleanup on exit
-  process.on('exit', () => {
-    clearInterval(monitoringInterval);
-  });
-
-  return {
-    stop: () => clearInterval(monitoringInterval),
-    getGCCount: () => gcCount,
   };
-}; 
+  
+  // Monitor memory every minute
+  setInterval(monitorMemory, MEMORY_CONFIG.MEMORY_MONITORING_INTERVAL);
+  
+  // Initial memory check
+  monitorMemory();
+};
+
+// Export the global cache instance
+export default globalCache; 

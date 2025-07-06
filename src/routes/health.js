@@ -1,38 +1,46 @@
 import express from "express";
 import mongoose from "mongoose";
+import { checkDBHealth } from "../config/database.js";
 import { createLLMService } from "../services/llmService.js";
+import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 
 const router = express.Router();
-const llmService = createLLMService();
 
-// Health Check Endpoint
+// Health check endpoint
 router.get("/health", async (req, res) => {
   try {
+    const llmService = createLLMService();
+    const dbHealth = checkDBHealth();
     const llmHealth = await llmService.healthCheck();
 
     const healthStatus = {
       server: "healthy",
-      database:
-        mongoose.connection.readyState === 1 ? "connected" : "disconnected",
-      llm_api: llmHealth.status,
-      llm_api_url: llmHealth.url,
-      llm_response_status: llmHealth.responseStatus,
+      database: dbHealth.state,
+      llm_api: llmHealth.healthy ? "accessible" : "unreachable",
+      llm_api_url: llmService.config.apiUrl,
+      timestamp: new Date().toISOString(),
     };
 
-    if (llmHealth.status === "accessible") {
-      res.json({ status: "success", health: healthStatus });
+    if (llmHealth.healthy && dbHealth.state === 'connected') {
+      res.json({ 
+        status: MESSAGES.SUCCESS, 
+        health: healthStatus 
+      });
     } else {
-      res.status(503).json({
-        status: "degraded",
+      res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({
+        status: MESSAGES.DEGRADED,
         health: {
           ...healthStatus,
-          error: llmHealth.error,
+          llm_error: llmHealth.error || null,
         },
       });
     }
   } catch (err) {
     console.error("Health check error:", err);
-    res.status(500).json({ status: "error", message: "Health check failed" });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
+      status: MESSAGES.ERROR, 
+      message: MESSAGES.HEALTH_CHECK_FAILED 
+    });
   }
 });
 

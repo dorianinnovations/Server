@@ -1,23 +1,22 @@
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { env } from "./environment.js";
+import { DB_CONFIG } from "./constants.js";
 
 // Optimized Database Connection with enhanced pool settings
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      // Optimized connection pool settings
-      maxPoolSize: 50,           // Increased pool size for better concurrency
-      minPoolSize: 5,            // Maintain minimum connections
-      maxIdleTimeMS: 30000,      // Close idle connections after 30 seconds
-      serverSelectionTimeoutMS: 5000, // Fast server selection timeout
-      socketTimeoutMS: 45000,    // Socket timeout
-      family: 4,                 // Use IPv4, avoid slow IPv6 lookups
-      bufferCommands: false,     // Disable mongoose buffering for better performance
-      heartbeatFrequencyMS: 10000, // Heartbeat every 10 seconds
-      retryReads: true,          // Enable read retries
-      retryWrites: true,         // Enable write retries
+    await mongoose.connect(env.MONGO_URI, {
+      // Use centralized connection pool settings
+      maxPoolSize: DB_CONFIG.CONNECTION_POOL.MAX_POOL_SIZE,
+      minPoolSize: DB_CONFIG.CONNECTION_POOL.MIN_POOL_SIZE,
+      maxIdleTimeMS: DB_CONFIG.CONNECTION_POOL.MAX_IDLE_TIME_MS,
+      serverSelectionTimeoutMS: DB_CONFIG.CONNECTION_POOL.SERVER_SELECTION_TIMEOUT_MS,
+      socketTimeoutMS: DB_CONFIG.CONNECTION_POOL.SOCKET_TIMEOUT_MS,
+      family: 4, // Use IPv4, avoid slow IPv6 lookups
+      bufferCommands: false, // Disable mongoose buffering for better performance
+      heartbeatFrequencyMS: DB_CONFIG.CONNECTION_POOL.HEARTBEAT_FREQUENCY_MS,
+      retryReads: true, // Enable read retries
+      retryWrites: true, // Enable write retries
     });
     
     console.log("✓MongoDB connected with optimized pool settings");
@@ -42,7 +41,7 @@ const connectDB = async () => {
     
   } catch (err) {
     console.error("✗ MongoDB connection error:", err);
-    if (process.env.NODE_ENV !== 'test') {
+    if (env.NODE_ENV !== 'test') {
       process.exit(1); // Only exit in non-test environments
     } else {
       throw err; // Let the test fail naturally
@@ -54,10 +53,10 @@ const connectDB = async () => {
 export const checkDBHealth = () => {
   const state = mongoose.connection.readyState;
   const states = {
-    0: 'disconnected',
-    1: 'connected', 
-    2: 'connecting',
-    3: 'disconnecting'
+    0: DB_CONFIG.STATES.DISCONNECTED,
+    1: DB_CONFIG.STATES.CONNECTED,
+    2: DB_CONFIG.STATES.CONNECTING,
+    3: DB_CONFIG.STATES.DISCONNECTING
   };
   
   return {

@@ -1,12 +1,11 @@
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
+import { env } from "../config/environment.js";
+import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG } from "../config/constants.js";
 
-dotenv.config();
-
-// JWT Authentication Utilities
+// JWT signing function
 export const signToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: "1d", // Default to 1 day
+  jwt.sign({ id }, env.JWT_SECRET, {
+    expiresIn: SECURITY_CONFIG.JWT_EXPIRES_IN,
   });
 
 console.log("✓JWT signing function ready.");
@@ -22,17 +21,21 @@ export const protect = (req, res, next) => {
   }
 
   if (!token) {
-    return res
-      .status(401)
-      .json({ message: "You are not logged in! Please log in to get access." });
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
+      status: MESSAGES.ERROR,
+      message: MESSAGES.UNAUTHORIZED 
+    });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, env.JWT_SECRET);
     req.user = decoded; // Attach user ID to request object
     next();
   } catch (error) {
     console.error("JWT verification error:", error);
-    return res.status(401).json({ message: "Invalid or expired token." });
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
+      status: MESSAGES.ERROR,
+      message: MESSAGES.INVALID_TOKEN 
+    });
   }
 }; 
