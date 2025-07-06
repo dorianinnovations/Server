@@ -112,7 +112,7 @@ router.post("/completion", protect, async (req, res) => {
   ];
   
   const n_predict = req.body.n_predict || 500;
-  const temperature = req.body.temperature || 0.7;
+  const temperature = req.body.temperature || 0.3; // Reduced from 0.7 to 0.3 for better conversation quality
 
   if (!userPrompt || typeof userPrompt !== "string") {
     return res.status(400).json({ message: "Invalid or missing prompt." });

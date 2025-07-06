@@ -38,7 +38,7 @@ class TaskScheduler {
 
   // Schedule task processing
   scheduleTaskProcessing() {
-    const job = cron.schedule("* * * * *", async () => {
+    const job = cron.schedule("*/5 * * * *", async () => { // Changed from every minute to every 5 minutes
       try {
         await this.processPendingTasks();
       } catch (error) {
@@ -84,14 +84,15 @@ class TaskScheduler {
       runAt: { $lte: new Date() },
     })
       .sort({ priority: -1, createdAt: 1 })
-      .limit(10)
+      .limit(3) // Reduced from 10 to 3 tasks per batch
       .populate("userId");
 
     if (tasksToProcess.length === 0) return;
 
     logger.info(`Processing ${tasksToProcess.length} pending tasks`);
 
-    for (const task of tasksToProcess) {
+    // Process tasks in parallel instead of sequentially for better performance
+    const taskPromises = tasksToProcess.map(async (task) => {
       try {
         await this.processTask(task);
       } catch (error) {
@@ -110,7 +111,10 @@ class TaskScheduler {
           }
         );
       }
-    }
+    });
+
+    // Wait for all tasks to complete
+    await Promise.allSettled(taskPromises);
   }
 
   // Process individual task
@@ -163,16 +167,18 @@ class TaskScheduler {
         }
       );
 
-      // Track analytics
-      await AnalyticsService.trackEvent(
-        "task_completed",
-        "system",
-        {
-          taskType: task.taskType,
-          status,
-          taskId: task._id.toString(),
-        }
-      );
+      // Only track analytics for critical events to reduce database load
+      if (status === "failed" || task.taskType === "emotion_analysis") {
+        await AnalyticsService.trackEvent(
+          "task_completed",
+          "system",
+          {
+            taskType: task.taskType,
+            status,
+            taskId: task._id.toString(),
+          }
+        );
+      }
 
       logger.info(`Task completed: ${task.taskType}`, {
         taskId: task._id,
@@ -205,6 +211,7 @@ class TaskScheduler {
     const user = await User.findById(userId);
     if (!user) throw new Error("User not found");
 
+    // Use cached insights instead of generating new ones every time
     const insights = await AnalyticsService.getUserInsights(userId, 30);
     
     return `User insights generated with ${insights.length} data points`;

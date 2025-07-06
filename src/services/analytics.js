@@ -47,6 +47,57 @@ const analyticsSchema = new mongoose.Schema({
 
 const Analytics = mongoose.model("Analytics", analyticsSchema);
 
+// Batch processing for analytics
+class AnalyticsBatcher {
+  constructor() {
+    this.batch = [];
+    this.batchSize = 10; // Process 10 events at once
+    this.flushInterval = 5000; // Flush every 5 seconds
+    this.lastFlush = Date.now();
+    
+    // Start auto-flush timer
+    this.startAutoFlush();
+  }
+
+  add(analyticsData) {
+    this.batch.push(analyticsData);
+    
+    // Flush if batch is full
+    if (this.batch.length >= this.batchSize) {
+      this.flush();
+    }
+  }
+
+  async flush() {
+    if (this.batch.length === 0) return;
+    
+    const currentBatch = this.batch.splice(0, this.batch.length);
+    
+    try {
+      await Analytics.insertMany(currentBatch);
+      logger.info(`Flushed ${currentBatch.length} analytics events`);
+    } catch (error) {
+      logger.error("Failed to flush analytics batch", {
+        error: error.message,
+        batchSize: currentBatch.length,
+      });
+    }
+    
+    this.lastFlush = Date.now();
+  }
+
+  startAutoFlush() {
+    setInterval(() => {
+      if (this.batch.length > 0 && Date.now() - this.lastFlush > this.flushInterval) {
+        this.flush();
+      }
+    }, this.flushInterval);
+  }
+}
+
+// Create singleton batcher
+const analyticsBatcher = new AnalyticsBatcher();
+
 // Analytics service
 export class AnalyticsService {
   static async trackEvent(event, category, metadata = {}, req = null) {
@@ -61,17 +112,22 @@ export class AnalyticsService {
         ipAddress: req?.ip || null,
         responseTime: req?.responseTime || null,
         statusCode: req?.statusCode || null,
+        timestamp: new Date(),
       };
 
-      await Analytics.create(analyticsData);
+      // Add to batch instead of immediate database write
+      analyticsBatcher.add(analyticsData);
       
-      logger.info("Analytics event tracked", {
-        event,
-        category,
-        userId: analyticsData.userId,
-      });
+      // Only log for critical events to reduce noise
+      if (category === "error" || event === "task_completed") {
+        logger.info("Analytics event queued for batch processing", {
+          event,
+          category,
+          userId: analyticsData.userId,
+        });
+      }
     } catch (error) {
-      logger.error("Failed to track analytics event", {
+      logger.error("Failed to queue analytics event", {
         error: error.message,
         event,
         category,
@@ -207,6 +263,11 @@ export class AnalyticsService {
       },
       req
     );
+  }
+
+  // Force flush for critical events
+  static async forceFlush() {
+    await analyticsBatcher.flush();
   }
 }
 
