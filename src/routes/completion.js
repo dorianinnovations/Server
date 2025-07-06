@@ -118,8 +118,6 @@ router.post("/completion", protect, async (req, res) => {
     return res.status(400).json({ message: "Invalid or missing prompt." });
   }
 
-<<<<<<< HEAD
-=======
   if (stream) {
     try {
       const user = await User.findById(userId);
@@ -224,7 +222,6 @@ router.post("/completion", protect, async (req, res) => {
   }
 
   // --- Non-streaming mode (existing logic) ---
->>>>>>> 3f17339 (refactor: Swap configuration for claude open router setup)
   try {
     console.log(`✓Completion request received for user ${userId}.`);
     

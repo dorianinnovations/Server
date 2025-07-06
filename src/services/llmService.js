@@ -1,38 +1,4 @@
 import axios from "axios";
-<<<<<<< HEAD
-import https from "https";
-import { env } from "../config/environment.js";
-
-// Create reusable HTTPS agent
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  rejectUnauthorized: false,
-  timeout: 60000,
-});
-
-// LLM Service Configuration
-const LLM_CONFIG = {
-  apiUrl: env.LLAMA_CPP_API_URL,
-  timeout: 30000,
-  defaultParams: {
-    temperature: 0.7,
-    top_k: 40,
-    top_p: 0.9,
-    repeat_penalty: 1.1,
-    frequency_penalty: 0.1,
-    presence_penalty: 0.1,
-  }
-};
-
-// Create LLM Service
-export const createLLMService = () => {
-  const makeRequest = async (prompt, params = {}) => {
-    try {
-      const config = {
-        method: "POST",
-        url: `${LLM_CONFIG.apiUrl}/completion`,
-=======
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -147,7 +113,6 @@ export const createLLMService = () => {
       const testResponse = await axios({
         method: "POST",
         url: openRouterApiUrl,
->>>>>>> 3f17339 (refactor: Swap configuration for claude open router setup)
         headers: {
           "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
@@ -155,42 +120,6 @@ export const createLLMService = () => {
           "X-Title": "Numina Server",
         },
         data: {
-<<<<<<< HEAD
-          prompt,
-          ...LLM_CONFIG.defaultParams,
-          ...params,
-        },
-        httpsAgent,
-        timeout: LLM_CONFIG.timeout,
-      };
-
-      console.log(
-        `🔗 LLM Request: ${config.url} with ${prompt.length} char prompt`
-      );
-
-      const response = await axios(config);
-
-      console.log(
-        `✅ LLM Response: ${response.status} - ${response.data?.content?.length || 0} chars`
-      );
-
-      return response.data;
-    } catch (error) {
-      console.error("❌ LLM Service Error:", error.message);
-      throw error;
-    }
-  };
-
-  const healthCheck = async () => {
-    try {
-      const response = await makeRequest("Hello", {
-        n_predict: 5,
-        temperature: 0.1,
-      });
-      return { healthy: true, response };
-    } catch (error) {
-      return { healthy: false, error: error.message };
-=======
           model: "anthropic/claude-3-sonnet",
           messages: [{ role: "user", content: "Hello" }],
           max_tokens: 10,
@@ -203,65 +132,70 @@ export const createLLMService = () => {
         status: "accessible",
         service: "OpenRouter (Claude 3 Sonnet)",
         responseStatus: testResponse.status,
-        testResponse: testResponse.data.choices[0].message.content,
       };
     } catch (error) {
-      console.error("Health check OpenRouter test failed:", error.message);
+      console.error("OpenRouter Health Check Error:", error.message);
       return {
         status: "unreachable",
         service: "OpenRouter (Claude 3 Sonnet)",
         error: error.message,
       };
->>>>>>> 3f17339 (refactor: Swap configuration for claude open router setup)
     }
   };
 
   return {
-<<<<<<< HEAD
-    makeRequest,
-    healthCheck,
-    config: LLM_CONFIG,
-  };
-};
-
-// Default export
-export default createLLMService(); 
-=======
     makeLLMRequest,
     makeStreamingRequest,
     healthCheck,
   };
 };
 
-// Helper function to parse the chat-ml format prompt into OpenRouter's message format
+// Helper function to parse chat-ml format to OpenRouter message format
 const parsePromptToMessages = (prompt) => {
   const messages = [];
   
   // Split by the chat-ml markers
-  const parts = prompt.split(/<\|im_start\|>(user|assistant|system)\n?/);
+  const sections = prompt.split(/(<\|im_start\|>|<\|im_end\|>)/).filter(Boolean);
   
-  for (let i = 1; i < parts.length; i += 2) {
-    const role = parts[i];
-    const content = parts[i + 1]?.replace(/<\|im_end\|>/g, "").trim();
-    
-    if (!content) continue;
-    
-    if (role === "system" || role === "user" || role === "assistant") {
-      messages.push({
-        role: role,
-        content: content,
-      });
+  let currentRole = null;
+  let currentContent = "";
+  
+  for (const section of sections) {
+    if (section === "<|im_start|>") {
+      continue;
+    } else if (section === "<|im_end|>") {
+      if (currentRole && currentContent.trim()) {
+        messages.push({
+          role: currentRole,
+          content: currentContent.trim()
+        });
+      }
+      currentRole = null;
+      currentContent = "";
+    } else if (section.startsWith("user\n") || section.startsWith("assistant\n") || section.startsWith("system\n")) {
+      const lines = section.split('\n');
+      currentRole = lines[0];
+      currentContent = lines.slice(1).join('\n');
+    } else {
+      currentContent += section;
     }
   }
   
-  // Handle the case where the prompt doesn't use chat-ml format
+  // Handle the last message if it doesn't end with <|im_end|>
+  if (currentRole && currentContent.trim()) {
+    messages.push({
+      role: currentRole,
+      content: currentContent.trim()
+    });
+  }
+  
+  // If no chat-ml format detected, treat the entire prompt as a user message
   if (messages.length === 0) {
     messages.push({
       role: "user",
-      content: prompt,
+      content: prompt.trim()
     });
   }
   
   return messages;
-}; 
->>>>>>> 3f17339 (refactor: Swap configuration for claude open router setup)
+};
