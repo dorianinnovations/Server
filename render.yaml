@@ -2,8 +2,9 @@ services:
   - type: web
     name: numina-server
     env: node
-    buildCommand: npm install
-    startCommand: npm start
+    region: oregon
+    buildCommand: npm ci && ls -la src/ && node --check src/server.js
+    startCommand: node src/server.js
     envVars:
       - key: NODE_ENV
         value: production
