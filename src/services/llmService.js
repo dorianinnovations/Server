@@ -77,7 +77,7 @@ export const createLLMService = () => {
     }
   };
 
-  const makeStreamingRequest = async (prompt, options = {}) => {
+  const makeStreamingRequest = async (promptOrMessages, options = {}) => {
     const {
       stop = ["<|im_end|>", "\n<|im_start|>"],
       n_predict = 1024,
@@ -85,7 +85,10 @@ export const createLLMService = () => {
     } = options;
 
     try {
-      const messages = parsePromptToMessages(prompt);
+      // Handle both string prompts and messages array
+      const messages = Array.isArray(promptOrMessages) 
+        ? promptOrMessages 
+        : parsePromptToMessages(promptOrMessages);
       
       const response = await axios({
         method: "POST",

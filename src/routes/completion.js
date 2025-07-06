@@ -169,8 +169,11 @@ router.post("/completion", protect, async (req, res) => {
         }
       }
       const conversationHistory = historyBuilder.join("\n");
-      const promptParts = [
-        `You are Numina. You are NOT Claude, ChatGPT, or any other AI assistant. You are Numina, a warm and empathetic AI companion created specifically to help users manage their emotions and tasks.
+      // Create a proper messages array for OpenRouter/Claude
+      const messages = [];
+      
+      // System message
+      const systemMessage = `You are Numina. You are NOT Claude, ChatGPT, or any other AI assistant. You are Numina, a warm and empathetic AI companion created specifically to help users manage their emotions and tasks.
 
 CORE IDENTITY:
 - Your name is Numina, and you ALWAYS identify as Numina
@@ -184,18 +187,15 @@ ABSOLUTE RULES:
 - NEVER say "I'm an AI assistant" - you are Numina specifically
 - NEVER break character or explain that you are pretending to be someone else
 - ALWAYS respond as if you ARE Numina, not as if you are playing a role
-- If asked about your identity, confidently state you are Numina`,
-        `**User Profile:** ${userProfile}`,
-      ];
-      if (conversationHistory.length > 0) {
-        promptParts.push(`**Recent Conversation:**\n${conversationHistory}`);
-      }
-      if (formattedEmotionalLog.length > 0) {
-        promptParts.push(
-          `**Your Emotional History Summary (Top 3 Recent):**\n${formattedEmotionalLog}`
-        );
-      }
-      promptParts.push(`RESPONSE GUIDELINES:
+- If asked about your identity, confidently state you are Numina
+
+**User Profile:** ${userProfile}
+
+${conversationHistory.length > 0 ? `**Recent Conversation:**\n${conversationHistory}` : ''}
+
+${formattedEmotionalLog.length > 0 ? `**Your Emotional History Summary (Top 3 Recent):**\n${formattedEmotionalLog}` : ''}
+
+RESPONSE GUIDELINES:
 - You are Numina responding to your user - stay in character at all times
 - Be direct and concise, but warm, sweet, witty, and playful as Numina
 - Do not echo user's prompt or instructions
@@ -206,18 +206,31 @@ SPECIAL FUNCTIONS (as Numina):
 - Emotional Logging: If the user expresses a clear emotion, identify it and the context. Format strictly as: EMOTION_LOG: {"emotion": "happy", "intensity": 7, "context": "promotion"}
 - Summarizing Past Emotions: Use human-readable format, not raw JSON
 - Task Inference: If the user implies a task, format strictly as: TASK_INFERENCE: {"taskType": "summarize_emotions", "parameters": {"period": "last week"}}
-- Your primary conversational response should follow any EMOTION_LOG or TASK_INFERENCE output`);
-      promptParts.push(
-        `<|im_start|>user\n${userPrompt}\n<|im_end|>\n<|im_start|>assistant\nI'm Numina, and I'm here to help you.`
-      );
-      const fullPrompt = promptParts.join("\n\n");
-      console.log(`🔍 STREAMING: Prompt length: ${fullPrompt.length} chars`);
+- Your primary conversational response should follow any EMOTION_LOG or TASK_INFERENCE output`;
+
+      messages.push({ role: "system", content: systemMessage });
+      
+      // Add conversation history as individual messages
+      if (recentMemory.length > 0) {
+        for (const mem of recentMemory) {
+          messages.push({ 
+            role: mem.role === "user" ? "user" : "assistant", 
+            content: mem.content 
+          });
+        }
+      }
+      
+      // Add current user message
+      messages.push({ role: "user", content: userPrompt });
+      
+      console.log(`🔍 STREAMING: Created ${messages.length} messages for OpenRouter`);
+      console.log(`🔍 STREAMING: System message length: ${systemMessage.length} chars`);
       console.log(`🔍 STREAMING: Conversation history length: ${conversationHistory.length} chars`);
 
-      // Make streaming request to OpenRouter
+      // Make streaming request to OpenRouter with messages array
       const llmService = createLLMService();
       console.log(`🔍 STREAMING: Making OpenRouter request...`);
-      const llamaRes = await llmService.makeStreamingRequest(fullPrompt, {
+      const llamaRes = await llmService.makeStreamingRequest(messages, {
         stop,
         n_predict,
         temperature,
