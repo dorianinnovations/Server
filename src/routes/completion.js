@@ -334,11 +334,11 @@ ${userPrompt}`;
                   
                   if (shouldStop) break;
                   
-                  // Optimized metadata detection
-                  const hasCompleteEmotion = metadataBuffer.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
-                  const hasCompleteTask = metadataBuffer.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
+                  // Optimized metadata detection - Combined regex for better performance
+                  const COMBINED_METADATA_REGEX = /(?:EMOTION_LOG|TASK_INFERENCE):?\s*(\{[^}]*\})/g;
+                  const hasCompleteMetadata = metadataBuffer.match(COMBINED_METADATA_REGEX);
                   
-                  if (hasCompleteEmotion || hasCompleteTask) {
+                  if (hasCompleteMetadata) {
                     console.log('🔍 Complete metadata detected, clearing buffer');
                     metadataBuffer = '';
                   } else if (metadataBuffer.includes('EMOTION_LOG') || metadataBuffer.includes('TASK_INFERENCE')) {
@@ -349,9 +349,10 @@ ${userPrompt}`;
                     res.write(`data: ${JSON.stringify({ content: parsed.content })}\n\n`);
                     if (res.flush) res.flush();
                     
-                    // Reset buffer periodically
-                    if (metadataBuffer.length > 500) {
-                      metadataBuffer = metadataBuffer.slice(-200);
+                    // Reset buffer periodically with sliding window for better memory management
+                    const MAX_BUFFER_SIZE = 1000;
+                    if (metadataBuffer.length > MAX_BUFFER_SIZE) {
+                      metadataBuffer = metadataBuffer.slice(-MAX_BUFFER_SIZE);
                     }
                   }
                 }
@@ -434,26 +435,38 @@ ${userPrompt}`;
       let botReplyContent = llmRes.data.content || "";
       console.log("Raw LLM response:", botReplyContent);
 
-      // Optimized parsing and cleaning
+      // Optimized parsing and cleaning with performance tracking
       let inferredTask = null;
       let inferredEmotion = null;
 
+      // Track emotion logging performance
+      const emotionStart = Date.now();
       [inferredEmotion, botReplyContent] = extractJsonPattern(
         METADATA_PATTERNS.emotion,
         botReplyContent,
         "emotion log"
       );
+      const emotionDuration = Date.now() - emotionStart;
+      if (req.trackOperation) req.trackOperation('emotion_logging', emotionDuration);
 
+      // Track task inference performance
+      const taskStart = Date.now();
       [inferredTask, botReplyContent] = extractJsonPattern(
         METADATA_PATTERNS.task,
         botReplyContent,
         "task inference"
       );
+      const taskDuration = Date.now() - taskStart;
+      if (req.trackOperation) req.trackOperation('task_inference', taskDuration);
 
-      // Clean up response using optimized function
+      // Track string sanitization performance
+      const sanitizeStart = Date.now();
       botReplyContent = cleanResponse(botReplyContent);
+      const sanitizeDuration = Date.now() - sanitizeStart;
+      if (req.trackOperation) req.trackOperation('string_sanitization', sanitizeDuration);
 
-      // Optimized database operations
+      // Optimized database operations with performance tracking
+      const dbStart = Date.now();
       const dbOperations = [];
 
       dbOperations.push(
@@ -498,6 +511,8 @@ ${userPrompt}`;
       }
 
       await Promise.all(dbOperations);
+      const dbDuration = Date.now() - dbStart;
+      if (req.trackOperation) req.trackOperation('database_operations', dbDuration);
 
       // Invalidate cache after database operations
       userCache.invalidateUser(userId);

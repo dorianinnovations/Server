@@ -4,17 +4,18 @@ export const sanitizeResponse = (text) => {
     return "I'm sorry, I wasn't able to provide a proper response. Please try again.";
   }
 
-  // Remove markers and their JSON, case-insensitive
+  // Optimized single-pass sanitization with combined regex
+  const SANITIZATION_REGEX = /(?:TASK_INFERENCE|EMOTION_LOG):?\s*(?:\{[\s\S]*?\})?\s*|\}+|[ ]{2,}|\n{2,}/gi;
+  
   let sanitized = text
-    .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*/gi, ' ')
-    .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*/gi, ' ')
-    // Remove any stray braces left behind
-    .replace(/\}+/g, ' ')
-    // Collapse multiple spaces to one (but preserve newlines)
-    .replace(/[ ]{2,}/g, ' ')
-    // Collapse multiple newlines to a single newline
-    .replace(/\n{2,}/g, '\n')
-    // Remove leading/trailing spaces and newlines
+    .replace(SANITIZATION_REGEX, (match) => {
+      if (match.match(/(?:TASK_INFERENCE|EMOTION_LOG)/i)) return ' ';
+      if (match.match(/\}+/)) return ' ';
+      if (match.match(/[ ]{2,}/)) return ' ';
+      if (match.match(/\n{2,}/)) return '\n';
+      return match;
+    })
+    // Final cleanup of leading/trailing spaces
     .replace(/^[ \n]+|[ \n]+$/g, '');
 
   if (!sanitized) {
