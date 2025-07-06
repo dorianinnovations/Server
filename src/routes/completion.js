@@ -197,14 +197,49 @@ router.post("/completion", protect, async (req, res) => {
       res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
       res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
 
-      // Handle streaming data chunk by chunk
+      // Handle OpenRouter streaming data chunk by chunk
+      let buffer = '';
+      let fullContent = '';
+      
       llamaRes.data.on('data', (chunk) => {
-        res.write(chunk);
-        res.flush && res.flush(); // Ensure immediate sending
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.substring(6).trim();
+            
+            if (data === '[DONE]') {
+              res.write('data: [DONE]\n\n');
+              res.end();
+              return;
+            }
+            
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                const content = parsed.choices[0].delta.content;
+                fullContent += content;
+                res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                res.flush && res.flush();
+              }
+            } catch (e) {
+              console.error('Error parsing OpenRouter streaming data:', e);
+            }
+          }
+        }
       });
+      
       llamaRes.data.on("end", () => {
+        if (fullContent.trim()) {
+          // Process the complete response for metadata extraction
+          processStreamResponse(fullContent, userPrompt, userId);
+        }
+        res.write('data: [DONE]\n\n');
         res.end();
       });
+      
       llamaRes.data.on("error", (err) => {
         console.error("Stream error:", err.message);
         if (!res.headersSent) {
