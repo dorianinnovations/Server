@@ -79,6 +79,9 @@ const userSchema = new mongoose.Schema({
 // Indexes for better performance
 userSchema.index({ "stats.lastActive": -1 });
 userSchema.index({ status: 1 });
+userSchema.index({ "emotionalLog.timestamp": -1 }); // For recent emotions queries
+userSchema.index({ email: 1 }); // Explicit email index for faster lookups
+userSchema.index({ createdAt: 1 }); // For user registration analytics
 
 // Pre-save hook to hash password
 userSchema.pre("save", async function (next) {

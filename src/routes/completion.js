@@ -4,24 +4,98 @@ import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
 import { sanitizeResponse } from "../utils/sanitize.js";
+import { createUserCache } from "../utils/cache.js";
 import axios from "axios";
 import https from "https";
 
 const router = express.Router();
 
+// Create smart cache instance
+const userCache = createUserCache();
+
 // Create reusable HTTPS agent for better performance
 const httpsAgent = new https.Agent({
-  rejectUnauthorized: false, // For ngrok certificates
+  rejectUnauthorized: false,
   keepAlive: true,
+  maxSockets: 50,
   timeout: 30000,
 });
+
+// Optimized regex for combined pattern matching
+const CLEANUP_REGEX = /(?:TASK_INFERENCE|EMOTION_LOG):?\s*(?:\{[\s\S]*?\})?\s*?/g;
+const METADATA_PATTERNS = {
+  task: /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g,
+  emotion: /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g,
+};
+
+// Helper function for optimized JSON extraction
+const extractJsonPattern = (regex, content, logType) => {
+  const match = content.match(regex);
+  if (!match || !match[1]) {
+    return [null, content];
+  }
+
+  try {
+    const jsonString = match[1].trim();
+    const parsed = JSON.parse(jsonString);
+    const newContent = content.replace(match[0], "");
+    return [parsed, newContent];
+  } catch (jsonError) {
+    console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
+    return [null, content];
+  }
+};
+
+// Optimized response cleaning function
+const cleanResponse = (content) => {
+  if (!content) return "";
+  
+  // Single-pass cleanup using combined regex
+  let cleaned = content
+    .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "")
+    .replace(CLEANUP_REGEX, "")
+    .replace(/```json[\s\S]*?```/g, "")
+    .replace(/(\r?\n){2,}/g, "\n")
+    .trim();
+  
+  // Final check for any remaining markers
+  const lowerCleaned = cleaned.toLowerCase();
+  if (lowerCleaned.includes("task_inference") || lowerCleaned.includes("emotion_log")) {
+    cleaned = cleaned
+      .split("\n")
+      .filter(line => {
+        const lowerLine = line.toLowerCase();
+        return !lowerLine.includes("task_inference") && !lowerLine.includes("emotion_log");
+      })
+      .join("\n")
+      .trim();
+  }
+  
+  return cleaned || "I'm sorry, I wasn't able to provide a proper response. Please try again.";
+};
+
+// Streaming cleanup utility
+const createStreamCleanup = (streamResponse, streamTimeout, res) => {
+  return () => {
+    if (streamTimeout) clearTimeout(streamTimeout);
+    if (streamResponse?.data?.removeAllListeners) {
+      streamResponse.data.removeAllListeners();
+    }
+    if (streamResponse?.data?.destroy) {
+      streamResponse.data.destroy();
+    }
+    if (res && !res.headersSent) {
+      res.end();
+    }
+  };
+};
 
 router.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
   
-  // Comprehensive stop sequences for Mistral 7B - matches working server.js
+  // Comprehensive stop sequences for Mistral 7B
   const stop = req.body.stop || [
     "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
     "Human:", "\nHuman:", "\nhuman:", "human:",
@@ -29,7 +103,6 @@ router.post("/completion", protect, async (req, res) => {
     "Q:", "\nQ:", "\nQuestion:", "Question:",
     "\n\n\n", "---", "***", "```",
     "</EXAMPLES>", "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
-    // Mistral-specific stop sequences
     "<s>", "</s>", "[INST]", "[/INST]",
     "Assistant:", "\nAssistant:", "AI:",
     "Example:", "\nExample:", "For example:",
@@ -47,22 +120,32 @@ router.post("/completion", protect, async (req, res) => {
 
   try {
     console.log(`✓Completion request received for user ${userId}.`);
-    const user = await User.findById(userId);
+    
+    // Optimized user and memory query using smart caching
+    const [user, recentMemory] = await Promise.all([
+      userCache.getCachedUser(userId, () => 
+        User.findById(userId).select('profile emotionalLog').lean()
+      ),
+      userCache.getCachedMemory(userId, () => 
+        ShortTermMemory.find({ userId }, { role: 1, content: 1, _id: 0 })
+          .sort({ timestamp: -1 })
+          .limit(3)
+          .lean()
+      ),
+    ]);
 
     if (!user) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const userProfile = user.profile ? JSON.stringify(user.profile) : "{}";
-
-    // Limit emotional log to recent entries
-    const recentEmotionalLogEntries = user.emotionalLog
-      .sort((a, b) => b.timestamp - a.timestamp)
+    // Optimized emotional log processing
+    const recentEmotionalLogEntries = (user.emotionalLog || [])
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, 2);
 
     const formattedEmotionalLog = recentEmotionalLogEntries
       .map((entry) => {
-        const date = entry.timestamp.toLocaleDateString("en-US", {
+        const date = new Date(entry.timestamp).toLocaleDateString("en-US", {
           year: "numeric",
           month: "short",
           day: "numeric",
@@ -73,28 +156,14 @@ router.post("/completion", protect, async (req, res) => {
       })
       .join("\n");
 
-    // Get recent conversation history
-    const [recentMemory] = await Promise.all([
-      ShortTermMemory.find(
-        { userId },
-        { role: 1, content: 1, _id: 0 }
-      )
-        .sort({ timestamp: -1 })
-        .limit(3)
-        .lean(),
-    ]);
-
     recentMemory.reverse();
 
-    const historyBuilder = [];
-    for (const mem of recentMemory) {
-      historyBuilder.push(
-        `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`
-      );
-    }
-    const conversationHistory = historyBuilder.join("\n");
+    // Optimized conversation history building
+    const conversationHistory = recentMemory
+      .map(mem => `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`)
+      .join("\n");
 
-    // --- Proper Mistral 7B Prompt Format (matches working server.js) ---
+    // Optimized prompt construction
     let fullPrompt = `<s>[INST] You are a helpful, empathetic, and factual assistant. You provide thoughtful, comprehensive responses while maintaining accuracy and clarity.
 
 RESPONSE FORMAT:
@@ -105,7 +174,6 @@ RESPONSE FORMAT:
 
 CONVERSATION EXAMPLES:`;
 
-    // Add conversation history as examples if it exists
     if (conversationHistory.length > 0) {
       const recentExchanges = conversationHistory.split('\n').slice(-4);
       for (const exchange of recentExchanges) {
@@ -116,7 +184,6 @@ CONVERSATION EXAMPLES:`;
         }
       }
     } else {
-      // Default examples optimized for Mistral 7B
       fullPrompt += `
 User: I'm feeling anxious about tomorrow's presentation.
 Assistant: EMOTION_LOG: {"emotion":"anxiety","intensity":6,"context":"upcoming presentation"}
@@ -143,9 +210,8 @@ ${userPrompt}`;
     console.log("Full prompt constructed. Length:", fullPrompt.length);
 
     const llamaCppApiUrl = process.env.LLAMA_CPP_API_URL || "http://localhost:8000/completion";
-    console.log("Using LLAMA_CPP_API_URL:", llamaCppApiUrl);
 
-    // Optimized parameters for Mistral 7B GGUF Q4 (matches working server.js)
+    // Optimized parameters for Mistral 7B GGUF Q4
     const optimizedParams = {
       prompt: fullPrompt,
       stop: stop,
@@ -177,8 +243,12 @@ ${userPrompt}`;
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('X-Accel-Buffering', 'no');
 
+      let streamResponse;
+      let streamTimeout;
+      let cleanup;
+
       try {
-        const streamResponse = await axios({
+        streamResponse = await axios({
           method: "POST",
           url: llamaCppApiUrl,
           headers: {
@@ -198,20 +268,20 @@ ${userPrompt}`;
         let streamEnded = false;
         let metadataBuffer = '';
         
+        // Create cleanup function
+        cleanup = createStreamCleanup(streamResponse, streamTimeout, res);
+        
         console.log('📡 Stream connected, waiting for tokens...');
         
         // Timeout to prevent infinite streams
-        const streamTimeout = setTimeout(() => {
+        streamTimeout = setTimeout(() => {
           if (!streamEnded) {
             console.log('⏰ Stream timeout reached, ending stream');
             streamEnded = true;
             res.write('data: [DONE]\n\n');
-            res.end();
-            if (streamResponse.data && streamResponse.data.destroy) {
-              streamResponse.data.destroy();
-            }
+            cleanup();
           }
-        }, 120000); // 2 minute timeout
+        }, 120000);
 
         streamResponse.data.on('data', (chunk) => {
           if (streamEnded) return;
@@ -228,7 +298,6 @@ ${userPrompt}`;
                 if (jsonStr === '[DONE]') {
                   console.log('🏁 Stream ended by llama.cpp');
                   streamEnded = true;
-                  clearTimeout(streamTimeout);
                   break;
                 }
                 
@@ -237,7 +306,6 @@ ${userPrompt}`;
                 if (parsed.stop === true || parsed.stopped === true) {
                   console.log('🛑 Stream stopped by model');
                   streamEnded = true;
-                  clearTimeout(streamTimeout);
                   break;
                 }
                 
@@ -246,8 +314,6 @@ ${userPrompt}`;
                   metadataBuffer += parsed.content;
                   tokenCount++;
                   
-                  console.log(`⚡ Token ${tokenCount}:`, JSON.stringify(parsed.content));
-                  
                   // Check for stop sequences
                   let shouldStop = false;
                   for (const stopSeq of stop) {
@@ -255,7 +321,6 @@ ${userPrompt}`;
                       console.log(`🛑 Stop sequence detected: "${stopSeq}"`);
                       shouldStop = true;
                       streamEnded = true;
-                      clearTimeout(streamTimeout);
                       break;
                     }
                   }
@@ -265,12 +330,11 @@ ${userPrompt}`;
                     console.log(`🚨 Token limit exceeded (${tokenCount}), stopping stream`);
                     shouldStop = true;
                     streamEnded = true;
-                    clearTimeout(streamTimeout);
                   }
                   
                   if (shouldStop) break;
                   
-                  // Simplified metadata detection - only check for complete patterns
+                  // Optimized metadata detection
                   const hasCompleteEmotion = metadataBuffer.match(/EMOTION_LOG:?\s*(\{[^}]*\})/);
                   const hasCompleteTask = metadataBuffer.match(/TASK_INFERENCE:?\s*(\{[^}]*\})/);
                   
@@ -301,10 +365,9 @@ ${userPrompt}`;
         streamResponse.data.on('end', () => {
           if (!streamEnded) {
             streamEnded = true;
-            clearTimeout(streamTimeout);
             console.log(`✅ Stream complete! ${tokenCount} tokens, ${fullContent.length} chars`);
             res.write('data: [DONE]\n\n');
-            res.end();
+            cleanup();
           }
           
           if (fullContent.trim()) {
@@ -315,41 +378,35 @@ ${userPrompt}`;
         streamResponse.data.on('error', (error) => {
           if (!streamEnded) {
             streamEnded = true;
-            clearTimeout(streamTimeout);
             console.error('❌ Stream error:', error);
             res.write(`data: ${JSON.stringify({ 
               error: true, 
               message: "Stream connection error. Please try again.",
               recoverable: true 
             })}\n\n`);
-            res.end();
+            cleanup();
           }
         });
 
         res.on('error', (error) => {
           if (!streamEnded) {
             streamEnded = true;
-            clearTimeout(streamTimeout);
             console.error('❌ Response stream error:', error);
-            if (streamResponse.data && streamResponse.data.destroy) {
-              streamResponse.data.destroy();
-            }
+            cleanup();
           }
         });
 
         req.on('close', () => {
           if (!streamEnded) {
             streamEnded = true;
-            clearTimeout(streamTimeout);
             console.log('🔌 Client disconnected during stream');
-            if (streamResponse.data && streamResponse.data.destroy) {
-              streamResponse.data.destroy();
-            }
+            cleanup();
           }
         });
 
       } catch (error) {
         console.error('💥 Streaming failed:', error.message);
+        if (cleanup) cleanup();
         res.status(500).json({ 
           status: "error", 
           message: "Streaming failed: " + error.message
@@ -377,65 +434,26 @@ ${userPrompt}`;
       let botReplyContent = llmRes.data.content || "";
       console.log("Raw LLM response:", botReplyContent);
 
-      // Parse and clean response (matches server.js logic)
+      // Optimized parsing and cleaning
       let inferredTask = null;
       let inferredEmotion = null;
 
-      const extractJsonPattern = (regex, content, logType) => {
-        const match = content.match(regex);
-        if (!match || !match[1]) {
-          return [null, content];
-        }
-
-        try {
-          const jsonString = match[1].trim();
-          const parsed = JSON.parse(jsonString);
-          const newContent = content.replace(match[0], "");
-          return [parsed, newContent];
-        } catch (jsonError) {
-          console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
-          return [null, content];
-        }
-      };
-
-      const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
-      const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
-
       [inferredEmotion, botReplyContent] = extractJsonPattern(
-        emotionLogRegex,
+        METADATA_PATTERNS.emotion,
         botReplyContent,
         "emotion log"
       );
 
       [inferredTask, botReplyContent] = extractJsonPattern(
-        taskInferenceRegex,
+        METADATA_PATTERNS.task,
         botReplyContent,
         "task inference"
       );
 
-      // Clean up response
-      botReplyContent = botReplyContent
-        .replace(/<\|im_(start|end)\|>(assistant|user)?\n?/g, "")
-        .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-        .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-        .replace(/TASK_INFERENCE:?/g, "")
-        .replace(/EMOTION_LOG:?/g, "")
-        .replace(/```json[\s\S]*?```/g, "")
-        .replace(/(\r?\n){2,}/g, "\n")
-        .trim();
+      // Clean up response using optimized function
+      botReplyContent = cleanResponse(botReplyContent);
 
-      if (botReplyContent.includes("TASK_INFERENCE") || botReplyContent.includes("EMOTION_LOG")) {
-        console.warn("Markers detected - applying emergency cleanup");
-        botReplyContent = botReplyContent
-          .split("\n")
-          .filter(line => !line.includes("TASK_INFERENCE") && !line.includes("EMOTION_LOG"))
-          .join("\n")
-          .trim();
-      }
-
-      botReplyContent = sanitizeResponse(botReplyContent);
-
-      // Database operations
+      // Optimized database operations
       const dbOperations = [];
 
       dbOperations.push(
@@ -443,13 +461,13 @@ ${userPrompt}`;
           { userId, content: userPrompt, role: "user" },
           {
             userId,
-            content: botReplyContent || "I'm sorry, I wasn't able to provide a proper response.",
+            content: botReplyContent,
             role: "assistant",
           },
         ])
       );
 
-      if (inferredEmotion && inferredEmotion.emotion) {
+      if (inferredEmotion?.emotion) {
         const emotionToLog = {
           emotion: inferredEmotion.emotion,
           context: inferredEmotion.context || userPrompt,
@@ -466,7 +484,7 @@ ${userPrompt}`;
         );
       }
 
-      if (inferredTask && inferredTask.taskType) {
+      if (inferredTask?.taskType) {
         const taskParameters = typeof inferredTask.parameters === "object" ? inferredTask.parameters : {};
 
         dbOperations.push(
@@ -481,13 +499,11 @@ ${userPrompt}`;
 
       await Promise.all(dbOperations);
 
+      // Invalidate cache after database operations
+      userCache.invalidateUser(userId);
+
       // Final safety check
       botReplyContent = sanitizeResponse(botReplyContent);
-
-      if (botReplyContent.includes("TASK_INFERENCE") || botReplyContent.includes("EMOTION_LOG")) {
-        console.error("CRITICAL ERROR: Markers still present despite sanitization");
-        botReplyContent = "I'm sorry, I wasn't able to provide a proper response. Please try again.";
-      }
 
       res.json({ content: botReplyContent });
 
@@ -500,68 +516,51 @@ ${userPrompt}`;
     }
 
   } catch (err) {
-    console.error("Completion request failed:", err.message);
-    res.status(500).json({ 
-      status: "error", 
-      message: "Completion failed: " + err.message
+    console.error("Error in /completion endpoint:", err);
+    res.status(500).json({
+      status: "error",
+      message: "Error processing LLM request. Please try again.",
     });
   }
 });
 
-// Process stream response for metadata and database operations
+// Optimized stream response processing
 const processStreamResponse = async (fullContent, userPrompt, userId) => {
   try {
-    console.log("Processing stream response for metadata...");
+    console.log("Processing complete stream response for metadata...");
     
-    const extractJsonPattern = (regex, content, logType) => {
-      const match = content.match(regex);
-      if (!match || !match[1]) {
-        return [null, content];
-      }
+    let inferredTask = null;
+    let inferredEmotion = null;
 
-      try {
-        const jsonString = match[1].trim();
-        const parsed = JSON.parse(jsonString);
-        return [parsed, content];
-      } catch (jsonError) {
-        console.error(`Failed to parse ${logType} JSON:`, jsonError.message);
-        return [null, content];
-      }
-    };
+    [inferredEmotion, fullContent] = extractJsonPattern(
+      METADATA_PATTERNS.emotion,
+      fullContent,
+      "emotion log"
+    );
 
-    const taskInferenceRegex = /TASK_INFERENCE:?\s*(\{[\s\S]*?\})\s*?/g;
-    const emotionLogRegex = /EMOTION_LOG:?\s*(\{[\s\S]*?\})\s*?/g;
+    [inferredTask, fullContent] = extractJsonPattern(
+      METADATA_PATTERNS.task,
+      fullContent,
+      "task inference"
+    );
 
-    const [inferredEmotion] = extractJsonPattern(emotionLogRegex, fullContent, "emotion log");
-    const [inferredTask] = extractJsonPattern(taskInferenceRegex, fullContent, "task inference");
+    const sanitizedContent = cleanResponse(fullContent);
 
-    // Clean content for storage
-    let cleanContent = fullContent
-      .replace(/TASK_INFERENCE:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-      .replace(/EMOTION_LOG:?\s*(\{[\s\S]*?\})?\s*?/g, "")
-      .replace(/TASK_INFERENCE:?/g, "")
-      .replace(/EMOTION_LOG:?/g, "")
-      .replace(/(\r?\n){2,}/g, "\n")
-      .trim();
-
-    cleanContent = sanitizeResponse(cleanContent);
-
+    // Optimized database operations
     const dbOperations = [];
 
-    // Store conversation
     dbOperations.push(
       ShortTermMemory.insertMany([
         { userId, content: userPrompt, role: "user" },
         {
           userId,
-          content: cleanContent || "I'm sorry, I wasn't able to provide a proper response.",
+          content: sanitizedContent,
           role: "assistant",
         },
       ])
     );
 
-    // Store emotion if detected
-    if (inferredEmotion && inferredEmotion.emotion) {
+    if (inferredEmotion?.emotion) {
       const emotionToLog = {
         emotion: inferredEmotion.emotion,
         context: inferredEmotion.context || userPrompt,
@@ -578,8 +577,7 @@ const processStreamResponse = async (fullContent, userPrompt, userId) => {
       );
     }
 
-    // Store task if detected
-    if (inferredTask && inferredTask.taskType) {
+    if (inferredTask?.taskType) {
       const taskParameters = typeof inferredTask.parameters === "object" ? inferredTask.parameters : {};
 
       dbOperations.push(
@@ -593,10 +591,24 @@ const processStreamResponse = async (fullContent, userPrompt, userId) => {
     }
 
     await Promise.all(dbOperations);
-    console.log("Stream response processing complete");
 
+    // Invalidate cache after database operations
+    userCache.invalidateUser(userId);
+
+    const summaryParts = ["Stream data saved:"];
+    summaryParts.push("- 2 memory entries (user and assistant)");
+
+    if (inferredEmotion?.emotion) {
+      summaryParts.push(`- Emotion: ${inferredEmotion.emotion}`);
+    }
+
+    if (inferredTask?.taskType) {
+      summaryParts.push(`- Task: ${inferredTask.taskType}`);
+    }
+
+    console.log(summaryParts.join(" "));
   } catch (error) {
-    console.error("Error processing stream response:", error);
+    console.error('Error processing stream response:', error);
   }
 };
 
