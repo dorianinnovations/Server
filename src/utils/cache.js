@@ -64,14 +64,81 @@ export const createCache = () => new MemoryCache();
 export const createUserCache = (userId) => {
   const userCache = new MemoryCache();
   
-  // Override methods to prefix keys with user ID
+  // Override methods to prefix keys with user ID if userId is provided
   const originalSet = userCache.set.bind(userCache);
   const originalGet = userCache.get.bind(userCache);
   const originalDelete = userCache.delete.bind(userCache);
   
-  userCache.set = (key, value, ttl) => originalSet(`user:${userId}:${key}`, value, ttl);
-  userCache.get = (key) => originalGet(`user:${userId}:${key}`);
-  userCache.delete = (key) => originalDelete(`user:${userId}:${key}`);
+  if (userId) {
+    userCache.set = (key, value, ttl) => originalSet(`user:${userId}:${key}`, value, ttl);
+    userCache.get = (key) => originalGet(`user:${userId}:${key}`);
+    userCache.delete = (key) => originalDelete(`user:${userId}:${key}`);
+  }
+
+  // Add cache-first methods for user data
+  userCache.getCachedUser = async (targetUserId, fallbackFunction) => {
+    const cacheKey = `user:${targetUserId}`;
+    
+    // Try to get from cache first
+    let cachedUser = userCache.get(cacheKey);
+    if (cachedUser) {
+      console.log(`✓ Cache hit for user ${targetUserId}`);
+      return cachedUser;
+    }
+    
+    // If not in cache, execute fallback function
+    console.log(`⚡ Cache miss for user ${targetUserId}, fetching from database`);
+    try {
+      const userData = await fallbackFunction();
+      if (userData) {
+        // Cache the result for 5 minutes
+        userCache.set(cacheKey, userData, 5 * 60 * 1000);
+        console.log(`✓ Cached user ${targetUserId} data`);
+      }
+      return userData;
+    } catch (error) {
+      console.error(`❌ Failed to fetch user ${targetUserId}:`, error);
+      throw error;
+    }
+  };
+
+  // Add cache-first methods for memory data
+  userCache.getCachedMemory = async (targetUserId, fallbackFunction) => {
+    const cacheKey = `memory:${targetUserId}`;
+    
+    // Try to get from cache first
+    let cachedMemory = userCache.get(cacheKey);
+    if (cachedMemory) {
+      console.log(`✓ Cache hit for memory ${targetUserId}`);
+      return cachedMemory;
+    }
+    
+    // If not in cache, execute fallback function
+    console.log(`⚡ Cache miss for memory ${targetUserId}, fetching from database`);
+    try {
+      const memoryData = await fallbackFunction();
+      if (memoryData) {
+        // Cache the result for 2 minutes (shorter TTL for more dynamic data)
+        userCache.set(cacheKey, memoryData, 2 * 60 * 1000);
+        console.log(`✓ Cached memory ${targetUserId} data`);
+      }
+      return memoryData;
+    } catch (error) {
+      console.error(`❌ Failed to fetch memory for ${targetUserId}:`, error);
+      throw error;
+    }
+  };
+
+  // Add method to invalidate user-specific cache entries
+  userCache.invalidateUser = (targetUserId) => {
+    const userKey = `user:${targetUserId}`;
+    const memoryKey = `memory:${targetUserId}`;
+    
+    userCache.delete(userKey);
+    userCache.delete(memoryKey);
+    
+    console.log(`🗑️ Invalidated cache for user ${targetUserId}`);
+  };
   
   return userCache;
 };
