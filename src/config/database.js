@@ -15,7 +15,6 @@ const connectDB = async () => {
       socketTimeoutMS: 45000,    // Socket timeout
       family: 4,                 // Use IPv4, avoid slow IPv6 lookups
       bufferCommands: false,     // Disable mongoose buffering for better performance
-      bufferMaxEntries: 0,       // Disable mongoose buffering queue
       heartbeatFrequencyMS: 10000, // Heartbeat every 10 seconds
       retryReads: true,          // Enable read retries
       retryWrites: true,         // Enable write retries

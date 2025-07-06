@@ -92,7 +92,6 @@ mongoose.connect(process.env.MONGO_URI, {
   socketTimeoutMS: 45000,
   family: 4,
   bufferCommands: false,     // Disable mongoose buffering
-  bufferMaxEntries: 0,       // Disable mongoose buffering
 })
 .then(() => console.log("✓MongoDB connected with optimized pool settings"))
 .catch((err) => {
