@@ -10,9 +10,6 @@ import https from "https";
 
 const router = express.Router();
 
-// Create smart cache instance
-const userCache = createUserCache();
-
 // Create reusable HTTPS agent for better performance
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
@@ -95,6 +92,9 @@ router.post("/completion", protect, async (req, res) => {
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
   
+  // Create user-specific cache instance
+  const userCache = createUserCache(userId);
+
   // Comprehensive stop sequences for Mistral 7B
   const stop = req.body.stop || [
     "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
