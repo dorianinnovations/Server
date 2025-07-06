@@ -748,8 +748,7 @@ const processStreamResponse = async (fullContent, userPrompt, userId) => {
 
     await Promise.all(dbOperations);
 
-    // Invalidate cache after database operations
-    userCache.invalidateUser(userId);
+    // Note: Cache invalidation not needed in streaming mode as userCache is scoped to the request
 
     const summaryParts = ["Stream data saved:"];
     summaryParts.push("- 2 memory entries (user and assistant)");
