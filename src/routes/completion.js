@@ -121,10 +121,15 @@ router.post("/completion", protect, async (req, res) => {
 
   if (stream) {
     try {
+      console.log(`🔍 STREAMING: Starting DB operations for user ${userId}`);
+      
       const user = await User.findById(userId);
       if (!user) {
+        console.log(`❌ STREAMING: User ${userId} not found`);
         return res.status(404).json({ message: "User not found." });
       }
+      console.log(`✅ STREAMING: User ${userId} found`);
+      
       const userProfile = user.profile ? JSON.stringify(user.profile) : "{}";
       const recentEmotionalLogEntries = user.emotionalLog
         .sort((a, b) => b.timestamp - a.timestamp)
@@ -141,6 +146,8 @@ router.post("/completion", protect, async (req, res) => {
           } because: ${entry.context || "no specific context provided"}.`;
         })
         .join("\n");
+      
+      console.log(`🔍 STREAMING: Fetching recent memory for user ${userId}`);
       const [recentMemory] = await Promise.all([
         ShortTermMemory.find(
           { userId },
@@ -150,6 +157,7 @@ router.post("/completion", protect, async (req, res) => {
           .limit(6)
           .lean(),
       ]);
+      console.log(`✅ STREAMING: Found ${recentMemory.length} recent memories`);
       recentMemory.reverse();
       const historyBuilder = [];
       for (const mem of recentMemory) {
@@ -203,14 +211,18 @@ SPECIAL FUNCTIONS (as Numina):
         `<|im_start|>user\n${userPrompt}\n<|im_end|>\n<|im_start|>assistant\nI'm Numina, and I'm here to help you.`
       );
       const fullPrompt = promptParts.join("\n\n");
+      console.log(`🔍 STREAMING: Prompt length: ${fullPrompt.length} chars`);
+      console.log(`🔍 STREAMING: Conversation history length: ${conversationHistory.length} chars`);
 
       // Make streaming request to OpenRouter
       const llmService = createLLMService();
+      console.log(`🔍 STREAMING: Making OpenRouter request...`);
       const llamaRes = await llmService.makeStreamingRequest(fullPrompt, {
         stop,
         n_predict,
         temperature,
       });
+      console.log(`✅ STREAMING: OpenRouter request successful, setting up stream...`);
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -233,6 +245,7 @@ SPECIAL FUNCTIONS (as Numina):
             const data = line.substring(6).trim();
             
             if (data === '[DONE]') {
+              console.log('🏁 STREAMING: Received [DONE] signal');
               res.write('data: [DONE]\n\n');
               res.end();
               return;
@@ -243,11 +256,15 @@ SPECIAL FUNCTIONS (as Numina):
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 const content = parsed.choices[0].delta.content;
                 fullContent += content;
+                console.log(`📤 STREAMING: Sending chunk: "${content.substring(0, 50)}..."`);
                 res.write(`data: ${JSON.stringify({ content })}\n\n`);
                 res.flush && res.flush();
+              } else {
+                console.log(`🔍 STREAMING: Non-content chunk received:`, JSON.stringify(parsed));
               }
             } catch (e) {
-              console.error('Error parsing OpenRouter streaming data:', e);
+              console.error('❌ STREAMING: Error parsing OpenRouter data:', e);
+              console.log('❌ STREAMING: Raw data:', data);
             }
           }
         }
