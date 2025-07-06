@@ -6,6 +6,20 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import https from "https";
 
+// Load environment variables
+dotenv.config();
+
+// Validate required environment variables
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error('✗ Missing required environment variables:', missingEnvVars);
+  console.error('Please create a .env file with the required variables.');
+  console.error('You can use .env.template as a starting point.');
+  process.exit(1);
+}
+
 // Import routes
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js";
@@ -29,8 +43,6 @@ import taskScheduler from "./services/taskScheduler.js";
 import "./models/User.js";
 import "./models/ShortTermMemory.js";
 import "./models/Task.js";
-
-dotenv.config();
 
 const app = express();
 
