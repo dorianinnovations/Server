@@ -227,9 +227,6 @@ Be sharp. Be useful. Be Numina.`;
       // Add current user message
       messages.push({ role: "user", content: userPrompt });
       
-      console.log(`🔍 STREAMING: Created ${messages.length} messages for OpenRouter`);
-      console.log(`🔍 STREAMING: System message length: ${systemMessage.length} chars`);
-      console.log(`🔍 STREAMING: Conversation history length: ${conversationHistory.length} chars`);
 
       // Make streaming request to OpenRouter with messages array
       const llmService = createLLMService();
