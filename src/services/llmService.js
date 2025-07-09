@@ -50,7 +50,7 @@ export const createLLMService = () => {
         `OpenRouter API Response Status: ${response.status} (${responseTime}ms)`
       );
 
-      // Return in the same format as the original llama.cpp response
+      // Return in a standardized format for consistency
       return {
         content: response.data.choices[0].message.content,
         stop_reason: response.data.choices[0].finish_reason,
