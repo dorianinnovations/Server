@@ -18,7 +18,7 @@ class TaskScheduler {
     
     this.isRunning = true;
     
-    // Schedule task processing every minute
+    // Schedule task processing more frequently for better responsiveness
     this.scheduleTaskProcessing();
     
     // Schedule cleanup jobs
@@ -40,15 +40,26 @@ class TaskScheduler {
 
   // Schedule task processing
   scheduleTaskProcessing() {
-    const job = cron.schedule("*/5 * * * *", async () => { // Changed from every minute to every 5 minutes
+    // Process high priority tasks every minute for better responsiveness
+    const highPriorityJob = cron.schedule("* * * * *", async () => {
       try {
-        await this.processPendingTasks();
+        await this.processPendingTasks(true); // Process high priority tasks only
       } catch (error) {
-        logger.error("Error in task processing job", { error: error.message });
+        logger.error("Error in high priority task processing job", { error: error.message });
       }
     });
 
-    this.jobs.set("taskProcessing", job);
+    // Process all tasks every 5 minutes
+    const regularJob = cron.schedule("*/5 * * * *", async () => {
+      try {
+        await this.processPendingTasks(false); // Process all tasks
+      } catch (error) {
+        logger.error("Error in regular task processing job", { error: error.message });
+      }
+    });
+
+    this.jobs.set("highPriorityTaskProcessing", highPriorityJob);
+    this.jobs.set("regularTaskProcessing", regularJob);
   }
 
   // Schedule cleanup jobs
@@ -90,13 +101,20 @@ class TaskScheduler {
   }
 
   // Process pending tasks
-  async processPendingTasks() {
-    const tasksToProcess = await Task.find({
+  async processPendingTasks(highPriorityOnly = false) {
+    const query = {
       status: "queued",
       runAt: { $lte: new Date() },
-    })
+    };
+
+    // If processing high priority only, add priority filter
+    if (highPriorityOnly) {
+      query.priority = { $gte: 1 }; // High priority tasks (1 and above)
+    }
+
+    const tasksToProcess = await Task.find(query)
       .sort({ priority: -1, createdAt: 1 })
-      .limit(3) // Reduced from 10 to 3 tasks per batch
+      .limit(highPriorityOnly ? 5 : 3) // More high priority tasks, fewer regular tasks
       .populate("userId");
 
     if (tasksToProcess.length === 0) return;
@@ -328,6 +346,11 @@ class TaskScheduler {
     }
 
     try {
+      // Check if LLM service is available before proceeding
+      if (!process.env.OPENROUTER_API_KEY) {
+        throw new Error("OpenRouter API key not configured. Unable to generate insights.");
+      }
+
       // Generate insights using LLM
       const llmService = createLLMService();
       const emotionsSummary = dayEmotions.map(e => 
@@ -429,6 +452,11 @@ Keep each insight concise (2-3 sentences max) and practical.`;
     }
 
     try {
+      // Check if LLM service is available before proceeding
+      if (!process.env.OPENROUTER_API_KEY) {
+        throw new Error("OpenRouter API key not configured. Unable to generate weekly report.");
+      }
+
       // Get all processed daily insights
       const processedInsights = session.reportProgress.filter(p => p.status === "processed");
       

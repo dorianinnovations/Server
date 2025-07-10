@@ -91,6 +91,15 @@ app.use("/", docsRoutes);
 app.use("/emotions", emotionsRoutes);
 app.use("/analytics", emotionalAnalyticsRoutes);
 
+// --- Environment Variable Validation ---
+const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.warn('⚠️ Missing required environment variables:', missingEnvVars.join(', '));
+  console.warn('⚠️ Some features may not work properly without these variables');
+}
+
 // --- Start Task Scheduler ---
 if (process.env.NODE_ENV !== 'test') {
   taskScheduler.start();
