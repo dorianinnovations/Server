@@ -89,7 +89,7 @@ A modular Express.js server for the Numina AI assistant application.
    ```env
    MONGO_URI=your_mongodb_connection_string
    JWT_SECRET=your_jwt_secret
-   LLAMA_CPP_API_URL=your_llm_api_url
+   OPENROUTER_API_KEY=your_openrouter_api_key
    PORT=5000
    NODE_ENV=development
    ```

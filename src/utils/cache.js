@@ -18,9 +18,15 @@ class MemoryCache {
     const expirationTime = this.expirationTimes.get(key);
     if (expirationTime && Date.now() > expirationTime) {
       this.delete(key);
-      return undefined;
+      return null;
     }
-    return this.cache.get(key);
+    
+    // Check if key exists in cache
+    if (this.cache.has(key)) {
+      return this.cache.get(key); // Return the actual value, even if it's undefined
+    }
+    
+    return null; // Key doesn't exist
   }
 
   delete(key) {
@@ -190,4 +196,4 @@ export const setupMemoryMonitoring = () => {
 };
 
 // Export the global cache instance
-export default globalCache; 
+export default globalCache;

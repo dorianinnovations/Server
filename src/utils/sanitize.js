@@ -4,18 +4,12 @@ export const sanitizeResponse = (text) => {
     return "I'm sorry, I wasn't able to provide a proper response. Please try again.";
   }
 
-  // Optimized single-pass sanitization with combined regex
-  const SANITIZATION_REGEX = /(?:TASK_INFERENCE|EMOTION_LOG):?\s*(?:\{[\s\S]*?\})?\s*|\}+|[ ]{2,}|\n{2,}/gi;
-  
+  // Remove the metadata markers and their JSON content
   let sanitized = text
-    .replace(SANITIZATION_REGEX, (match) => {
-      if (match.match(/(?:TASK_INFERENCE|EMOTION_LOG)/i)) return ' ';
-      if (match.match(/\}+/)) return ' ';
-      if (match.match(/[ ]{2,}/)) return ' ';
-      if (match.match(/\n{2,}/)) return '\n';
-      return match;
-    })
-    // Final cleanup of leading/trailing spaces
+    .replace(/(?:TASK_INFERENCE|EMOTION_LOG):?\s*(?:\{[\s\S]*?\})?\s*/gi, ' ')
+    .replace(/\}+/g, ' ')
+    .replace(/[ ]{2,}/g, ' ')
+    .replace(/\n{2,}/g, '\n')
     .replace(/^[ \n]+|[ \n]+$/g, '');
 
   if (!sanitized) {

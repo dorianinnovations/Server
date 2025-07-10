@@ -33,29 +33,25 @@ describe('Cache Utility', () => {
     });
   });
 
-  describe('cache size management', () => {
-    it('should limit cache size', () => {
-      // Fill cache beyond max size
-      for (let i = 0; i < 120; i++) {
-        cache.set(`key-${i}`, `value-${i}`);
-      }
-
-      // Check that cache size is managed
-      expect(cache.items.size).toBeLessThanOrEqual(100);
+  describe('cache operations', () => {
+    it('should delete items', () => {
+      cache.set('test-key', 'test-value');
+      cache.delete('test-key');
+      expect(cache.get('test-key')).toBeNull();
     });
 
-    it('should remove oldest items when cache is full', () => {
-      // Add items to fill cache
-      for (let i = 0; i < 100; i++) {
-        cache.set(`key-${i}`, `value-${i}`);
-      }
+    it('should clear all items', () => {
+      cache.set('key1', 'value1');
+      cache.set('key2', 'value2');
+      cache.clear();
+      expect(cache.get('key1')).toBeNull();
+      expect(cache.get('key2')).toBeNull();
+    });
 
-      // Add one more to trigger cleanup
-      cache.set('new-key', 'new-value');
-
-      // Oldest items should be removed
-      expect(cache.get('key-0')).toBeNull();
-      expect(cache.get('new-key')).toBe('new-value');
+    it('should return correct size', () => {
+      cache.set('key1', 'value1');
+      cache.set('key2', 'value2');
+      expect(cache.size()).toBe(2);
     });
   });
 

@@ -13,7 +13,7 @@ const getRefererUrl = () => {
 export const createLLMService = () => {
   const openRouterApiUrl = "https://openrouter.ai/api/v1/chat/completions";
   
-  const makeLLMRequest = async (prompt, options = {}) => {
+  const makeLLMRequest = async (promptOrMessages, options = {}) => {
     const {
       stop = ["<|im_end|>", "\n<|im_start|>"],
       n_predict = 1024,
@@ -23,8 +23,10 @@ export const createLLMService = () => {
     const llmStartTime = Date.now();
 
     try {
-      // Convert the prompt format from chat-ml to OpenRouter's message format
-      const messages = parsePromptToMessages(prompt);
+      // Handle both string prompts and messages array
+      const messages = Array.isArray(promptOrMessages) 
+        ? promptOrMessages 
+        : parsePromptToMessages(promptOrMessages);
       
       const response = await axios({
         method: "POST",
@@ -50,7 +52,7 @@ export const createLLMService = () => {
         `OpenRouter API Response Status: ${response.status} (${responseTime}ms)`
       );
 
-      // Return in the same format as the original llama.cpp response
+      // Return response in consistent format
       return {
         content: response.data.choices[0].message.content,
         stop_reason: response.data.choices[0].finish_reason,

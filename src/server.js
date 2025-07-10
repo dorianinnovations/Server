@@ -15,6 +15,7 @@ import healthRoutes from "./routes/health.js";
 import completionRoutes from "./routes/completion.js";
 import taskRoutes from "./routes/tasks.js";
 import docsRoutes from "./routes/docs.js";
+import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 
 // Import middleware
 import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
@@ -32,6 +33,7 @@ import taskScheduler from "./services/taskScheduler.js";
 import "./models/User.js";
 import "./models/ShortTermMemory.js";
 import "./models/Task.js";
+import "./models/EmotionalAnalyticsSession.js";
 
 const app = express();
 
@@ -85,6 +87,7 @@ app.use("/", healthRoutes);
 app.use("/", completionPerformanceMiddleware, completionRoutes);
 app.use("/", taskRoutes);
 app.use("/", docsRoutes);
+app.use("/analytics", emotionalAnalyticsRoutes);
 
 // --- Start Task Scheduler ---
 if (process.env.NODE_ENV !== 'test') {

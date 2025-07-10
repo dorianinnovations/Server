@@ -35,17 +35,6 @@ Thumbs.db
 *.sublime-workspace
 *.sublime-project
 
-# Llama.cpp binaries and models
-llama.cpp/build/
-llama.cpp/models/
-llama.cpp/*.bin
-llama.cpp/*.gguf
-llama.cpp/*.ggml
-llama.cpp/*.exe
-llama.cpp/*.dll
-llama.cpp/*.so
-llama.cpp/*.dylib
-
 # Python virtual environments
 venv/
 .venv/

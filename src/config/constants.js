@@ -67,39 +67,12 @@ export const TASK_CONFIG = {
   }
 };
 
-// LLM Configuration
-export const LLM_CONFIG = {
-  DEFAULT_PARAMS: {
-    TEMPERATURE: 0.7,
-    TOP_K: 40,
-    TOP_P: 0.9,
-    REPEAT_PENALTY: 1.1,
-    FREQUENCY_PENALTY: 0.1,
-    PRESENCE_PENALTY: 0.1,
-    N_PREDICT: 500
-  },
-  STOP_SEQUENCES: [
-    "USER:", "\nUSER:", "\nUser:", "user:", "\n\nUSER:",
-    "Human:", "\nHuman:", "\nhuman:", "human:",
-    "\n\nUser:", "\n\nHuman:", "\n\nuser:", "\n\nhuman:",
-    "Q:", "\nQ:", "\nQuestion:", "Question:",
-    "\n\n\n", "---", "***", "```",
-    "</EXAMPLES>", "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
-    "<s>", "</s>", "[INST]", "[/INST]",
-    "Assistant:", "\nAssistant:", "AI:",
-    "Example:", "\nExample:", "For example:",
-    "...", "etc.", "and so on",
-    "Note:", "Important:", "Remember:",
-    "Source:", "Reference:", "According to:"
-  ]
-};
-
 // Memory and Performance Configuration
 export const MEMORY_CONFIG = {
-  CACHE_TTL: 3600000, // 1 hour in milliseconds
-  GC_THRESHOLD: 100000000, // 100MB in bytes
-  MEMORY_MONITORING_INTERVAL: 60000, // 1 minute
-  MAX_RESPONSE_SIZE: 100000 // 100KB
+  CACHE_TTL: 3600000, 
+  GC_THRESHOLD: 100000000,
+  MEMORY_MONITORING_INTERVAL: 60000, 
+  MAX_RESPONSE_SIZE: 100000 
 };
 
 // Security Configuration
