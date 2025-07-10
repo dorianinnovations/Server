@@ -2,7 +2,7 @@ import express from "express";
 import { protect } from "../middleware/auth.js";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
-import { updateAnalyticsForUser } from "../utils/analyticsHelper.js";
+// Analytics helper no longer needed for simple emotion logging
 
 const router = express.Router();
 
@@ -49,17 +49,7 @@ router.post("/", protect, async (req, res) => {
     user.updatedAt = new Date();
     await user.save();
 
-    // Trigger immediate analytics update
-    try {
-      await updateAnalyticsForUser(userId);
-      logger.info("Analytics updated after emotion submission", { userId });
-    } catch (analyticsError) {
-      logger.warn("Failed to update analytics after emotion submission", { 
-        userId, 
-        error: analyticsError.message 
-      });
-      // Don't fail the emotion submission if analytics update fails
-    }
+    // Note: Complex analytics removed - now using simple history tracking
 
     logger.info("Emotional entry submitted", { 
       userId, 

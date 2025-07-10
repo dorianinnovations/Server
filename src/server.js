@@ -15,8 +15,9 @@ import healthRoutes from "./routes/health.js";
 import completionRoutes from "./routes/completion.js";
 import taskRoutes from "./routes/tasks.js";
 import docsRoutes from "./routes/docs.js";
-import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 import emotionsRoutes from "./routes/emotions.js";
+import emotionHistoryRoutes from "./routes/emotionHistory.js";
+import emotionMetricsRoutes from "./routes/emotionMetrics.js";
 
 // Import middleware
 import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
@@ -89,7 +90,8 @@ app.use("/", completionPerformanceMiddleware, completionRoutes);
 app.use("/", taskRoutes);
 app.use("/", docsRoutes);
 app.use("/emotions", emotionsRoutes);
-app.use("/analytics", emotionalAnalyticsRoutes);
+app.use("/emotion-history", emotionHistoryRoutes);
+app.use("/emotion-metrics", emotionMetricsRoutes);
 
 // --- Environment Variable Validation ---
 const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
@@ -100,10 +102,11 @@ if (missingEnvVars.length > 0) {
   console.warn('⚠️ Some features may not work properly without these variables');
 }
 
-// --- Start Task Scheduler ---
-if (process.env.NODE_ENV !== 'test') {
-  taskScheduler.start();
-}
+// --- Task Scheduler Disabled ---
+// Complex analytics removed - using simple emotion history tracking instead
+// if (process.env.NODE_ENV !== 'test') {
+//   taskScheduler.start();
+// }
 
 // --- Error Handling ---
 app.use(errorLogger);
