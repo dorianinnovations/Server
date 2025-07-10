@@ -16,6 +16,7 @@ import completionRoutes from "./routes/completion.js";
 import taskRoutes from "./routes/tasks.js";
 import docsRoutes from "./routes/docs.js";
 import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
+import emotionsRoutes from "./routes/emotions.js";
 
 // Import middleware
 import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
@@ -87,6 +88,7 @@ app.use("/", healthRoutes);
 app.use("/", completionPerformanceMiddleware, completionRoutes);
 app.use("/", taskRoutes);
 app.use("/", docsRoutes);
+app.use("/emotions", emotionsRoutes);
 app.use("/analytics", emotionalAnalyticsRoutes);
 
 // --- Start Task Scheduler ---
