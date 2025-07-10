@@ -14,7 +14,7 @@ const taskSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
   runAt: { type: Date, default: Date.now },
-  parameters: { type: Map, of: String },
+  parameters: { type: Map, of: mongoose.Schema.Types.Mixed },
   result: { type: String },
   priority: { type: Number, default: 0, min: 0, max: 10 },
 });

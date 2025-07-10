@@ -181,10 +181,14 @@ class TaskScheduler {
           result = await this.analyzeEmotions(task.userId, task.parameters);
           break;
         case "process_daily_insights":
-          result = await this.processDailyInsights(task.userId, task.parameters);
+          // Convert Map to plain object for proper parameter access
+          const dailyParams = task.parameters instanceof Map ? Object.fromEntries(task.parameters) : task.parameters;
+          result = await this.processDailyInsights(task.userId, dailyParams);
           break;
         case "generate_weekly_report":
-          result = await this.generateWeeklyReport(task.userId, task.parameters);
+          // Convert Map to plain object for proper parameter access
+          const weeklyParams = task.parameters instanceof Map ? Object.fromEntries(task.parameters) : task.parameters;
+          result = await this.generateWeeklyReport(task.userId, weeklyParams);
           break;
         default:
           result = `Unknown task type: ${task.taskType}`;
@@ -291,9 +295,16 @@ class TaskScheduler {
 
   // Process daily insights for emotional analytics session
   async processDailyInsights(userId, parameters = {}) {
+    logger.info("Processing daily insights with parameters", { userId, parameters });
+    
     const { sessionId, day } = parameters;
     
     if (!sessionId || !day) {
+      logger.error("Missing required parameters for daily insights", { 
+        sessionId, 
+        day, 
+        parameters: JSON.stringify(parameters) 
+      });
       throw new Error("Session ID and day are required for daily insights processing");
     }
 
