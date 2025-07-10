@@ -2,6 +2,7 @@ import express from "express";
 import { protect } from "../middleware/auth.js";
 import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import logger from "../utils/logger.js";
+import { updateAnalyticsForUser } from "../utils/analyticsHelper.js";
 
 const router = express.Router();
 
@@ -9,6 +10,7 @@ const router = express.Router();
 router.get("/current-session", protect, async (req, res) => {
   try {
     const userId = req.user.id;
+    const forceRefresh = req.query.refresh === 'true';
     
     // Get or create current session
     const session = await EmotionalAnalyticsSession.getCurrentSession(userId);
@@ -17,6 +19,20 @@ router.get("/current-session", protect, async (req, res) => {
       return res.status(404).json({
         message: "No analytics session found"
       });
+    }
+
+    // Force refresh analytics if requested
+    if (forceRefresh) {
+      try {
+        await updateAnalyticsForUser(userId);
+        logger.info("Forced analytics refresh for current-session request", { userId });
+      } catch (refreshError) {
+        logger.warn("Failed to force refresh analytics", { 
+          userId, 
+          error: refreshError.message 
+        });
+        // Continue with existing data if refresh fails
+      }
     }
 
     // Build response with session details
