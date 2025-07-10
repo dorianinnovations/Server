@@ -10,25 +10,11 @@ router.post("/", protect, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Debug logging - let's see what we're actually receiving
-    logger.info("=== EMOTION SUBMISSION DEBUG ===", {
-      headers: req.headers,
-      body: req.body,
-      bodyType: typeof req.body,
-      emotionValue: req.body?.emotion,
-      emotionType: typeof req.body?.emotion,
-      userId: userId
-    });
-    
-    const { emotion, intensity, context } = req.body;
+    // Map frontend fields to backend expected names
+    const { mood: emotion, intensity, notes: context, date } = req.body;
 
     // Validate required fields
     if (!emotion || typeof emotion !== 'string' || emotion.trim().length === 0) {
-      logger.warn("Validation failed", { 
-        emotion: emotion, 
-        emotionType: typeof emotion,
-        userId: userId 
-      });
       return res.status(400).json({
         message: "Emotion is required and must be a non-empty string"
       });
