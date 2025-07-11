@@ -24,7 +24,7 @@ import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
 import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
 
 // Import middleware
-import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
+import { corsSecurity, securityHeaders, validateContent, sanitizeRequest } from "./middleware/security.js";
 import { requestLogger, errorLogger } from "./utils/logger.js";
 import { globalErrorHandler } from "./utils/errorHandler.js";
 import { performanceMiddleware as enhancedPerformanceMiddleware, completionPerformanceMiddleware } from "./middleware/performanceMiddleware.js";
@@ -65,10 +65,12 @@ const memoryCleanupMiddleware = (req, res, next) => {
 
 // --- Security and Middleware Configuration ---
 app.use(enhancedPerformanceMiddleware);
-app.use(corsMiddleware);
+app.use(corsSecurity);
 app.use(express.json({ limit: "1mb" }));
-app.use(securityMiddleware);
-app.use(optimizedCompression);
+app.use(validateContent);
+app.use(sanitizeRequest);
+app.use(securityHeaders);
+app.use(compression());
 app.use(memoryCleanupMiddleware);
 app.use(requestLogger);
 
