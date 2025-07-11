@@ -91,6 +91,26 @@ export const SECURITY_CONFIG = {
     COMPLETION: {
       windowMs: 60 * 1000, // 1 minute
       max: 10 // requests per windowMs
+    },
+    COLLECTIVE_DATA: {
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 50 // requests per windowMs
+    },
+    SNAPSHOTS: {
+      windowMs: 60 * 60 * 1000, // 1 hour
+      max: 10 // requests per windowMs
+    },
+    EXPORT: {
+      windowMs: 60 * 60 * 1000, // 1 hour
+      max: 5 // requests per windowMs
+    },
+    ADMIN: {
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 20 // requests per windowMs
+    },
+    AGGREGATION: {
+      windowMs: 5 * 60 * 1000, // 5 minutes
+      max: 30 // requests per windowMs
     }
   },
   JWT_EXPIRES_IN: '1d',

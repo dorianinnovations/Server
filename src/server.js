@@ -19,6 +19,9 @@ import emotionsRoutes from "./routes/emotions.js";
 import emotionHistoryRoutes from "./routes/emotionHistory.js";
 import emotionMetricsRoutes from "./routes/emotionMetrics.js";
 import analyticsRoutes from "./routes/analytics.js";
+import collectiveDataRoutes from "./routes/collectiveData.js";
+import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
+import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
 
 // Import middleware
 import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
@@ -31,12 +34,15 @@ import { createCache, setupMemoryMonitoring } from "./utils/cache.js";
 
 // Import services
 import taskScheduler from "./services/taskScheduler.js";
+import scheduledAggregationService from "./services/scheduledAggregationService.js";
 
 // Import models (to ensure they're loaded)
 import "./models/User.js";
 import "./models/ShortTermMemory.js";
 import "./models/Task.js";
 import "./models/EmotionalAnalyticsSession.js";
+import "./models/CollectiveDataConsent.js";
+import "./models/CollectiveSnapshot.js";
 
 const app = express();
 
@@ -94,6 +100,9 @@ app.use("/emotions", emotionsRoutes);
 app.use("/emotion-history", emotionHistoryRoutes);
 app.use("/emotion-metrics", emotionMetricsRoutes);
 app.use("/analytics", analyticsRoutes);
+app.use("/collective-data", collectiveDataRoutes);
+app.use("/collective-snapshots", collectiveSnapshotsRoutes);
+app.use("/scheduled-aggregation", scheduledAggregationRoutes);
 
 // --- Environment Variable Validation ---
 const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
@@ -109,6 +118,13 @@ if (missingEnvVars.length > 0) {
 // if (process.env.NODE_ENV !== 'test') {
 //   taskScheduler.start();
 // }
+
+// --- Scheduled Aggregation Service ---
+if (process.env.NODE_ENV !== 'test') {
+  // Start scheduled aggregation service
+  scheduledAggregationService.start();
+  console.log("✓Scheduled aggregation service started (10-minute intervals)");
+}
 
 // --- Error Handling ---
 app.use(errorLogger);
