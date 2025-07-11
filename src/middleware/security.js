@@ -18,7 +18,15 @@ export const corsMiddleware = cors({
     return callback(null, true);
   },
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization", "authorization", "X-Title", "Origin", "Referer"]
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Origin",
+    "Referer",
+    "http-referer",  
+    "X-Title"
+  ]
+  
 ,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 });
