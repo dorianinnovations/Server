@@ -18,6 +18,7 @@ import docsRoutes from "./routes/docs.js";
 import emotionsRoutes from "./routes/emotions.js";
 import emotionHistoryRoutes from "./routes/emotionHistory.js";
 import emotionMetricsRoutes from "./routes/emotionMetrics.js";
+import analyticsRoutes from "./routes/analytics.js";
 
 // Import middleware
 import { corsMiddleware, securityMiddleware, optimizedCompression } from "./middleware/security.js";
@@ -92,6 +93,7 @@ app.use("/", docsRoutes);
 app.use("/emotions", emotionsRoutes);
 app.use("/emotion-history", emotionHistoryRoutes);
 app.use("/emotion-metrics", emotionMetricsRoutes);
+app.use("/analytics", analyticsRoutes);
 
 // --- Environment Variable Validation ---
 const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
