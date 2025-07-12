@@ -11,18 +11,18 @@ router.post("/", protect, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Map frontend fields to backend expected names
-    const { mood: emotion, intensity, notes: context, date } = req.body;
+    // Extract fields from frontend
+    const { mood, intensity, notes, timestamp, timeZone, deviceInfo } = req.body;
 
     // Validate required fields
-    if (!emotion || typeof emotion !== 'string' || emotion.trim().length === 0) {
+    if (!mood || typeof mood !== 'string' || mood.trim().length === 0) {
       return res.status(400).json({
         message: "Emotion is required and must be a non-empty string"
       });
     }
 
-    // Validate intensity if provided
-    if (intensity !== undefined && (typeof intensity !== 'number' || intensity < 1 || intensity > 10)) {
+    // Validate intensity
+    if (typeof intensity !== 'number' || intensity < 1 || intensity > 10) {
       return res.status(400).json({
         message: "Intensity must be a number between 1 and 10"
       });
@@ -38,10 +38,12 @@ router.post("/", protect, async (req, res) => {
 
     // Create the emotional entry
     const emotionalEntry = {
-      emotion: emotion.trim(),
-      intensity: intensity || undefined,
-      context: context?.trim() || undefined,
-      timestamp: new Date()
+      emotion: mood.trim(),
+      intensity,
+      context: notes?.trim() || undefined,
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      timeZone: timeZone || undefined,
+      deviceInfo: deviceInfo || undefined
     };
 
     // Add to user's emotional log
@@ -61,10 +63,12 @@ router.post("/", protect, async (req, res) => {
       message: "Emotional entry submitted successfully",
       entry: {
         id: user.emotionalLog[user.emotionalLog.length - 1]._id,
-        emotion: emotionalEntry.emotion,
+        mood: emotionalEntry.emotion,
         intensity: emotionalEntry.intensity,
-        context: emotionalEntry.context,
-        timestamp: emotionalEntry.timestamp
+        notes: emotionalEntry.context,
+        timestamp: emotionalEntry.timestamp,
+        timeZone: emotionalEntry.timeZone,
+        deviceInfo: emotionalEntry.deviceInfo
       }
     });
 
