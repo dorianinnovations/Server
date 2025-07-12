@@ -106,6 +106,26 @@ export class CollectiveDataFormatter {
    */
   formatForVisualization(data, visualizationType = "chart") {
     try {
+      // Validate input data
+      if (!data || !Array.isArray(data)) {
+        logger.warn("Invalid data format for visualization", { dataType: typeof data });
+        return {
+          success: false,
+          error: "Invalid data format - expected array",
+          data: []
+        };
+      }
+
+      if (data.length === 0) {
+        logger.info("Empty data provided for visualization");
+        return {
+          success: true,
+          type: visualizationType,
+          data: [],
+          metadata: { isEmpty: true }
+        };
+      }
+
       switch (visualizationType) {
         case "heatmap":
           return this._formatForHeatmap(data);
@@ -129,7 +149,7 @@ export class CollectiveDataFormatter {
       return {
         success: false,
         error: error.message,
-        data: data
+        data: data || []
       };
     }
   }
