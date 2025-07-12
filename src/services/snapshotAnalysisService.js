@@ -18,7 +18,7 @@ class SnapshotAnalysisService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping snapshot generation");
         return {
           success: false,
@@ -125,7 +125,7 @@ class SnapshotAnalysisService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping latest snapshot fetch");
         return {
           success: false,
@@ -169,7 +169,7 @@ class SnapshotAnalysisService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping snapshot history fetch");
         return {
           success: false,
@@ -208,7 +208,7 @@ class SnapshotAnalysisService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping archetype history fetch");
         return {
           success: false,

@@ -85,7 +85,7 @@ class ScheduledAggregationService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping scheduled aggregation");
         return;
       }

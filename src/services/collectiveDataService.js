@@ -24,7 +24,7 @@ class CollectiveDataService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping aggregated emotional data generation");
         return {
           success: false,
@@ -150,7 +150,7 @@ class CollectiveDataService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping demographic patterns generation");
         return {
           success: false,
@@ -239,7 +239,7 @@ class CollectiveDataService {
     try {
       // Check database connection
       const mongoose = await import("mongoose");
-      if (mongoose.connection.readyState !== 1) {
+      if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping real-time insights generation");
         return {
           success: false,
