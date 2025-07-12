@@ -45,10 +45,12 @@ router.get("/", protect, async (req, res) => {
     // Format emotions for frontend
     const formattedEmotions = paginatedEmotions.map(emotion => ({
       id: emotion._id,
-      emotion: emotion.emotion,
+      mood: emotion.emotion,
       intensity: emotion.intensity,
-      context: emotion.context,
+      notes: emotion.context,
       timestamp: emotion.timestamp,
+      timeZone: emotion.timeZone,
+      deviceInfo: emotion.deviceInfo,
       date: emotion.timestamp.toISOString().split('T')[0], // YYYY-MM-DD format
       time: emotion.timestamp.toISOString().split('T')[1].substring(0, 5) // HH:MM format
     }));

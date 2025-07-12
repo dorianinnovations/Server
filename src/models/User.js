@@ -23,10 +23,12 @@ const userSchema = new mongoose.Schema({
   },
   emotionalLog: [
     {
-      emotion: { type: String, required: true, trim: true },
-      intensity: { type: Number, min: 1, max: 10, required: false },
-      context: { type: String, required: false, trim: true },
+      emotion: { type: String, required: true, trim: true }, // stored mood
+      intensity: { type: Number, min: 1, max: 10, required: true },
+      context: { type: String, trim: true }, // stored notes
       timestamp: { type: Date, default: Date.now },
+      timeZone: { type: String, trim: true },
+      deviceInfo: { type: String, trim: true },
     },
   ],
   createdAt: { type: Date, default: Date.now },
@@ -36,6 +38,7 @@ const userSchema = new mongoose.Schema({
 // Indexes for better performance
 // Note: email index is automatically created by unique: true
 userSchema.index({ createdAt: -1 });
+userSchema.index({ _id: 1, 'emotionalLog.timestamp': -1 });
 
 // Pre-save hook to hash password
 userSchema.pre("save", async function (next) {
