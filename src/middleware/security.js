@@ -2,10 +2,6 @@ import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
 import cors from "cors";
 
-/**
- * Admin role middleware - checks if user has admin privileges
- * This is a basic implementation - in production, you should implement proper role-based access control
- */
 export const requireAdmin = (req, res, next) => {
   try {
     // Check if user is authenticated
@@ -201,22 +197,40 @@ export const sanitizeRequest = (req, res, next) => {
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
   "https://numinaai.netlify.app",
   "http://localhost:5173",
-  "http://localhost:5000"
+  "http://localhost:5000",
+  "https://server-a7od.onrender.com"
 ];
 
 export const corsSecurity = cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // Allow requests with no origin (mobile apps, curl, etc.)
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) {
+      console.log("CORS: Allowing request with no origin");
+      return callback(null, true);
+    }
+    
+    // Allow all origins in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`CORS: Allowing origin in development: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Check against allowed origins
     if (allowedOrigins.includes(origin)) {
+      console.log(`CORS: Allowing origin: ${origin}`);
       return callback(null, true);
     } else {
+      console.log(`CORS: Blocked origin: ${origin}`);
+      console.log(`CORS: Allowed origins: ${allowedOrigins.join(', ')}`);
       return callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  optionsSuccessStatus: 200
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-API-Key', 'X-Requested-With'],
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
+  maxAge: 86400 // Cache preflight for 24 hours
 });
 
 /**

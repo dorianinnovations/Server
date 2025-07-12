@@ -108,6 +108,21 @@ const initializeServer = async () => {
   app.use("/collective-snapshots", collectiveSnapshotsRoutes);
   app.use("/scheduled-aggregation", scheduledAggregationRoutes);
 
+  // Simple test endpoint to verify routing
+  app.get("/test", (req, res) => {
+    res.json({
+      success: true,
+      message: "Server is running correctly",
+      timestamp: new Date().toISOString(),
+      routes: [
+        "/collective-data/health",
+        "/collective-snapshots/health",
+        "/collective-data/formatted",
+        "/collective-snapshots/latest"
+      ]
+    });
+  });
+
   // --- Environment Variable Validation ---
   const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGO_URI'];
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);

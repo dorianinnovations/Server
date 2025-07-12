@@ -9,6 +9,15 @@ import logger from "../utils/logger.js";
 
 const router = express.Router();
 
+// GET /collective-data/health - Simple health check
+router.get("/health", (req, res) => {
+  res.json({
+    success: true,
+    message: "Collective data service is running",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // POST /collective-data/consent - Update user consent for collective data
 router.post("/consent", protect, async (req, res) => {
   try {
@@ -290,17 +299,29 @@ router.get("/formatted", rateLimiters.collectiveData, async (req, res) => {
       includeStats = "true"
     } = req.query;
 
+    // Log the request for debugging
+    logger.info("Formatted collective data request", {
+      query: req.query,
+      ip: req.ip
+    });
+
     const options = {
       timeRange,
       groupBy,
       includeIntensity: includeIntensity === "true",
-      includeContext: includeContext === "false",
+      includeContext: includeContext === "true",
       minConsentCount: parseInt(minConsentCount)
     };
+
+    logger.info("Calling collectiveDataService with options", { options });
 
     const result = await collectiveDataService.getAggregatedEmotionalData(options);
 
     if (!result.success) {
+      logger.warn("collectiveDataService returned error", {
+        error: result.message,
+        query: req.query
+      });
       return res.status(400).json(result);
     }
 
@@ -308,6 +329,11 @@ router.get("/formatted", rateLimiters.collectiveData, async (req, res) => {
     const formatted = collectiveDataFormatter.formatForVisualization(result.data, visualization);
     
     if (!formatted.success) {
+      logger.warn("formatForVisualization returned error", {
+        error: formatted.error,
+        visualization,
+        dataLength: result.data?.length
+      });
       return res.status(400).json(formatted);
     }
 
@@ -332,6 +358,11 @@ router.get("/formatted", rateLimiters.collectiveData, async (req, res) => {
         response.summary = stats.summary;
       }
     }
+
+    logger.info("Formatted collective data response successful", {
+      dataPoints: result.data?.length,
+      visualizationType: visualization
+    });
 
     res.json(response);
 

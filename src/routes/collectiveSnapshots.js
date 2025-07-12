@@ -8,6 +8,15 @@ import logger from "../utils/logger.js";
 
 const router = express.Router();
 
+// GET /collective-snapshots/health - Simple health check
+router.get("/health", (req, res) => {
+  res.json({
+    success: true,
+    message: "Collective snapshots service is running",
+    timestamp: new Date().toISOString()
+  });
+});
+
 // POST /collective-snapshots/generate - Generate a new collective snapshot
 router.post("/generate", protect, rateLimiters.snapshots, async (req, res) => {
   try {
@@ -59,11 +68,28 @@ router.get("/latest", rateLimiters.collectiveData, async (req, res) => {
   try {
     const { timeRange = "30d" } = req.query;
 
+    // Log the request for debugging
+    logger.info("Latest snapshot request", {
+      query: req.query,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
     const result = await snapshotAnalysisService.getLatestSnapshot(timeRange);
 
     if (!result.success) {
+      logger.warn("snapshotAnalysisService returned error", {
+        error: result.message,
+        timeRange,
+        query: req.query
+      });
       return res.status(404).json(result);
     }
+
+    logger.info("Latest snapshot response successful", {
+      timeRange,
+      snapshotId: result.snapshot?._id
+    });
 
     res.json({
       success: true,
