@@ -37,7 +37,7 @@ const collectiveSnapshotSchema = new mongoose.Schema({
   metadata: {
     timeRange: {
       type: String,
-      enum: ["7d", "30d", "90d", "1y", "all"],
+      enum: ["10m", "1h", "24h", "7d", "30d", "90d", "1y", "all"],
       default: "30d"
     },
     totalEmotions: {

@@ -23,10 +23,10 @@ router.post("/generate", protect, rateLimiters.snapshots, async (req, res) => {
     const { timeRange = "30d" } = req.body;
 
     // Validate time range
-    if (!["7d", "30d", "90d", "1y", "all"].includes(timeRange)) {
+    if (!["10m", "1h", "24h", "7d", "30d", "90d", "1y", "all"].includes(timeRange)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid time range. Must be one of: 7d, 30d, 90d, 1y, all"
+        message: "Invalid time range. Must be one of: 10m, 1h, 24h, 7d, 30d, 90d, 1y, all"
       });
     }
 
