@@ -77,7 +77,9 @@ const initializeServer = async () => {
   app.use(requestLogger);
 
   // --- Database Connection ---
-  await connectDB();
+  if (process.env.NODE_ENV !== 'test') {
+    await connectDB();
+  }
 
   // --- Global HTTPS Agent for Performance ---
   const globalHttpsAgent = new https.Agent({
@@ -156,7 +158,9 @@ const initializeServer = async () => {
 };
 
 // Start the server
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV === 'test') {
+  await initializeServer();
+} else {
   initializeServer().catch(err => {
     console.error('Failed to initialize server:', err);
     process.exit(1);
