@@ -28,7 +28,7 @@ const collectiveDataConsentSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-collectiveDataConsentSchema.index({ userId: 1 });
+// Note: userId index is automatically created by unique: true
 collectiveDataConsentSchema.index({ consentStatus: 1 });
 collectiveDataConsentSchema.index({ lastUpdated: -1 });
 
