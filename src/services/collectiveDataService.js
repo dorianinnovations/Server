@@ -210,7 +210,7 @@ class CollectiveDataService {
       const result = {
         success: true,
         metadata: {
-          totalUsers: consentingUsers.length,
+          totalUsers: userIds.length,
           generatedAt: new Date().toISOString()
         },
         demographics: activityData[0] || {},
@@ -258,7 +258,10 @@ class CollectiveDataService {
         consentStatus: "granted" 
       }).populate("userId");
 
-      const userIds = consentingUsers.map(consent => consent.userId._id);
+      // Filter out any consent records where userId is null and extract valid user IDs
+      const userIds = consentingUsers
+        .filter(consent => consent.userId && consent.userId._id)
+        .map(consent => consent.userId._id);
       const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
       // Get recent emotional trends
@@ -288,7 +291,7 @@ class CollectiveDataService {
       const result = {
         success: true,
         metadata: {
-          totalUsers: consentingUsers.length,
+          totalUsers: userIds.length,
           generatedAt: new Date().toISOString()
         },
         insights: {
