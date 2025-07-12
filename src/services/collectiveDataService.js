@@ -54,7 +54,15 @@ class CollectiveDataService {
         return this._generateSampleData(timeRange, groupBy);
       }
 
-      const userIds = consentingUsers.map(consent => consent.userId._id);
+      const userIds = consentingUsers
+        .filter(consent => consent.userId && consent.userId._id)
+        .map(consent => consent.userId._id);
+        
+      if (userIds.length === 0) {
+        logger.warn("No valid user IDs found after filtering null users");
+        return this._generateSampleData(timeRange, groupBy);
+      }
+      
       const dateFilter = this._getDateFilter(timeRange);
 
       // Aggregate emotional data
@@ -169,7 +177,18 @@ class CollectiveDataService {
         consentStatus: "granted" 
       }).populate("userId");
 
-      const userIds = consentingUsers.map(consent => consent.userId._id);
+      const userIds = consentingUsers
+        .filter(consent => consent.userId && consent.userId._id)
+        .map(consent => consent.userId._id);
+        
+      if (userIds.length === 0) {
+        logger.warn("No valid user IDs found for demographic patterns");
+        return {
+          success: true,
+          activityPatterns: {},
+          message: "No users found for demographic analysis"
+        };
+      }
 
       // Get user activity patterns
       const activityPipeline = [
