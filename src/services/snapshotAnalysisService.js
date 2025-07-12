@@ -32,7 +32,7 @@ class SnapshotAnalysisService {
         timeRange,
         includeIntensity: true,
         includeContext: true,
-        minConsentCount: 5
+        minConsentCount: 1
       });
 
       if (!collectiveData.success) {

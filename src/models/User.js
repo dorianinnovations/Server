@@ -14,7 +14,7 @@ const userSchema = new mongoose.Schema({
     type: String, 
     required: true, 
     minlength: 8,
-    select: false // Don't include password in queries by default
+    select: false 
   },
   profile: {
     type: Map,
@@ -33,11 +33,8 @@ const userSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 });
 
-// Indexes for better performance
-// Note: email index is automatically created by unique: true
 userSchema.index({ createdAt: -1 });
 
-// Pre-save hook to hash password
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, SECURITY_CONFIG.BCRYPT_ROUNDS);

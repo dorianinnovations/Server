@@ -18,7 +18,7 @@ class CollectiveDataService {
       groupBy = "day", // hour, day, week, month
       includeIntensity = true,
       includeContext = false,
-      minConsentCount = 5
+      minConsentCount = 1
     } = options;
 
     try {
