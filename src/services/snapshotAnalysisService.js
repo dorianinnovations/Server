@@ -16,6 +16,17 @@ class SnapshotAnalysisService {
     const startTime = Date.now();
     
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping snapshot generation");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       // Get aggregated data
       const collectiveData = await collectiveDataService.getAggregatedEmotionalData({
         timeRange,
@@ -112,6 +123,17 @@ class SnapshotAnalysisService {
    */
   async getLatestSnapshot(timeRange = "30d") {
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping latest snapshot fetch");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       const snapshot = await CollectiveSnapshot.getLatest(timeRange);
       
       if (!snapshot) {
@@ -145,6 +167,17 @@ class SnapshotAnalysisService {
    */
   async getSnapshotHistory(timeRange = "30d", limit = 10) {
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping snapshot history fetch");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       const snapshots = await CollectiveSnapshot.getByTimeRange(timeRange, limit);
       
       return {
@@ -173,6 +206,17 @@ class SnapshotAnalysisService {
    */
   async getArchetypeHistory(timeRange = "30d", limit = 20) {
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping archetype history fetch");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       const archetypes = await CollectiveSnapshot.getArchetypeHistory(timeRange, limit);
       
       return {

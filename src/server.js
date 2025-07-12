@@ -46,99 +46,105 @@ import "./models/CollectiveSnapshot.js";
 
 const app = express();
 
-// --- Memory Cleanup Middleware ---
-const memoryCleanupMiddleware = (req, res, next) => {
-  res.on('finish', () => {
-    // Clean up request-specific data
-    if (req.user) delete req.user;
-    if (req.body) delete req.body;
-    
-    // Suggest GC on large responses
-    if (res.get('content-length') > 100000) {
-      setImmediate(() => {
-        if (global.gc) global.gc();
-      });
-    }
+// Initialize server function
+const initializeServer = async () => {
+  // --- Memory Cleanup Middleware ---
+  const memoryCleanupMiddleware = (req, res, next) => {
+    res.on('finish', () => {
+      // Clean up request-specific data
+      if (req.user) delete req.user;
+      if (req.body) delete req.body;
+      
+      // Suggest GC on large responses
+      if (res.get('content-length') > 100000) {
+        setImmediate(() => {
+          if (global.gc) global.gc();
+        });
+      }
+    });
+    next();
+  };
+
+  // --- Security and Middleware Configuration ---
+  app.use(enhancedPerformanceMiddleware);
+  app.use(corsSecurity);
+  app.use(express.json({ limit: "1mb" }));
+  app.use(validateContent);
+  app.use(sanitizeRequest);
+  app.use(securityHeaders);
+  app.use(compression());
+  app.use(memoryCleanupMiddleware);
+  app.use(requestLogger);
+
+  // --- Database Connection ---
+  await connectDB();
+
+  // --- Global HTTPS Agent for Performance ---
+  const globalHttpsAgent = new https.Agent({
+    keepAlive: true,
+    maxSockets: 50,
+    rejectUnauthorized: false,
+    timeout: 60000,
   });
-  next();
+
+  app.locals.httpsAgent = globalHttpsAgent;
+
+  // --- Cache and Memory Management ---
+  app.locals.cache = createCache();
+  setupMemoryMonitoring();
+
+  // --- Route Registration ---
+  app.use("/", authRoutes);
+  app.use("/", userRoutes);
+  app.use("/", healthRoutes);
+  app.use("/", completionPerformanceMiddleware, completionRoutes);
+  app.use("/", taskRoutes);
+  app.use("/", docsRoutes);
+  app.use("/emotions", emotionsRoutes);
+  app.use("/emotion-history", emotionHistoryRoutes);
+  app.use("/emotion-metrics", emotionMetricsRoutes);
+  app.use("/analytics", analyticsRoutes);
+  app.use("/collective-data", collectiveDataRoutes);
+  app.use("/collective-snapshots", collectiveSnapshotsRoutes);
+  app.use("/scheduled-aggregation", scheduledAggregationRoutes);
+
+  // --- Environment Variable Validation ---
+  const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
+  const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+  if (missingEnvVars.length > 0) {
+    console.warn('⚠️ Missing required environment variables:', missingEnvVars.join(', '));
+    console.warn('⚠️ Some features may not work properly without these variables');
+  }
+
+
+  // --- Scheduled Aggregation Service ---
+  if (process.env.NODE_ENV !== 'test') {
+    // Start scheduled aggregation service
+    scheduledAggregationService.start();
+    console.log("✓Scheduled aggregation service started (10-minute intervals)");
+  }
+
+  // --- Error Handling ---
+  app.use(errorLogger);
+  app.use(globalErrorHandler);
+
+  // --- Server Start ---
+  if (process.env.NODE_ENV !== 'test') {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`✓API running → http://localhost:${PORT}`);
+      console.log(`✓Performance optimizations enabled`);
+      console.log(`✓Memory optimization enabled, initial RSS: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
+    });
+  }
 };
 
-// --- Security and Middleware Configuration ---
-app.use(enhancedPerformanceMiddleware);
-app.use(corsSecurity);
-app.use(express.json({ limit: "1mb" }));
-app.use(validateContent);
-app.use(sanitizeRequest);
-app.use(securityHeaders);
-app.use(compression());
-app.use(memoryCleanupMiddleware);
-app.use(requestLogger);
-
-// --- Database Connection ---
-connectDB();
-
-// --- Global HTTPS Agent for Performance ---
-const globalHttpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  rejectUnauthorized: false,
-  timeout: 60000,
-});
-
-app.locals.httpsAgent = globalHttpsAgent;
-
-// --- Cache and Memory Management ---
-app.locals.cache = createCache();
-setupMemoryMonitoring();
-
-// --- Route Registration ---
-app.use("/", authRoutes);
-app.use("/", userRoutes);
-app.use("/", healthRoutes);
-app.use("/", completionPerformanceMiddleware, completionRoutes);
-app.use("/", taskRoutes);
-app.use("/", docsRoutes);
-app.use("/emotions", emotionsRoutes);
-app.use("/emotion-history", emotionHistoryRoutes);
-app.use("/emotion-metrics", emotionMetricsRoutes);
-app.use("/analytics", analyticsRoutes);
-app.use("/collective-data", collectiveDataRoutes);
-app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-app.use("/scheduled-aggregation", scheduledAggregationRoutes);
-
-// --- Environment Variable Validation ---
-const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
-const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingEnvVars.length > 0) {
-  console.warn('⚠️ Missing required environment variables:', missingEnvVars.join(', '));
-  console.warn('⚠️ Some features may not work properly without these variables');
-}
-
-// --- Task Scheduler Disabled ---
-// Complex analytics removed - using simple emotion history tracking instead
-// if (process.env.NODE_ENV !== 'test') {
-//   taskScheduler.start();
-// }
-
-// --- Scheduled Aggregation Service ---
+// Start the server
 if (process.env.NODE_ENV !== 'test') {
-  // Start scheduled aggregation service
-  scheduledAggregationService.start();
-  console.log("✓Scheduled aggregation service started (10-minute intervals)");
-}
-
-// --- Error Handling ---
-app.use(errorLogger);
-app.use(globalErrorHandler);
-
-// --- Server Start ---
-if (process.env.NODE_ENV !== 'test') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`✓API running → http://localhost:${PORT}`);
-    console.log(`✓Performance optimizations enabled`);
-    console.log(`✓Memory optimization enabled, initial RSS: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
+  initializeServer().catch(err => {
+    console.error('Failed to initialize server:', err);
+    process.exit(1);
   });
 }
 

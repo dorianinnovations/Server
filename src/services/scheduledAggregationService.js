@@ -1,4 +1,4 @@
-import snapshotAnalysisService from "./snapshotAnalysisService.js";
+git aimport snapshotAnalysisService from "./snapshotAnalysisService.js";
 import collectiveDataService from "./collectiveDataService.js";
 import logger from "../utils/logger.js";
 import { createCache } from "../utils/cache.js";
@@ -83,6 +83,13 @@ class ScheduledAggregationService {
     const startTime = Date.now();
     
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping scheduled aggregation");
+        return;
+      }
+
       logger.info("Starting scheduled aggregation cycle", {
         cycle: this.runCount + 1,
         timestamp: new Date().toISOString()

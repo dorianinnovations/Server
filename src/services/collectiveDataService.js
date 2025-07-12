@@ -22,6 +22,17 @@ class CollectiveDataService {
     } = options;
 
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping aggregated emotional data generation");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       // Check cache first
       const cacheKey = `${this.cacheKey}_emotions_${timeRange}_${groupBy}`;
       const cached = this.cache.get(cacheKey);
@@ -137,6 +148,17 @@ class CollectiveDataService {
     } = options;
 
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping demographic patterns generation");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       const cacheKey = `${this.cacheKey}_demographics`;
       const cached = this.cache.get(cacheKey);
       if (cached) {
@@ -215,6 +237,17 @@ class CollectiveDataService {
   // Get real-time collective insights
   async getRealTimeInsights() {
     try {
+      // Check database connection
+      const mongoose = await import("mongoose");
+      if (mongoose.connection.readyState !== 1) {
+        logger.warn("Database not connected, skipping real-time insights generation");
+        return {
+          success: false,
+          message: "Database not connected",
+          error: "Database connection not ready"
+        };
+      }
+
       const cacheKey = `${this.cacheKey}_realtime`;
       const cached = this.cache.get(cacheKey);
       if (cached && Date.now() - cached.metadata.generatedAt < 300000) { // 5 minutes
