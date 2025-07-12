@@ -3,7 +3,17 @@ import mongoose from "mongoose";
 import { createLLMService } from "../services/llmService.js";
 
 const router = express.Router();
-const llmService = createLLMService();
+
+// Health check for the LLM service
+router.get("/llm", async (req, res) => {
+  try {
+    const llmService = createLLMService();
+    const result = await llmService.healthCheck();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
 
 router.get("/health", async (req, res) => {
   try {
@@ -13,6 +23,7 @@ router.get("/health", async (req, res) => {
     // Check OpenRouter API health
     let llmHealth;
     try {
+      const llmService = createLLMService(); // Re-create llmService for health check
       const llmHealthCheck = await llmService.healthCheck();
       llmHealth = {
         status: llmHealthCheck.status,

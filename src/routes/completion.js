@@ -265,26 +265,21 @@ router.post("/completion", protect, async (req, res) => {
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
-  const temperature = req.body.temperature || 0.7; // Claude 3 temperature
-  const n_predict = req.body.n_predict || 1000; // Default to 1000 tokens
-  
-  // Create user-specific cache instance
+  const temperature = req.body.temperature || 0.7;
+  const n_predict = req.body.n_predict || 1000;
   const userCache = createUserCache(userId);
-
-  // Claude 3 optimized stop sequences
   const stop = req.body.stop || [
     "Human:", "\nHuman:", "\nhuman:", "human:",
     "User:", "\nUser:", "\nuser:", "user:",
     "\n\nHuman:", "\n\nUser:",
     "Q:", "\nQ:", "\nQuestion:", "Question:",
     "\n\n\n", "---", "***",
-    "Assistant:", "\nAssistant:", // Remove these if causing issues
+    "Assistant:", "\nAssistant:",
     "SYSTEM:", "\nSYSTEM:", "system:", "\nsystem:",
     "Example:", "\nExample:", "For example:",
     "Note:", "Important:", "Remember:",
     "Source:", "Reference:", "According to:",
   ];
-// ...existing code...
 
   if (!userPrompt || typeof userPrompt !== "string") {
     return res.status(400).json({ message: "Invalid or missing prompt." });
@@ -292,10 +287,18 @@ router.post("/completion", protect, async (req, res) => {
 
   try {
     console.log(`✓Completion request received for user ${userId} (stream: ${stream})`);
-    
     // Build user context
-    const context = await buildUserContext(userId, userCache);
-    
+    let context;
+    try {
+      context = await buildUserContext(userId, userCache);
+    } catch (err) {
+      console.error("Error building user context:", err.stack || err);
+      if (err.message && err.message.includes("User not found")) {
+        return res.status(404).json({ status: "error", message: "User not found." });
+      }
+      return res.status(500).json({ status: "error", message: "Error building user context: " + err.message });
+    }
+
     // Build messages for OpenRouter
     const messages = buildMessages(
       context.userProfile,
@@ -309,13 +312,18 @@ router.post("/completion", protect, async (req, res) => {
     if (stream) {
       // Streaming mode
       console.log(`🔍 STREAMING: Making OpenRouter request for user ${userId}`);
+      let streamResponse;
+      try {
+        streamResponse = await llmService.makeStreamingRequest(messages, {
+          stop,
+          n_predict,
+          temperature,
+        });
+      } catch (err) {
+        console.error("Error in makeStreamingRequest:", err.stack || err);
+        return res.status(502).json({ status: "error", message: "LLM streaming API error: " + err.message });
+      }
       
-      const streamResponse = await llmService.makeStreamingRequest(messages, {
-        stop,
-        n_predict,
-        temperature,
-      });
-
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
@@ -383,25 +391,37 @@ router.post("/completion", protect, async (req, res) => {
     } else {
       // Non-streaming mode
       console.log(`🔍 NON-STREAMING: Making OpenRouter request for user ${userId}`);
-      
-      const response = await llmService.makeLLMRequest(messages, {
-        stop,
-        n_predict,
-        temperature,
-      });
-
-      const sanitizedContent = await processResponseAndSave(
-        response.content,
-        userPrompt,
-        userId,
-        userCache
-      );
-
+      let response;
+      try {
+        response = await llmService.makeLLMRequest(messages, {
+          stop,
+          n_predict,
+          temperature,
+        });
+      } catch (err) {
+        console.error("Error in makeLLMRequest:", err.stack || err);
+        return res.status(502).json({ status: "error", message: "LLM API error: " + err.message });
+      }
+      let sanitizedContent;
+      try {
+        sanitizedContent = await processResponseAndSave(
+          response.content,
+          userPrompt,
+          userId,
+          userCache
+        );
+      } catch (err) {
+        console.error("Error in processResponseAndSave:", err.stack || err);
+        return res.status(500).json({ status: "error", message: "Database error: " + err.message });
+      }
       res.json({ content: sanitizedContent });
     }
-
   } catch (err) {
-    console.error("Error in /completion endpoint:", err);
+    // Log request context for debugging
+    console.error("Error in /completion endpoint:", err.stack || err, {
+      userId,
+      body: { ...req.body, prompt: req.body.prompt ? '[REDACTED]' : undefined },
+    });
     res.status(500).json({
       status: "error",
       message: "Error processing completion request: " + err.message,

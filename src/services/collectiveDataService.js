@@ -50,7 +50,12 @@ class CollectiveDataService {
       const pipeline = [
         { $match: { _id: { $in: userIds } } },
         { $unwind: "$emotionalLog" },
-        { $match: { "emotionalLog.timestamp": dateFilter } },
+        { 
+          $match: { 
+            "emotionalLog.timestamp": dateFilter,
+            "emotionalLog.emotion": { $exists: true, $ne: null, $ne: "" }
+          } 
+        },
         {
           $group: {
             _id: {

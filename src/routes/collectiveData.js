@@ -260,6 +260,15 @@ router.get("/insights", rateLimiters.collectiveData, async (req, res) => {
       stack: error.stack
     });
 
+    // Check if it's a rate limit error
+    if (error.message && error.message.includes("Too Many Requests")) {
+      return res.status(429).json({
+        success: false,
+        message: "Rate limit exceeded. Please try again later.",
+        error: "Too Many Requests"
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch real-time insights",

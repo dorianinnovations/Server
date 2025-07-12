@@ -62,6 +62,7 @@ export const createLLMService = () => {
       console.error("OpenRouter API Error:", {
         name: error.name,
         message: error.message,
+        stack: error.stack,
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
@@ -115,8 +116,23 @@ export const createLLMService = () => {
 
       return response;
     } catch (error) {
-      console.error("OpenRouter Streaming API Error:", error);
-      throw error;
+      console.error("OpenRouter Streaming API Error:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      });
+      if (error.response?.status === 401) {
+        throw new Error("Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY environment variable.");
+      } else if (error.response?.status === 429) {
+        throw new Error("OpenRouter API rate limit exceeded. Please try again later.");
+      } else if (error.response?.status === 402) {
+        throw new Error("OpenRouter API insufficient credits. Please check your account balance.");
+      } else {
+        throw new Error(`OpenRouter Streaming API error: ${error.message}`);
+      }
     }
   };
 

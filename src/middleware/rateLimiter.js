@@ -103,7 +103,7 @@ export const rateLimiters = {
   // Collective data specific rate limiting
   collectiveData: createRateLimiter({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 50, // 50 requests per 15 minutes
+    max: 200, // 200 requests per 15 minutes (increased from 50)
     message: "Too many collective data requests. Please try again later."
   }),
   
@@ -131,7 +131,7 @@ export const rateLimiters = {
   // Aggregation service rate limiting
   aggregation: createRateLimiter({
     windowMs: 5 * 60 * 1000, // 5 minutes
-    max: 30, // 30 aggregation requests per 5 minutes
+    max: 100, // 100 aggregation requests per 5 minutes (increased from 30)
     message: "Too many aggregation service requests. Please try again later."
   })
 };
