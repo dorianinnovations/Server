@@ -109,7 +109,7 @@ const initializeServer = async () => {
   app.use("/scheduled-aggregation", scheduledAggregationRoutes);
 
   // --- Environment Variable Validation ---
-  const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGODB_URI'];
+  const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGO_URI'];
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
   if (missingEnvVars.length > 0) {
