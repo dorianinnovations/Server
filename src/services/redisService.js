@@ -18,10 +18,12 @@ class RedisService {
    */
   async initialize() {
     try {
-      // Skip Redis initialization if disabled
-      if (process.env.REDIS_DISABLED === 'true') {
+      // Skip Redis initialization if disabled or in production without Redis URL
+      if (process.env.REDIS_DISABLED === 'true' || 
+          (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL)) {
         logger.info('Redis disabled, using in-memory fallback');
         this.isConnected = false;
+        this.client = new Map();
         return false;
       }
 
@@ -36,18 +38,30 @@ class RedisService {
         keepAlive: 30000,
         connectTimeout: 2000,
         commandTimeout: 1000,
-        family: 4
+        family: 4,
+        maxRetriesPerRequest: 1,
+        retryStrategy: (times) => {
+          // Stop retrying after 3 attempts
+          if (times > 3) {
+            return null;
+          }
+          return Math.min(times * 1000, 3000);
+        }
       };
 
       // Add Redis URL support for cloud deployment
       if (process.env.REDIS_URL) {
         this.client = new Redis(process.env.REDIS_URL, {
           retryDelayOnFailover: 100,
-          maxRetriesPerRequest: 3,
+          maxRetriesPerRequest: 1,
           lazyConnect: true,
           keepAlive: 30000,
-          connectTimeout: 10000,
-          commandTimeout: 5000
+          connectTimeout: 2000,
+          commandTimeout: 1000,
+          retryStrategy: (times) => {
+            if (times > 3) return null;
+            return Math.min(times * 1000, 3000);
+          }
         });
       } else {
         this.client = new Redis(redisConfig);
@@ -61,22 +75,19 @@ class RedisService {
       });
 
       this.client.on('error', (error) => {
-        logger.error('Redis connection error:', error);
-        this.isConnected = false;
-        
-        if (this.retryCount < this.maxRetries) {
-          this.retryCount++;
-          setTimeout(() => this.initialize(), 5000 * this.retryCount);
+        if (this.retryCount === 0) {
+          logger.error('Redis connection failed, switching to in-memory fallback');
         }
+        this.isConnected = false;
+        this.retryCount++;
       });
 
       this.client.on('close', () => {
-        logger.warn('Redis connection closed');
         this.isConnected = false;
       });
 
       this.client.on('reconnecting', () => {
-        logger.info('Redis reconnecting...');
+        // Suppress reconnection logs to avoid spam
       });
 
       // Test connection
@@ -84,12 +95,16 @@ class RedisService {
       logger.info('Redis service initialized successfully');
       
     } catch (error) {
-      logger.error('Failed to initialize Redis service:', error);
+      logger.warn('Redis unavailable, using in-memory cache fallback');
+      
+      // Clean up any existing client to prevent further reconnection attempts
+      if (this.client && typeof this.client.disconnect === 'function') {
+        this.client.disconnect();
+      }
       
       // Fallback to in-memory cache if Redis fails
       this.client = new Map();
       this.isConnected = false;
-      logger.warn('Using in-memory cache as Redis fallback');
     }
   }
 
