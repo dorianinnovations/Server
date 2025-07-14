@@ -209,10 +209,11 @@ Generate Numina's response in this format:
 Make it personal, empathetic, and authentic. Numina should react to patterns, show curiosity about the user's journey, and express genuine care.`;
 
     const llmService = createLLMService();
-    const response = await llmService.generateResponse({
-      messages: [{ role: 'user', content: prompt }],
+    const response = await llmService.makeLLMRequest([
+      { role: 'user', content: prompt }
+    ], {
       temperature: 0.8,
-      max_tokens: 200
+      n_predict: 200
     });
 
     // Parse AI response
@@ -267,10 +268,11 @@ Generate your immediate emotional reaction as Numina:
 Be authentic, caring, and responsive to the user's emotional state.`;
 
     const llmService = createLLMService();
-    const response = await llmService.generateResponse({
-      messages: [{ role: 'user', content: prompt }],
+    const response = await llmService.makeLLMRequest([
+      { role: 'user', content: prompt }
+    ], {
       temperature: 0.9,
-      max_tokens: 150
+      n_predict: 150
     });
 
     let parsedResponse;

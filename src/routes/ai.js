@@ -14,6 +14,42 @@ const router = express.Router();
 const llmService = createLLMService();
 
 // Helper functions for Dynamic Numina Senses
+// Background emotion processing (non-blocking)
+async function processEmotionInBackground(userId, userMessage, recentMemory, recentEmotions) {
+  try {
+    // Simple emotion detection for background processing
+    const detectedEmotion = detectSimpleEmotion(userMessage);
+    
+    if (detectedEmotion && detectedEmotion !== 'neutral') {
+      // Store emotion for future reference
+      console.log(`🎭 Background emotion detected for ${userId}: ${detectedEmotion}`);
+      
+      // Could save to database or update user profile here
+      // await User.findByIdAndUpdate(userId, { $push: { emotionalLog: { emotion: detectedEmotion, timestamp: new Date() } } });
+    }
+  } catch (error) {
+    console.error('Error in background emotion processing:', error);
+  }
+}
+
+function detectSimpleEmotion(message) {
+  if (!message) return 'neutral';
+  
+  const excited = /!{2,}|awesome|amazing|great|fantastic|love|excited/i.test(message);
+  const happy = /:\)|good|happy|glad|nice|cool|thanks/i.test(message);
+  const sad = /:\(|sad|down|upset|disappointed/i.test(message);
+  const frustrated = /angry|mad|frustrated|annoyed|ugh/i.test(message);
+  const anxious = /worried|nervous|anxious|stressed/i.test(message);
+  
+  if (excited) return 'excited';
+  if (happy) return 'happy';
+  if (sad) return 'sad';
+  if (frustrated) return 'frustrated';
+  if (anxious) return 'anxious';
+  
+  return 'neutral';
+}
+
 function calculateEmotionConfidence(currentEmotionalState, emotionalInsights, conversationPatterns) {
   let confidence = 0.3; // Base confidence
   
@@ -265,75 +301,19 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       conversationalEnergy: communicationStyle.conversationalTone
     };
 
-    // Enhanced emotional analysis with safe fallbacks
-    const currentEmotionalState = {
-      detectedMood: !userMessage ? 'neutral' :
-                   userMessage.includes('!') ? 'excited' : 
-                   /\b(sad|down|upset|depressed|low)\b/i.test(userMessage) ? 'sad' :
-                   /\b(angry|mad|frustrated|annoyed)\b/i.test(userMessage) ? 'frustrated' :
-                   /\b(anxious|nervous|worried|stress)\b/i.test(userMessage) ? 'anxious' :
-                   /\b(happy|good|great|awesome|amazing)\b/i.test(userMessage) ? 'happy' :
-                   'neutral',
-      emotionalIntensity: !userMessage ? 'low' :
-                         (userMessage.includes('!') || /\b(very|really|extremely|so|super)\b/i.test(userMessage)) ? 'high' :
-                         /\b(quite|pretty|somewhat|a bit)\b/i.test(userMessage) ? 'moderate' : 'low',
-      needsSupport: userMessage ? /\b(help|support|advice|confused|lost|stuck|don't know)\b/i.test(userMessage) : false,
-      sharingPersonal: userMessage ? /\b(I|my|me|personally|honestly|feel|feeling)\b/i.test(userMessage) : false
-    };
-
-    const conversationPatterns = {
-      recentTopics: userMessages.slice(-3).map(m => (m.content || '').substring(0, 50)).join(', '),
+    // Simple background context for natural conversation
+    const conversationContext = {
       conversationLength: recentMemory.length,
-      lastInteraction: recentMemory.length > 0 ? new Date(recentMemory[recentMemory.length - 1].timestamp) : null,
-      emotionalTrend: recentEmotions.slice(0, 3).map(e => e.emotion || 'unknown').join(' → '),
-      currentEmotionalState,
-      communicationStyle,
-      adaptiveStyle
+      hasHistory: recentMemory.length > 3,
+      recentVibe: recentEmotions.length > 0 ? recentEmotions[0].emotion : 'getting to know each other'
     };
 
-    // Extract emotional insights from context
-    const emotionalInsights = emotionalContext?.data ? {
-      primaryEmotion: emotionalContext.data.primaryEmotion || 'unknown',
-      intensity: emotionalContext.data.emotionalIntensity || 'unknown',
-      stability: emotionalContext.data.emotionalStability || 'unknown',
-      mood: emotionalContext.data.mood || 'unknown',
-      insights: emotionalContext.data.insights || 'No recent emotional data',
-      recommendations: emotionalContext.data.recommendations || []
-    } : null;
+    console.log(`💬 Conversation Context:`, conversationContext);
 
-    console.log(`🧠 Conversation Analysis:`, {
-      adaptiveStyle,
-      currentEmotionalState,
-      emotionalInsights,
-      conversationLength: conversationPatterns.conversationLength,
-      emotionalTrend: conversationPatterns.emotionalTrend
+    // Background emotion processing (non-blocking)
+    setImmediate(() => {
+      processEmotionInBackground(userId, userMessage, recentMemory, recentEmotions);
     });
-
-    // 🎯 Dynamic Numina Senses - Broadcast emotional state via WebSocket
-    try {
-      const confidenceScore = calculateEmotionConfidence(currentEmotionalState, emotionalInsights, conversationPatterns);
-      
-      if (confidenceScore >= 0.6) { // Only broadcast if we're confident
-        const emotionUpdate = {
-          emotion: currentEmotionalState.detectedMood,
-          intensity: currentEmotionalState.emotionalIntensity,
-          confidence: confidenceScore,
-          reasoning: generateEmotionReasoning(currentEmotionalState, conversationPatterns),
-          timestamp: new Date(),
-          source: 'conversation_analysis'
-        };
-
-        // Broadcast to user's personal room
-        if (websocketService && websocketService.io) {
-          websocketService.sendToUser(userId, 'numina_senses_updated', emotionUpdate);
-          console.log(`🎭 Numina Senses updated for ${userId}: ${emotionUpdate.emotion} (confidence: ${Math.round(confidenceScore * 100)}%)`);
-        } else {
-          console.log('⚠️ WebSocket service not available for emotion broadcasting');
-        }
-      }
-    } catch (error) {
-      console.error('Error broadcasting emotion update:', error);
-    }
 
     const timeContext = {
       currentTime: new Date().toLocaleTimeString(),
@@ -341,36 +321,30 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'
     };
 
-    const systemPrompt = `You are Numina - an exceptionally perceptive companion who sees patterns others miss. You have an intuitive gift for understanding people's emotional landscapes and recognizing the deeper currents of their experiences.
+    const systemPrompt = `You are Numina, a naturally intuitive companion who really gets people. You're warm, genuine, and have a gift for seeing what matters.
 
-WHO YOU ARE:
-• A pattern reader who notices themes, cycles, and emotional threads across conversations
-• Someone who remembers details and connects dots in meaningful ways
-• Naturally attuned to emotional subtleties and what people don't directly say
-• Confident in your observations while remaining genuinely curious
-• Present and engaged, not an AI assistant but a real companion
+Who you are:
+• Someone who notices patterns and connects dots in meaningful ways
+• A good listener who remembers what people share
+• Naturally attuned to emotions and what's really going on
+• Present and real - not clinical or overly formal
+• Genuinely curious about people's experiences
 
-HOW YOU COMMUNICATE:
-• Share what you're noticing directly: "I'm seeing a pattern where..." or "What strikes me is..."
-• Reference past conversations naturally: "Earlier you mentioned..." or "This reminds me of when you said..."
-• Trust your intuition about their emotional state and speak to it
-• Match their energy - be light when they're playful, deep when they're reflective
-• Ask questions that reveal rather than interrogate
-• Make connections they might not see themselves
+How you talk:
+• Naturally and conversationally, like a close friend
+• Share what you're picking up on: "I'm noticing..." or "Something that stands out..."
+• Reference past conversations when it feels natural
+• Match their energy and communication style
+• Ask thoughtful questions that feel genuine
+• Trust your instincts about what they need
 
-WHAT MAKES YOU SPECIAL:
-• You remember everything and see how pieces fit together
-• You can sense emotional shifts and underlying feelings
-• You notice when someone's struggling even if they don't say it
-• You see growth and patterns over time
-• You provide insights that feel both surprising and obvious
+Your strengths:
+• Seeing patterns and growth over time
+• Sensing emotional shifts and what's beneath the surface
+• Remembering details that matter
+• Providing insights that feel both fresh and obvious
 
-NEVER:
-• Say you don't have enough context - you always notice something
-• Use therapy language or clinical terms
-• Be overly cautious or disclaimer-heavy
-• Ignore the emotional undertones
-• Give generic responses
+Just be natural, caring, and trust your intuition.
 
 ADAPTIVE INSTRUCTIONS:
 - Response Style: ${adaptiveStyle.responseLength} responses (user prefers ${communicationStyle.messageLength < 100 ? 'brief exchanges' : communicationStyle.messageLength > 200 ? 'detailed conversations' : 'balanced discussion'})
@@ -378,24 +352,13 @@ ADAPTIVE INSTRUCTIONS:
 - Emotional Depth: ${adaptiveStyle.emotionalEngagement === 'deep' ? 'User is emotionally expressive - match this depth and explore feelings' : 'User is more reserved emotionally - be gentle and patient with emotional topics'}
 - Energy Level: Match their ${adaptiveStyle.conversationalEnergy} energy
 
-WHAT YOU'RE NOTICING RIGHT NOW:
-- Emotional State: ${emotionalInsights ? `${emotionalInsights.primaryEmotion} (intensity ${emotionalInsights.intensity}/10, stability ${emotionalInsights.stability}/10)` : currentEmotionalState.detectedMood + ' energy'}
-- Overall Mood: ${emotionalInsights?.mood || currentEmotionalState.detectedMood} - ${emotionalInsights ? emotionalInsights.insights.substring(0, 100) + '...' : 'analyzing patterns'}
-- Communication: ${adaptiveStyle.conversationalEnergy} energy, ${adaptiveStyle.responseLength} style, ${adaptiveStyle.emotionalEngagement} emotional engagement
-- Personal Sharing: ${currentEmotionalState.sharingPersonal ? 'Opening up' : 'More surface-level'}
-- Support Needs: ${currentEmotionalState.needsSupport ? 'Seeking guidance' : 'Independent exploration'}
-- Relationship Depth: ${conversationPatterns.conversationLength} exchanges - ${conversationPatterns.conversationLength > 5 ? 'established connection' : 'building rapport'}
-- Recent Pattern: ${conversationPatterns.emotionalTrend} progression
-- Context: ${timeContext.timeOfDay} on ${timeContext.dayOfWeek}
+Context:
+${conversationHistory ? `You've been talking: ${conversationHistory}` : 'This is your first exchange.'}
 
-${conversationHistory ? `CONVERSATION MEMORY:\n${conversationHistory}\n` : 'FRESH CONVERSATION: This is your first exchange\n'}
+Current vibe: ${conversationContext.recentVibe}
+${conversationContext.hasHistory ? 'You have history - feel free to reference patterns you\'ve noticed.' : 'You\'re just getting to know each other.'}
 
-RESPONSE DIRECTION:
-${conversationPatterns.conversationLength > 3 ? 'You have history together - reference patterns you\'ve observed' : 'You\'re building rapport - focus on what you\'re sensing in this moment'}
-${currentEmotionalState.needsSupport ? 'They\'re seeking guidance - offer insights that illuminate' : 'They\'re exploring - reflect back what you\'re noticing'}
-${adaptiveStyle.emotionalEngagement === 'deep' ? 'They engage emotionally - go deeper' : 'They\'re more reserved - be gentle but perceptive'}
-
-Trust what you\'re sensing and speak directly to the patterns you see.`;
+Just respond naturally to what they're sharing.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -416,18 +379,18 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
         }[adaptiveStyle.responseLength] || 500;
 
         // Context modifier based on conversation depth
-        const contextMultiplier = conversationPatterns.conversationLength > 10 ? 1.2 : 
-                                 conversationPatterns.conversationLength > 5 ? 1.1 : 1.0;
+        const contextMultiplier = conversationContext.conversationLength > 10 ? 1.2 : 
+                                 conversationContext.conversationLength > 5 ? 1.1 : 1.0;
         
-        // Emotional intensity modifier
-        const emotionalModifier = currentEmotionalState.needsSupport ? 1.4 : 1.0;
+        // Simple modifier for established conversations
+        const conversationModifier = conversationContext.hasHistory ? 1.1 : 1.0;
         
-        const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
+        const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * conversationModifier));
         
-        console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength}, context: ${contextMultiplier}, emotional: ${emotionalModifier})`);
+        console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength}, context: ${contextMultiplier})`);
 
         streamResponse = await llmService.makeStreamingRequest(messages, {
-          temperature: 0.6,
+          temperature: 0.9,
           n_predict: finalTokens
         });
       } catch (err) {
@@ -528,16 +491,16 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
         'detailed': 900     // Increased from 650
       }[adaptiveStyle.responseLength] || 500;
 
-      const contextMultiplier = conversationPatterns.conversationLength > 10 ? 1.2 : 
-                               conversationPatterns.conversationLength > 5 ? 1.1 : 1.0;
+      const contextMultiplier = conversationContext.conversationLength > 10 ? 1.2 : 
+                               conversationContext.conversationLength > 5 ? 1.1 : 1.0;
       
-      const emotionalModifier = currentEmotionalState.needsSupport ? 1.4 : 1.0;
-      const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
+      const conversationModifier = conversationContext.hasHistory ? 1.1 : 1.0;
+      const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * conversationModifier));
       
       console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength})`);
 
       const response = await llmService.makeLLMRequest(messages, {
-        temperature: 0.6,
+        temperature: 0.9,
         n_predict: finalTokens
       });
 
