@@ -259,12 +259,12 @@ router.post("/completion", protect, async (req, res) => {
   const questionRatio = userMessages.length > 0 ? 
     userMessages.filter(m => m.content && m.content.includes('?')).length / userMessages.length : 0;
   
-  // Dynamic token allocation
-  const baseTokens = avgMessageLength < 100 ? 200 : avgMessageLength > 200 ? 500 : 350;
+  // Dynamic token allocation (increased limits to match adaptive chat)
+  const baseTokens = avgMessageLength < 100 ? 300 : avgMessageLength > 200 ? 700 : 500;
   const questionModifier = questionRatio > 0.3 ? 1.2 : 1.0;
   const contextModifier = recentMemory.length > 10 ? 1.1 : 1.0;
   
-  const n_predict = req.body.n_predict || Math.min(600, Math.floor(baseTokens * questionModifier * contextModifier));
+  const n_predict = req.body.n_predict || Math.min(1000, Math.floor(baseTokens * questionModifier * contextModifier));
   
   console.log(`🎯 Completion dynamic tokens: ${n_predict} (base: ${baseTokens}, avg msg: ${Math.round(avgMessageLength)}, questions: ${Math.round(questionRatio * 100)}%)`);
   const stop = req.body.stop || [

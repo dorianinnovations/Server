@@ -333,21 +333,21 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
       // Streaming mode
       let streamResponse;
       try {
-        // Dynamic token allocation based on adaptive style
+        // Dynamic token allocation based on adaptive style (increased limits)
         const dynamicTokens = {
-          'concise': 150,
-          'balanced': 350, 
-          'detailed': 650
-        }[adaptiveStyle.responseLength] || 350;
+          'concise': 250,     // Increased from 150
+          'balanced': 500,    // Increased from 350
+          'detailed': 900     // Increased from 650
+        }[adaptiveStyle.responseLength] || 500;
 
         // Context modifier based on conversation depth
         const contextMultiplier = conversationPatterns.conversationLength > 10 ? 1.2 : 
                                  conversationPatterns.conversationLength > 5 ? 1.1 : 1.0;
         
         // Emotional intensity modifier
-        const emotionalModifier = currentEmotionalState.needsSupport ? 1.3 : 1.0;
+        const emotionalModifier = currentEmotionalState.needsSupport ? 1.4 : 1.0;
         
-        const finalTokens = Math.min(800, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
+        const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
         
         console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength}, context: ${contextMultiplier}, emotional: ${emotionalModifier})`);
 
@@ -439,16 +439,16 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
       
       // Non-streaming mode - reuse dynamic token calculation
       const dynamicTokens = {
-        'concise': 150,
-        'balanced': 350, 
-        'detailed': 650
-      }[adaptiveStyle.responseLength] || 350;
+        'concise': 250,     // Increased from 150
+        'balanced': 500,    // Increased from 350
+        'detailed': 900     // Increased from 650
+      }[adaptiveStyle.responseLength] || 500;
 
       const contextMultiplier = conversationPatterns.conversationLength > 10 ? 1.2 : 
                                conversationPatterns.conversationLength > 5 ? 1.1 : 1.0;
       
-      const emotionalModifier = currentEmotionalState.needsSupport ? 1.3 : 1.0;
-      const finalTokens = Math.min(800, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
+      const emotionalModifier = currentEmotionalState.needsSupport ? 1.4 : 1.0;
+      const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
       
       console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength})`);
 
