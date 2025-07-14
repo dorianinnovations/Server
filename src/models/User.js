@@ -61,7 +61,7 @@ userSchema.virtual('profileData').get(function () {
     id: this._id,
     email: this.email,
     profile: this.profile,
-    emotionalLogCount: this.emotionalLog.length,
+    emotionalLogCount: this.emotionalLog ? this.emotionalLog.length : 0,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

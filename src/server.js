@@ -22,6 +22,8 @@ import analyticsRoutes from "./routes/analytics.js";
 import collectiveDataRoutes from "./routes/collectiveData.js";
 import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
 import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
+import aiRoutes from "./routes/ai.js";
+import cloudRoutes from "./routes/cloud.js";
 
 // Import middleware
 import { corsSecurity, securityHeaders, validateContent, sanitizeRequest } from "./middleware/security.js";
@@ -43,6 +45,7 @@ import "./models/Task.js";
 import "./models/EmotionalAnalyticsSession.js";
 import "./models/CollectiveDataConsent.js";
 import "./models/CollectiveSnapshot.js";
+import "./models/Event.js";
 
 const app = express();
 
@@ -107,6 +110,8 @@ const initializeServer = async () => {
   app.use("/collective-data", collectiveDataRoutes);
   app.use("/collective-snapshots", collectiveSnapshotsRoutes);
   app.use("/scheduled-aggregation", scheduledAggregationRoutes);
+  app.use("/ai", aiRoutes);
+  app.use("/cloud", cloudRoutes);
 
   // Simple test endpoint to verify routing
   app.get("/test", (req, res) => {
