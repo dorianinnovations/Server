@@ -144,20 +144,19 @@ Preferences: ${JSON.stringify(preferences)}`;
 
 router.post('/adaptive-chat', protect, async (req, res) => {
   try {
-    const { message, emotionalContext, personalityProfile, conversationGoal } = req.body;
+    const { message, emotionalContext, personalityProfile, conversationGoal, stream } = req.body;
+    const userId = req.user.id;
     
-    const systemPrompt = `You are an adaptive AI companion that tailors responses based on the user's emotional state and personality. Provide empathetic, contextually appropriate responses.
+    console.log(`✓ Adaptive chat request received for user ${userId} (stream: ${stream === true})`);
+    console.log(`📝 Message: ${message}`);
+    console.log(`🎭 Emotional Context:`, emotionalContext);
+    console.log(`👤 Personality Profile:`, personalityProfile);
+    
+    const systemPrompt = `You are Numina, an adaptive AI companion that tailors responses based on the user's emotional state and personality. Provide empathetic, contextually appropriate responses.
 
 Consider the user's emotional context and personality when responding. Be supportive, understanding, and helpful.
 
-Return JSON in this format:
-{
-  "response": "string - your adaptive response",
-  "tone": "string - the tone you used",
-  "suggestedFollowUps": ["followup1", "followup2"],
-  "emotionalSupport": "string - emotional support message if needed",
-  "adaptationReason": "string - why you chose this approach"
-}`;
+Provide a natural, conversational response that adapts to their emotional state and personality. Do not return JSON - just respond naturally as Numina.`;
 
     const userPrompt = `User Message: ${message}
 Emotional Context: ${JSON.stringify(emotionalContext)}
@@ -171,31 +170,107 @@ Please provide an adaptive response.`;
       { role: 'user', content: userPrompt }
     ];
 
-    const response = await llmService.makeLLMRequest(messages, {
-      temperature: 0.6,
-      n_predict: 512
-    });
+    if (stream === true) {
+      console.log(`🌊 STREAMING: Making adaptive chat request for user ${userId}`);
+      
+      // Streaming mode
+      let streamResponse;
+      try {
+        streamResponse = await llmService.makeStreamingRequest(messages, {
+          temperature: 0.6,
+          n_predict: 512
+        });
+      } catch (err) {
+        console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);
+        return res.status(502).json({ 
+          success: false, 
+          error: "LLM streaming API error: " + err.message 
+        });
+      }
+      
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+      res.setHeader("X-Accel-Buffering", "no");
 
-    let chatData;
-    try {
-      chatData = JSON.parse(response.content);
-    } catch (parseError) {
-      chatData = {
-        response: "I understand you're sharing something important with me. I'm here to listen and support you.",
-        tone: "supportive",
-        suggestedFollowUps: ["How are you feeling about this?", "Would you like to explore this further?"],
-        emotionalSupport: "Remember that you're not alone, and it's okay to take things one step at a time.",
-        adaptationReason: "Providing general supportive response due to parsing limitation"
-      };
+      let buffer = '';
+      let fullContent = '';
+      
+      streamResponse.data.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.substring(6).trim();
+            
+            if (data === '[DONE]') {
+              console.log('🏁 STREAMING: Adaptive chat [DONE] signal');
+              res.write('data: [DONE]\n\n');
+              res.end();
+              return;
+            }
+            
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                const content = parsed.choices[0].delta.content;
+                fullContent += content;
+                console.log(`📡 STREAMING: Sending chunk: ${content}`);
+                res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                res.flush && res.flush();
+              }
+            } catch (e) {
+              console.error('❌ STREAMING: Error parsing adaptive chat data:', e);
+            }
+          }
+        }
+      });
+      
+      streamResponse.data.on("end", () => {
+        console.log(`✅ STREAMING: Adaptive chat completed for user ${userId}, content length: ${fullContent.length}`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      });
+      
+      streamResponse.data.on("error", (err) => {
+        console.error("❌ Adaptive chat stream error:", err.message);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+        }
+        res.write(`data: {"error": "${err.message}"}\n\n`);
+        res.end();
+      });
+      
+    } else {
+      console.log(`📄 NON-STREAMING: Making adaptive chat request for user ${userId}`);
+      
+      // Non-streaming mode
+      const response = await llmService.makeLLMRequest(messages, {
+        temperature: 0.6,
+        n_predict: 512
+      });
+
+      console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content.length}`);
+      console.log(`📤 Response content: ${response.content.substring(0, 100)}...`);
+
+      res.json({
+        success: true,
+        data: {
+          response: response.content,
+          tone: "adaptive",
+          suggestedFollowUps: [],
+          emotionalSupport: "",
+          adaptationReason: "Personalized response based on emotional context"
+        }
+      });
     }
 
-    res.json({
-      success: true,
-      data: chatData
-    });
-
   } catch (error) {
-    console.error('Adaptive chat error:', error);
+    console.error('❌ Adaptive chat error:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to generate adaptive response'
