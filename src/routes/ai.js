@@ -146,14 +146,26 @@ Preferences: ${JSON.stringify(preferences)}`;
 
 router.post('/adaptive-chat', protect, async (req, res) => {
   try {
-    const { message, emotionalContext, personalityProfile, conversationGoal, stream } = req.body;
+    const { message, prompt, emotionalContext, personalityProfile, personalityStyle, conversationGoal, stream } = req.body;
+    // Support both message and prompt parameters for flexibility
+    const userMessage = message || prompt;
     const userId = req.user.id;
     const userCache = createUserCache(userId);
     
     console.log(`✓ Adaptive chat request received for user ${userId} (stream: ${stream === true})`);
-    console.log(`📝 Message: ${message}`);
+    console.log(`📝 Message: ${userMessage}`);
     console.log(`🎭 Emotional Context:`, emotionalContext);
     console.log(`👤 Personality Profile:`, personalityProfile);
+    console.log(`🎨 Personality Style:`, personalityStyle);
+    
+    // Validate required parameters
+    if (!userMessage || typeof userMessage !== 'string') {
+      console.error(`❌ Invalid message parameter: ${userMessage}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Message/prompt is required and must be a string'
+      });
+    }
     
     // Get conversation context
     const [user, recentMemory] = await Promise.all([
@@ -186,12 +198,14 @@ router.post('/adaptive-chat', protect, async (req, res) => {
     const userMessages = recentMemory.filter(m => m.role === 'user');
     const assistantMessages = recentMemory.filter(m => m.role === 'assistant');
     
-    // Analyze communication style
+    // Analyze communication style with safe fallbacks
     const communicationStyle = {
-      messageLength: userMessages.length > 0 ? userMessages.reduce((acc, m) => acc + m.content.length, 0) / userMessages.length : 0,
-      questionAsking: userMessages.filter(m => m.content.includes('?')).length / Math.max(userMessages.length, 1),
-      emotionalExpressions: userMessages.filter(m => /\b(feel|feeling|felt|emotion|mood|happy|sad|excited|nervous|anxious|stressed|love|hate)\b/i.test(m.content)).length,
-      conversationalTone: message.includes('!') ? 'energetic' : message.includes('?') ? 'curious' : message.length < 50 ? 'casual' : 'thoughtful'
+      messageLength: userMessages.length > 0 ? userMessages.reduce((acc, m) => acc + (m.content ? m.content.length : 0), 0) / userMessages.length : 0,
+      questionAsking: userMessages.filter(m => m.content && m.content.includes('?')).length / Math.max(userMessages.length, 1),
+      emotionalExpressions: userMessages.filter(m => m.content && /\b(feel|feeling|felt|emotion|mood|happy|sad|excited|nervous|anxious|stressed|love|hate)\b/i.test(m.content)).length,
+      conversationalTone: (userMessage && userMessage.includes('!')) ? 'energetic' : 
+                         (userMessage && userMessage.includes('?')) ? 'curious' : 
+                         (userMessage && userMessage.length < 50) ? 'casual' : 'thoughtful'
     };
 
     // Determine adaptive response style
@@ -202,25 +216,27 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       conversationalEnergy: communicationStyle.conversationalTone
     };
 
-    // Enhanced emotional analysis
+    // Enhanced emotional analysis with safe fallbacks
     const currentEmotionalState = {
-      detectedMood: message.includes('!') ? 'excited' : 
-                   /\b(sad|down|upset|depressed|low)\b/i.test(message) ? 'sad' :
-                   /\b(angry|mad|frustrated|annoyed)\b/i.test(message) ? 'frustrated' :
-                   /\b(anxious|nervous|worried|stress)\b/i.test(message) ? 'anxious' :
-                   /\b(happy|good|great|awesome|amazing)\b/i.test(message) ? 'happy' :
+      detectedMood: !userMessage ? 'neutral' :
+                   userMessage.includes('!') ? 'excited' : 
+                   /\b(sad|down|upset|depressed|low)\b/i.test(userMessage) ? 'sad' :
+                   /\b(angry|mad|frustrated|annoyed)\b/i.test(userMessage) ? 'frustrated' :
+                   /\b(anxious|nervous|worried|stress)\b/i.test(userMessage) ? 'anxious' :
+                   /\b(happy|good|great|awesome|amazing)\b/i.test(userMessage) ? 'happy' :
                    'neutral',
-      emotionalIntensity: message.includes('!') || /\b(very|really|extremely|so|super)\b/i.test(message) ? 'high' :
-                         /\b(quite|pretty|somewhat|a bit)\b/i.test(message) ? 'moderate' : 'low',
-      needsSupport: /\b(help|support|advice|confused|lost|stuck|don't know)\b/i.test(message),
-      sharingPersonal: /\b(I|my|me|personally|honestly|feel|feeling)\b/i.test(message)
+      emotionalIntensity: !userMessage ? 'low' :
+                         (userMessage.includes('!') || /\b(very|really|extremely|so|super)\b/i.test(userMessage)) ? 'high' :
+                         /\b(quite|pretty|somewhat|a bit)\b/i.test(userMessage) ? 'moderate' : 'low',
+      needsSupport: userMessage ? /\b(help|support|advice|confused|lost|stuck|don't know)\b/i.test(userMessage) : false,
+      sharingPersonal: userMessage ? /\b(I|my|me|personally|honestly|feel|feeling)\b/i.test(userMessage) : false
     };
 
     const conversationPatterns = {
-      recentTopics: userMessages.slice(-3).map(m => m.content.substring(0, 50)).join(', '),
+      recentTopics: userMessages.slice(-3).map(m => (m.content || '').substring(0, 50)).join(', '),
       conversationLength: recentMemory.length,
       lastInteraction: recentMemory.length > 0 ? new Date(recentMemory[recentMemory.length - 1].timestamp) : null,
-      emotionalTrend: recentEmotions.slice(0, 3).map(e => e.emotion).join(' → '),
+      emotionalTrend: recentEmotions.slice(0, 3).map(e => e.emotion || 'unknown').join(' → '),
       currentEmotionalState,
       communicationStyle,
       adaptiveStyle
@@ -284,7 +300,7 @@ Respond naturally as Numina, adapting your style to match their communication pr
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: message }
+      { role: 'user', content: userMessage }
     ];
 
     if (stream === true) {
@@ -353,7 +369,7 @@ Respond naturally as Numina, adapting your style to match their communication pr
         // Save conversation to memory
         if (fullContent.trim()) {
           ShortTermMemory.insertMany([
-            { userId, content: message, role: "user" },
+            { userId, content: userMessage, role: "user" },
             { userId, content: fullContent.trim(), role: "assistant" }
           ]).then(() => {
             console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
@@ -392,7 +408,7 @@ Respond naturally as Numina, adapting your style to match their communication pr
       if (response.content.trim()) {
         try {
           await ShortTermMemory.insertMany([
-            { userId, content: message, role: "user" },
+            { userId, content: userMessage, role: "user" },
             { userId, content: response.content.trim(), role: "assistant" }
           ]);
           console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
