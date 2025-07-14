@@ -330,15 +330,84 @@ class WebSocketService {
       logger.info(`Emotion update from user ${userId}: ${emotion} (${intensity})`);
     });
 
-    // Live analytics updates
-    socket.on('request_live_analytics', () => {
-      // This would integrate with your analytics service
-      // For now, we'll emit a placeholder
-      socket.emit('live_analytics', {
-        userId,
-        timestamp: new Date(),
-        message: 'Live analytics will be implemented with analytics service'
+    // Live emotional sharing with trusted contacts
+    socket.on('share_emotional_state', async (data) => {
+      const { targetUserId, emotion, intensity, message, shareType } = data;
+      
+      // Validate sharing permission (you could add a friends/trust system)
+      const shareData = {
+        fromUserId: userId,
+        fromUser: socket.userData,
+        emotion,
+        intensity,
+        message,
+        shareType, // 'check_in', 'support_request', 'celebration'
+        timestamp: new Date()
+      };
+
+      // Send to specific user
+      if (targetUserId) {
+        socket.to(`user:${targetUserId}`).emit('emotional_share_received', shareData);
+        logger.info(`Emotional state shared from ${userId} to ${targetUserId}: ${emotion}`);
+      }
+
+      // Confirm sharing to sender
+      socket.emit('emotional_share_sent', {
+        targetUserId,
+        emotion,
+        timestamp: new Date()
       });
+    });
+
+    // Support request broadcasting
+    socket.on('request_support', (data) => {
+      const { intensity, context, anonymous } = data;
+      
+      const supportRequest = {
+        userId: anonymous ? null : userId,
+        userData: anonymous ? null : socket.userData,
+        intensity,
+        context,
+        timestamp: new Date(),
+        id: `support_${Date.now()}_${userId.slice(-4)}`
+      };
+
+      // Broadcast to support network (could be moderators/volunteers)
+      this.io.to('support_network').emit('support_request', supportRequest);
+      
+      socket.emit('support_request_sent', {
+        message: 'Your support request has been sent to available helpers',
+        timestamp: new Date()
+      });
+
+      logger.info(`Support request from user ${userId} (anonymous: ${anonymous})`);
+    });
+
+    // Real-time growth milestone celebrations
+    socket.on('celebrate_milestone', (data) => {
+      const { milestoneId, title, shareWithCommunity } = data;
+      
+      const celebration = {
+        userId,
+        userData: socket.userData,
+        milestoneId,
+        title,
+        timestamp: new Date()
+      };
+
+      if (shareWithCommunity) {
+        // Broadcast to community celebration room
+        this.io.to('community_celebrations').emit('milestone_achieved', celebration);
+      }
+
+      // Send back to user for confirmation
+      socket.emit('milestone_celebrated', {
+        milestoneId,
+        timestamp: new Date(),
+        message: shareWithCommunity ? 'Milestone shared with community!' : 'Milestone celebrated privately!'
+      });
+
+      logger.info(`Milestone celebrated by user ${userId}: ${title}`);
     });
   }
 

@@ -6,6 +6,7 @@ import Task from "../models/Task.js";
 import { sanitizeResponse } from "../utils/sanitize.js";
 import { createUserCache } from "../utils/cache.js";
 import { createLLMService } from "../services/llmService.js";
+import { getRecentMemory } from "../utils/memory.js";
 
 const router = express.Router();
 
@@ -245,8 +246,27 @@ router.post("/completion", protect, async (req, res) => {
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
   const temperature = req.body.temperature || 0.7;
-  const n_predict = req.body.n_predict || 300;
   const userCache = createUserCache(userId);
+  
+  // Get user's conversation history for dynamic response sizing
+  const recentMemory = await getRecentMemory(userId, userCache);
+  const userMessages = recentMemory.filter(m => m.role === 'user');
+  
+  // Analyze user communication patterns
+  const avgMessageLength = userMessages.length > 0 ? 
+    userMessages.reduce((acc, m) => acc + (m.content ? m.content.length : 0), 0) / userMessages.length : 0;
+  
+  const questionRatio = userMessages.length > 0 ? 
+    userMessages.filter(m => m.content && m.content.includes('?')).length / userMessages.length : 0;
+  
+  // Dynamic token allocation
+  const baseTokens = avgMessageLength < 100 ? 200 : avgMessageLength > 200 ? 500 : 350;
+  const questionModifier = questionRatio > 0.3 ? 1.2 : 1.0;
+  const contextModifier = recentMemory.length > 10 ? 1.1 : 1.0;
+  
+  const n_predict = req.body.n_predict || Math.min(600, Math.floor(baseTokens * questionModifier * contextModifier));
+  
+  console.log(`🎯 Completion dynamic tokens: ${n_predict} (base: ${baseTokens}, avg msg: ${Math.round(avgMessageLength)}, questions: ${Math.round(questionRatio * 100)}%)`);
   const stop = req.body.stop || [
     "Human:", "\nHuman:", "\nhuman:", "human:",
     "User:", "\nUser:", "\nuser:", "user:",

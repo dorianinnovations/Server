@@ -333,9 +333,27 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
       // Streaming mode
       let streamResponse;
       try {
+        // Dynamic token allocation based on adaptive style
+        const dynamicTokens = {
+          'concise': 150,
+          'balanced': 350, 
+          'detailed': 650
+        }[adaptiveStyle.responseLength] || 350;
+
+        // Context modifier based on conversation depth
+        const contextMultiplier = conversationPatterns.conversationLength > 10 ? 1.2 : 
+                                 conversationPatterns.conversationLength > 5 ? 1.1 : 1.0;
+        
+        // Emotional intensity modifier
+        const emotionalModifier = currentEmotionalState.needsSupport ? 1.3 : 1.0;
+        
+        const finalTokens = Math.min(800, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
+        
+        console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength}, context: ${contextMultiplier}, emotional: ${emotionalModifier})`);
+
         streamResponse = await llmService.makeStreamingRequest(messages, {
           temperature: 0.6,
-          n_predict: 512
+          n_predict: finalTokens
         });
       } catch (err) {
         console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);
@@ -419,10 +437,24 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
     } else {
       console.log(`📄 NON-STREAMING: Making adaptive chat request for user ${userId}`);
       
-      // Non-streaming mode
+      // Non-streaming mode - reuse dynamic token calculation
+      const dynamicTokens = {
+        'concise': 150,
+        'balanced': 350, 
+        'detailed': 650
+      }[adaptiveStyle.responseLength] || 350;
+
+      const contextMultiplier = conversationPatterns.conversationLength > 10 ? 1.2 : 
+                               conversationPatterns.conversationLength > 5 ? 1.1 : 1.0;
+      
+      const emotionalModifier = currentEmotionalState.needsSupport ? 1.3 : 1.0;
+      const finalTokens = Math.min(800, Math.floor(dynamicTokens * contextMultiplier * emotionalModifier));
+      
+      console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength})`);
+
       const response = await llmService.makeLLMRequest(messages, {
         temperature: 0.6,
-        n_predict: 512
+        n_predict: finalTokens
       });
 
       console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content.length}`);

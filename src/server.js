@@ -22,12 +22,14 @@ import emotionsRoutes from "./routes/emotions.js";
 import emotionHistoryRoutes from "./routes/emotionHistory.js";
 import emotionMetricsRoutes from "./routes/emotionMetrics.js";
 import analyticsRoutes from "./routes/analytics.js";
-import collectiveDataRoutes from "./routes/collectiveData.js";
-import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
-import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
+// Collective data features temporarily removed for optimization
+// import collectiveDataRoutes from "./routes/collectiveData.js";
+// import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
+// import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
 import aiRoutes from "./routes/ai.js";
 import cloudRoutes from "./routes/cloud.js";
 import mobileRoutes from "./routes/mobile.js";
+import personalInsightsRoutes from "./routes/personalInsights.js";
 import syncRoutes from "./routes/sync.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
 
@@ -49,7 +51,7 @@ console.log("✓Utility modules imported successfully");
 
 // Import services
 import taskScheduler from "./services/taskScheduler.js";
-import scheduledAggregationService from "./services/scheduledAggregationService.js";
+// import scheduledAggregationService from "./services/scheduledAggregationService.js";
 import websocketService from "./services/websocketService.js";
 import redisService from "./services/redisService.js";
 import pushNotificationService from "./services/pushNotificationService.js";
@@ -152,11 +154,13 @@ const initializeServer = async () => {
   app.use("/emotion-history", emotionHistoryRoutes);
   app.use("/emotion-metrics", emotionMetricsRoutes);
   app.use("/analytics", analyticsRoutes);
-  app.use("/collective-data", collectiveDataRoutes);
-  app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-  app.use("/scheduled-aggregation", scheduledAggregationRoutes);
+  // Collective data endpoints temporarily disabled
+  // app.use("/collective-data", collectiveDataRoutes);
+  // app.use("/collective-snapshots", collectiveSnapshotsRoutes);
+  // app.use("/scheduled-aggregation", scheduledAggregationRoutes);
   app.use("/ai", aiRoutes);
   app.use("/cloud", cloudRoutes);
+  app.use("/personal-insights", personalInsightsRoutes);
   
   // Mobile-optimized routes
   app.use("/", mobileRoutes);
@@ -197,9 +201,9 @@ const initializeServer = async () => {
   // --- Scheduled Aggregation Service ---
   if (process.env.NODE_ENV !== 'test') {
     console.log("⏰ Starting scheduled aggregation service...");
-    // Start scheduled aggregation service
-    scheduledAggregationService.start();
-    console.log("✓Scheduled aggregation service started (10-minute intervals)");
+    // Scheduled aggregation service temporarily disabled for optimization
+    // scheduledAggregationService.start();
+    console.log("✓Collective data services disabled - focusing on core features");
   }
 
   // --- Error Handling ---
