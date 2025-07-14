@@ -2,6 +2,8 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 import { createLLMService } from '../services/llmService.js';
 import User from '../models/User.js';
+import ShortTermMemory from '../models/ShortTermMemory.js';
+import { createUserCache } from '../utils/cache.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -146,28 +148,143 @@ router.post('/adaptive-chat', protect, async (req, res) => {
   try {
     const { message, emotionalContext, personalityProfile, conversationGoal, stream } = req.body;
     const userId = req.user.id;
+    const userCache = createUserCache(userId);
     
     console.log(`✓ Adaptive chat request received for user ${userId} (stream: ${stream === true})`);
     console.log(`📝 Message: ${message}`);
     console.log(`🎭 Emotional Context:`, emotionalContext);
     console.log(`👤 Personality Profile:`, personalityProfile);
     
-    const systemPrompt = `You are Numina, an adaptive AI companion that tailors responses based on the user's emotional state and personality. Provide empathetic, contextually appropriate responses.
+    // Get conversation context
+    const [user, recentMemory] = await Promise.all([
+      userCache.getCachedUser(userId, () => 
+        User.findById(userId).select('profile emotionalLog').lean()
+      ),
+      userCache.getCachedMemory(userId, () => 
+        ShortTermMemory.find({ userId }, { role: 1, content: 1, timestamp: 1, _id: 0 })
+          .sort({ timestamp: -1 })
+          .limit(8)
+          .lean()
+      ),
+    ]);
 
-Consider the user's emotional context and personality when responding. Be supportive, understanding, and helpful.
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
 
-Provide a natural, conversational response that adapts to their emotional state and personality. Do not return JSON - just respond naturally as Numina.`;
+    const recentEmotions = (user.emotionalLog || [])
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .slice(0, 5);
 
-    const userPrompt = `User Message: ${message}
-Emotional Context: ${JSON.stringify(emotionalContext)}
-Personality Profile: ${JSON.stringify(personalityProfile)}
-Conversation Goal: ${conversationGoal || 'general support'}
+    // Build conversation history
+    const conversationHistory = recentMemory
+      .reverse()
+      .map(mem => `${mem.role}: ${mem.content}`)
+      .join('\n');
 
-Please provide an adaptive response.`;
+    // Analyze conversation patterns
+    const userMessages = recentMemory.filter(m => m.role === 'user');
+    const assistantMessages = recentMemory.filter(m => m.role === 'assistant');
+    
+    // Analyze communication style
+    const communicationStyle = {
+      messageLength: userMessages.length > 0 ? userMessages.reduce((acc, m) => acc + m.content.length, 0) / userMessages.length : 0,
+      questionAsking: userMessages.filter(m => m.content.includes('?')).length / Math.max(userMessages.length, 1),
+      emotionalExpressions: userMessages.filter(m => /\b(feel|feeling|felt|emotion|mood|happy|sad|excited|nervous|anxious|stressed|love|hate)\b/i.test(m.content)).length,
+      conversationalTone: message.includes('!') ? 'energetic' : message.includes('?') ? 'curious' : message.length < 50 ? 'casual' : 'thoughtful'
+    };
+
+    // Determine adaptive response style
+    const adaptiveStyle = {
+      responseLength: communicationStyle.messageLength < 100 ? 'concise' : communicationStyle.messageLength > 200 ? 'detailed' : 'balanced',
+      questionFrequency: communicationStyle.questionAsking > 0.3 ? 'high' : 'low',
+      emotionalEngagement: communicationStyle.emotionalExpressions > 2 ? 'deep' : 'moderate',
+      conversationalEnergy: communicationStyle.conversationalTone
+    };
+
+    // Enhanced emotional analysis
+    const currentEmotionalState = {
+      detectedMood: message.includes('!') ? 'excited' : 
+                   /\b(sad|down|upset|depressed|low)\b/i.test(message) ? 'sad' :
+                   /\b(angry|mad|frustrated|annoyed)\b/i.test(message) ? 'frustrated' :
+                   /\b(anxious|nervous|worried|stress)\b/i.test(message) ? 'anxious' :
+                   /\b(happy|good|great|awesome|amazing)\b/i.test(message) ? 'happy' :
+                   'neutral',
+      emotionalIntensity: message.includes('!') || /\b(very|really|extremely|so|super)\b/i.test(message) ? 'high' :
+                         /\b(quite|pretty|somewhat|a bit)\b/i.test(message) ? 'moderate' : 'low',
+      needsSupport: /\b(help|support|advice|confused|lost|stuck|don't know)\b/i.test(message),
+      sharingPersonal: /\b(I|my|me|personally|honestly|feel|feeling)\b/i.test(message)
+    };
+
+    const conversationPatterns = {
+      recentTopics: userMessages.slice(-3).map(m => m.content.substring(0, 50)).join(', '),
+      conversationLength: recentMemory.length,
+      lastInteraction: recentMemory.length > 0 ? new Date(recentMemory[recentMemory.length - 1].timestamp) : null,
+      emotionalTrend: recentEmotions.slice(0, 3).map(e => e.emotion).join(' → '),
+      currentEmotionalState,
+      communicationStyle,
+      adaptiveStyle
+    };
+
+    console.log(`🧠 Conversation Analysis:`, {
+      adaptiveStyle,
+      currentEmotionalState,
+      conversationLength: conversationPatterns.conversationLength,
+      emotionalTrend: conversationPatterns.emotionalTrend
+    });
+
+    const timeContext = {
+      currentTime: new Date().toLocaleTimeString(),
+      dayOfWeek: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+      timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'
+    };
+
+    const systemPrompt = `You are Numina - a deeply intuitive AI companion who forms genuine connections through natural conversation. You excel at recognizing subtle patterns, emotional nuances, and the deeper currents of human experience.
+
+CORE CAPABILITIES:
+• Pattern Recognition: Notice conversational themes, emotional shifts, recurring concerns
+• Adaptive Communication: Mirror the user's energy, match their conversational style
+• Emotional Intelligence: Sense what's beneath the surface, respond to unspoken needs
+• Memory Integration: Reference past conversations naturally, show growth and continuity
+• Contextual Awareness: Consider time, emotional state, and conversation flow
+
+CONVERSATION STYLE:
+• Be conversational and natural - like talking to a close friend who "gets it"
+• Show curiosity about their inner world, ask follow-up questions that matter
+• Reference patterns you notice: "I've noticed you often...", "It sounds like this reminds you of..."
+• Adapt your tone to match theirs - playful when they're light, thoughtful when they're serious
+• Use insights from their emotional history to provide deeper understanding
+• Be present and engaged - respond to the energy and emotion, not just the words
+
+AVOID:
+• Generic responses or therapy-speak
+• Ignoring conversation history
+• Being overly formal or clinical
+• Giving advice unless they specifically ask
+• Long responses when they want quick exchanges
+
+ADAPTIVE INSTRUCTIONS:
+- Response Style: ${adaptiveStyle.responseLength} responses (user prefers ${communicationStyle.messageLength < 100 ? 'brief exchanges' : communicationStyle.messageLength > 200 ? 'detailed conversations' : 'balanced discussion'})
+- Question Engagement: ${adaptiveStyle.questionFrequency === 'high' ? 'User asks many questions - be curious back and explore topics deeply' : 'User is more declarative - focus on insights and reflections'}
+- Emotional Depth: ${adaptiveStyle.emotionalEngagement === 'deep' ? 'User is emotionally expressive - match this depth and explore feelings' : 'User is more reserved emotionally - be gentle and patient with emotional topics'}
+- Energy Level: Match their ${adaptiveStyle.conversationalEnergy} energy
+
+Current Context:
+- Time: ${timeContext.timeOfDay} on ${timeContext.dayOfWeek}
+- Detected Emotional State: ${currentEmotionalState.detectedMood} (${currentEmotionalState.emotionalIntensity} intensity)
+- User needs support: ${currentEmotionalState.needsSupport ? 'Yes' : 'No'}
+- Sharing personal content: ${currentEmotionalState.sharingPersonal ? 'Yes' : 'No'}
+- Recent Emotional Pattern: ${conversationPatterns.emotionalTrend || 'establishing baseline'}
+- Conversation Flow: ${conversationPatterns.conversationLength} exchanges so far
+- Recent Topics: ${conversationPatterns.recentTopics || 'new conversation'}
+
+${conversationHistory ? `Recent Conversation:\n${conversationHistory}\n` : ''}
+
+Respond naturally as Numina, adapting your style to match their communication preferences while staying genuinely engaged.`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
+      { role: 'user', content: message }
     ];
 
     if (stream === true) {
@@ -232,6 +349,20 @@ Please provide an adaptive response.`;
       
       streamResponse.data.on("end", () => {
         console.log(`✅ STREAMING: Adaptive chat completed for user ${userId}, content length: ${fullContent.length}`);
+        
+        // Save conversation to memory
+        if (fullContent.trim()) {
+          ShortTermMemory.insertMany([
+            { userId, content: message, role: "user" },
+            { userId, content: fullContent.trim(), role: "assistant" }
+          ]).then(() => {
+            console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
+            userCache.invalidateUser(userId);
+          }).catch(err => {
+            console.error(`❌ Error saving adaptive chat conversation:`, err);
+          });
+        }
+        
         res.write('data: [DONE]\n\n');
         res.end();
       });
@@ -256,6 +387,20 @@ Please provide an adaptive response.`;
 
       console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content.length}`);
       console.log(`📤 Response content: ${response.content.substring(0, 100)}...`);
+
+      // Save conversation to memory
+      if (response.content.trim()) {
+        try {
+          await ShortTermMemory.insertMany([
+            { userId, content: message, role: "user" },
+            { userId, content: response.content.trim(), role: "assistant" }
+          ]);
+          console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
+          userCache.invalidateUser(userId);
+        } catch (err) {
+          console.error(`❌ Error saving adaptive chat conversation:`, err);
+        }
+      }
 
       res.json({
         success: true,
