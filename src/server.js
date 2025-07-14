@@ -35,6 +35,7 @@ import apiDocsRoutes from "./routes/apiDocs.js";
 import personalizedAIRoutes from "./routes/personalizedAI.js";
 import testPersonalizationRoutes from "./routes/testPersonalization.js";
 import testGPT4oRoutes from "./routes/testGPT4o.js";
+import numinaPersonalityRoutes from "./routes/numinaPersonality.js";
 
 console.log("✓All route modules imported successfully");
 
@@ -167,6 +168,7 @@ const initializeServer = async () => {
   app.use("/personalized-ai", personalizedAIRoutes);
   app.use("/test-personalization", testPersonalizationRoutes);
   app.use("/test-gpt4o", testGPT4oRoutes);
+  app.use("/numina-personality", numinaPersonalityRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
   
