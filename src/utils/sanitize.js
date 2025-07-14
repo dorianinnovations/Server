@@ -1,3 +1,5 @@
+console.log("🧹 Initializing sanitization utilities...");
+
 // Helper function to ensure all special markers are removed from text
 export const sanitizeResponse = (text) => {
   if (!text || typeof text !== 'string' || text.trim() === '') {
@@ -16,4 +18,7 @@ export const sanitizeResponse = (text) => {
     return "I'm sorry, I wasn't able to provide a proper response. Please try again.";
   }
   return sanitized;
-}; 
+};
+
+console.log("✓Response sanitization function configured");
+console.log("✓Sanitization utilities initialization completed"); 

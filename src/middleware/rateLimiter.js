@@ -1,8 +1,12 @@
 import { SECURITY_CONFIG } from "../config/constants.js";
 import logger from "../utils/logger.js";
 
+console.log("🛡️ Initializing rate limiting middleware...");
+
 // In-memory store for rate limiting (in production, use Redis)
 const rateLimitStore = new Map();
+
+console.log("✓Rate limit store created");
 
 // Clean up expired entries every 5 minutes
 setInterval(() => {
@@ -13,6 +17,8 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+
+console.log("✓Rate limit cleanup interval configured");
 
 /**
  * Create rate limiting middleware
@@ -93,6 +99,8 @@ export const createRateLimiter = (options = {}) => {
   };
 };
 
+console.log("✓Rate limiter factory function created");
+
 /**
  * Predefined rate limiters for different endpoint types
  */
@@ -136,6 +144,8 @@ export const rateLimiters = {
   })
 };
 
+console.log("✓Predefined rate limiters configured");
+
 /**
  * User-specific rate limiter (for authenticated users)
  */
@@ -149,4 +159,5 @@ export const userRateLimiter = createRateLimiter({
   message: "Too many requests for this user. Please try again later."
 });
 
+console.log("✓User-specific rate limiter configured");
 console.log("✓ Rate limiting middleware ready."); 

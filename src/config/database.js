@@ -2,9 +2,14 @@ import mongoose from "mongoose";
 import { env } from "./environment.js";
 import { DB_CONFIG } from "./constants.js";
 
+console.log("🗄️ Initializing database connection...");
+
 // Optimized Database Connection with enhanced pool settings
 const connectDB = async () => {
   try {
+    console.log("🔗 Attempting MongoDB connection...");
+    console.log("📊 Using optimized connection pool settings");
+    
     await mongoose.connect(env.MONGO_URI, {
       // Use centralized connection pool settings
       maxPoolSize: DB_CONFIG.CONNECTION_POOL.MAX_POOL_SIZE,
@@ -38,6 +43,8 @@ const connectDB = async () => {
     mongoose.connection.on('fullsetup', () => {
       console.log('✓MongoDB replica set connected');
     });
+    
+    console.log("✓Database connection monitoring configured");
     
   } catch (err) {
     console.error("✗ MongoDB connection error:", err);

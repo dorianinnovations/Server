@@ -1,6 +1,8 @@
 import logger from '../utils/logger.js';
 import { AnalyticsService } from '../services/analytics.js';
 
+console.log("⚡ Initializing performance middleware...");
+
 export const performanceMiddleware = (req, res, next) => {
   const start = Date.now();
   
@@ -82,24 +84,48 @@ export const performanceMiddleware = (req, res, next) => {
   next();
 };
 
-// Middleware specifically for completion endpoint monitoring
+console.log("✓Performance middleware ready");
+
 export const completionPerformanceMiddleware = (req, res, next) => {
-  // Add completion-specific tracking
-  const originalSend = res.send;
-  const originalJson = res.json;
+  const start = Date.now();
   
-  res.send = function(data) {
-    req.trackMemory('completion_end');
-    originalSend.call(this, data);
+  // Track completion-specific metrics
+  req.completionMetrics = {
+    start,
+    llmCallStart: null,
+    llmCallDuration: null,
+    streamingStart: null,
+    streamingDuration: null
   };
   
-  res.json = function(data) {
-    req.trackMemory('completion_end');
-    originalJson.call(this, data);
+  // Override res.write to track streaming
+  const originalWrite = res.write;
+  res.write = function(chunk, encoding) {
+    if (!req.completionMetrics.streamingStart) {
+      req.completionMetrics.streamingStart = Date.now();
+    }
+    return originalWrite.call(this, chunk, encoding);
   };
+  
+  res.on('finish', () => {
+    const total = Date.now() - start;
+    const metrics = req.completionMetrics;
+    
+    // Log completion performance
+    if (total > 5000) {
+      logger.warn(`🐌 SLOW COMPLETION: ${req.method} ${req.path} - ${total}ms`, {
+        total,
+        llmCallDuration: metrics.llmCallDuration,
+        streamingDuration: metrics.streamingDuration,
+        path: req.path
+      });
+    }
+  });
   
   next();
 };
+
+console.log("✓Completion performance middleware ready");
 
 // Helper function to track database operations
 export const trackDatabaseOperation = async (operation, operationFn, req = null) => {

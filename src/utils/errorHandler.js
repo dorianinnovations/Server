@@ -1,5 +1,7 @@
 import logger from "./logger.js";
 
+console.log("🛡️ Initializing error handling system...");
+
 // Custom error classes
 export class AppError extends Error {
   constructor(message, statusCode, isOperational = true) {
@@ -42,6 +44,8 @@ export class RateLimitError extends AppError {
     super(message, 429);
   }
 }
+
+console.log("✓Custom error classes defined");
 
 // Global error handler middleware
 export const globalErrorHandler = (err, req, res, next) => {
@@ -97,12 +101,16 @@ export const globalErrorHandler = (err, req, res, next) => {
   });
 };
 
+console.log("✓Global error handler configured");
+
 // Async error wrapper
 export const catchAsync = (fn) => {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
 };
+
+console.log("✓Async error wrapper configured");
 
 // Validation helper
 export const validateRequest = (schema) => {
@@ -114,4 +122,7 @@ export const validateRequest = (schema) => {
     }
     next();
   };
-}; 
+};
+
+console.log("✓Request validation helper configured");
+console.log("✓Error handling system initialization completed"); 

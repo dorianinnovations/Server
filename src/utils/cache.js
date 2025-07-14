@@ -1,5 +1,7 @@
 import { MEMORY_CONFIG } from "../config/constants.js";
 
+console.log("💾 Initializing cache system...");
+
 // --- Enhanced Cache Implementation ---
 class MemoryCache {
   constructor() {
@@ -60,14 +62,22 @@ class MemoryCache {
   }
 }
 
+console.log("✓Memory cache class defined");
+
 // Global cache instance
 const globalCache = new MemoryCache();
 
+console.log("✓Global cache instance created");
+
 // Factory function to create cache instances
-export const createCache = () => new MemoryCache();
+export const createCache = () => {
+  console.log("✓Creating new cache instance");
+  return new MemoryCache();
+};
 
 // User-specific cache factory with user ID prefix
 export const createUserCache = (userId) => {
+  console.log(`✓Creating user-specific cache for user: ${userId}`);
   const userCache = new MemoryCache();
   
   // Override methods to prefix keys with user ID if userId is provided
@@ -154,6 +164,8 @@ let gcCount = 0;
 let lastGcTime = Date.now();
 
 export const setupMemoryMonitoring = () => {
+  console.log("📊 Setting up memory monitoring...");
+  
   const monitorMemory = () => {
     const memoryUsage = process.memoryUsage();
     const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
@@ -193,7 +205,11 @@ export const setupMemoryMonitoring = () => {
   
   // Initial memory check
   monitorMemory();
+  
+  console.log("✓Memory monitoring configured");
 };
+
+console.log("✓Cache system initialization completed");
 
 // Export the global cache instance
 export default globalCache;

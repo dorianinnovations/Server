@@ -1,6 +1,8 @@
 import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import logger from "./logger.js";
 
+console.log("📊 Initializing analytics helper utilities...");
+
 // Shared helper function to update analytics for a user
 export async function updateAnalyticsForUser(userId) {
   try {
@@ -58,4 +60,7 @@ export async function updateAnalyticsForUser(userId) {
     });
     throw error;
   }
-} 
+}
+
+console.log("✓Analytics helper function configured");
+console.log("✓Analytics helper utilities initialization completed"); 

@@ -2,6 +2,8 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/environment.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG } from "../config/constants.js";
 
+console.log("🔐 Initializing authentication middleware...");
+
 // JWT signing function
 export const signToken = (id) =>
   jwt.sign({ id }, env.JWT_SECRET, {
@@ -38,4 +40,6 @@ export const protect = (req, res, next) => {
       message: MESSAGES.INVALID_TOKEN 
     });
   }
-}; 
+};
+
+console.log("✓Authentication middleware ready."); 

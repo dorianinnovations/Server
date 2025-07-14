@@ -3,8 +3,11 @@ import collectiveDataService from "./collectiveDataService.js";
 import logger from "../utils/logger.js";
 import { createCache } from "../utils/cache.js";
 
+console.log("⏰ Initializing scheduled aggregation service...");
+
 class ScheduledAggregationService {
   constructor() {
+    console.log("✓Creating scheduled aggregation service instance");
     this.cache = createCache();
     this.isRunning = false;
     this.lastRun = null;
@@ -12,6 +15,7 @@ class ScheduledAggregationService {
     this.errorCount = 0;
     this.interval = null;
     this.intervalMs = 10 * 60 * 1000; // 10 minutes
+    console.log("✓Scheduled aggregation service instance created");
   }
 
   /**
@@ -23,6 +27,9 @@ class ScheduledAggregationService {
       return;
     }
 
+    console.log("🚀 Starting scheduled aggregation service...");
+    console.log(`⏱️ Setting interval to ${this.intervalMs / 1000 / 60} minutes`);
+
     logger.info("Starting scheduled aggregation service", {
       interval: "10 minutes",
       nextRun: new Date(Date.now() + this.intervalMs)
@@ -30,13 +37,19 @@ class ScheduledAggregationService {
 
     this.isRunning = true;
     
+    console.log("✓Scheduled aggregation service started");
+    console.log("🔄 Running initial aggregation cycle...");
+    
     // Run immediately on start
     this.runAggregation();
     
     // Schedule recurring runs
     this.interval = setInterval(() => {
+      console.log("⏰ Scheduled aggregation cycle triggered");
       this.runAggregation();
     }, this.intervalMs);
+    
+    console.log("✓Recurring aggregation schedule configured");
   }
 
   /**
@@ -47,6 +60,8 @@ class ScheduledAggregationService {
       logger.warn("Scheduled aggregation service is not running");
       return;
     }
+
+    console.log("🛑 Stopping scheduled aggregation service...");
 
     logger.info("Stopping scheduled aggregation service", {
       totalRuns: this.runCount,
@@ -59,7 +74,10 @@ class ScheduledAggregationService {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
+      console.log("✓Scheduled aggregation interval cleared");
     }
+    
+    console.log("✓Scheduled aggregation service stopped");
   }
 
   /**
@@ -83,18 +101,22 @@ class ScheduledAggregationService {
     const startTime = Date.now();
     
     try {
+      console.log("🔍 Checking database connection...");
       // Check database connection
       const mongoose = await import("mongoose");
       if (!mongoose.default.connection || mongoose.default.connection.readyState !== 1) {
         logger.warn("Database not connected, skipping scheduled aggregation");
+        console.log("⚠️ Database not connected, skipping aggregation");
         return;
       }
+      console.log("✓Database connection verified");
 
       logger.info("Starting scheduled aggregation cycle", {
         cycle: this.runCount + 1,
         timestamp: new Date().toISOString()
       });
 
+      console.log("📊 Checking data availability...");
       // Check if we have sufficient data
       const insights = await collectiveDataService.getRealTimeInsights();
       
@@ -102,6 +124,7 @@ class ScheduledAggregationService {
         logger.warn("Insufficient data for aggregation", {
           message: insights.message
         });
+        console.log("⚠️ Insufficient data for aggregation");
         return;
       }
 
@@ -111,6 +134,7 @@ class ScheduledAggregationService {
           totalUsers: insights.metadata.totalUsers,
           minimum: 5
         });
+        console.log(`⚠️ Insufficient users (${insights.metadata.totalUsers}/5 minimum)`);
         return;
       }
 
@@ -120,9 +144,11 @@ class ScheduledAggregationService {
           recentEntries: insights.insights.totalRecentEntries,
           minimum: 10
         });
+        console.log(`⚠️ Insufficient recent activity (${insights.insights.totalRecentEntries}/10 minimum)`);
         return;
       }
 
+      console.log("✅ Data requirements met, generating snapshot...");
       // Generate snapshot for 10-minute window
       const result = await snapshotAnalysisService.generateSnapshot("10m", {
         forceGeneration: true,
@@ -147,6 +173,9 @@ class ScheduledAggregationService {
         totalRuns: this.runCount
       });
 
+      console.log(`✅ Aggregation completed successfully (${processingTime}ms)`);
+      console.log(`📊 Snapshot: ${result.snapshot.archetype} - ${result.snapshot.dominantEmotion}`);
+
       // Cache the latest snapshot for quick access
       this.cache.set("latest_scheduled_snapshot", result.snapshot, 300000); // 5 minutes
 
@@ -159,6 +188,8 @@ class ScheduledAggregationService {
         cycle: this.runCount + 1,
         errorCount: this.errorCount
       });
+
+      console.error(`❌ Aggregation failed: ${error.message}`);
 
       // Don't update lastRun on error to maintain accurate timing
     }
@@ -173,6 +204,7 @@ class ScheduledAggregationService {
     }
 
     logger.info("Manually triggering aggregation cycle");
+    console.log("🔧 Manually triggering aggregation cycle...");
     await this.runAggregation();
   }
 
@@ -207,6 +239,7 @@ class ScheduledAggregationService {
     this.lastRun = null;
     
     logger.info("Scheduled aggregation statistics reset");
+    console.log("🔄 Aggregation statistics reset");
   }
 
   /**
@@ -224,6 +257,8 @@ class ScheduledAggregationService {
       newInterval: minutes
     });
 
+    console.log(`⏰ Updating aggregation interval to ${minutes} minutes`);
+
     this.intervalMs = newIntervalMs;
 
     // Restart the service with new interval
@@ -234,7 +269,11 @@ class ScheduledAggregationService {
   }
 }
 
+console.log("✓Scheduled aggregation service class defined");
+
 // Create singleton instance
 const scheduledAggregationService = new ScheduledAggregationService();
+
+console.log("✓Scheduled aggregation service singleton created");
 
 export default scheduledAggregationService; 

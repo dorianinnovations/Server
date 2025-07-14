@@ -6,40 +6,55 @@ import logger from "../utils/logger.js";
 import { AnalyticsService } from "./analytics.js";
 import { createLLMService } from "./llmService.js";
 
+console.log("📅 Initializing task scheduler...");
+
 class TaskScheduler {
   constructor() {
+    console.log("✓Creating task scheduler instance");
     this.jobs = new Map();
     this.isRunning = false;
+    console.log("✓Task scheduler instance created");
   }
 
   // Start the scheduler
   start() {
-    if (this.isRunning) return;
+    if (this.isRunning) {
+      console.log("⚠️ Task scheduler is already running");
+      return;
+    }
     
+    console.log("🚀 Starting task scheduler...");
     this.isRunning = true;
     
     // Schedule task processing more frequently for better responsiveness
+    console.log("⏰ Scheduling task processing jobs...");
     this.scheduleTaskProcessing();
     
     // Schedule cleanup jobs
+    console.log("🧹 Scheduling cleanup jobs...");
     this.scheduleCleanupJobs();
     
     // Schedule analytics jobs
+    console.log("📊 Scheduling analytics jobs...");
     this.scheduleAnalyticsJobs();
     
     logger.info("Task scheduler started");
+    console.log("✓Task scheduler started successfully");
   }
 
   // Stop the scheduler
   stop() {
+    console.log("🛑 Stopping task scheduler...");
     this.isRunning = false;
     this.jobs.forEach(job => job.stop());
     this.jobs.clear();
     logger.info("Task scheduler stopped");
+    console.log("✓Task scheduler stopped");
   }
 
   // Schedule task processing
   scheduleTaskProcessing() {
+    console.log("⚡ Setting up high priority task processing (every minute)...");
     // Process high priority tasks every minute for better responsiveness
     const highPriorityJob = cron.schedule("* * * * *", async () => {
       try {
@@ -49,6 +64,7 @@ class TaskScheduler {
       }
     });
 
+    console.log("📋 Setting up regular task processing (every 5 minutes)...");
     // Process all tasks every 5 minutes
     const regularJob = cron.schedule("*/5 * * * *", async () => {
       try {
@@ -60,10 +76,12 @@ class TaskScheduler {
 
     this.jobs.set("highPriorityTaskProcessing", highPriorityJob);
     this.jobs.set("regularTaskProcessing", regularJob);
+    console.log("✓Task processing jobs scheduled");
   }
 
   // Schedule cleanup jobs
   scheduleCleanupJobs() {
+    console.log("🧹 Setting up cleanup job (daily at 2 AM)...");
     // Clean up old completed tasks daily at 2 AM
     const cleanupJob = cron.schedule("0 2 * * *", async () => {
       try {
@@ -74,10 +92,12 @@ class TaskScheduler {
     });
 
     this.jobs.set("cleanup", cleanupJob);
+    console.log("✓Cleanup job scheduled");
   }
 
   // Schedule analytics jobs
   scheduleAnalyticsJobs() {
+    console.log("📊 Setting up analytics job (daily at 1 AM)...");
     // Generate daily analytics at 1 AM
     const analyticsJob = cron.schedule("0 1 * * *", async () => {
       try {
@@ -87,6 +107,7 @@ class TaskScheduler {
       }
     });
 
+    console.log("📊 Setting up emotional analytics job (daily at 2 AM)...");
     // Process emotional analytics sessions at 2 AM daily
     const emotionalAnalyticsJob = cron.schedule("0 2 * * *", async () => {
       try {
@@ -98,6 +119,7 @@ class TaskScheduler {
 
     this.jobs.set("analytics", analyticsJob);
     this.jobs.set("emotionalAnalytics", emotionalAnalyticsJob);
+    console.log("✓Analytics jobs scheduled");
   }
 
   // Process pending tasks

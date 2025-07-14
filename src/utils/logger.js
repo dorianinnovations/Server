@@ -1,6 +1,8 @@
 import winston from "winston";
 import { format } from "winston";
 
+console.log("📝 Initializing logging system...");
+
 // Custom format for structured logging
 const logFormat = format.combine(
   format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
@@ -15,6 +17,8 @@ const logFormat = format.combine(
     });
   })
 );
+
+console.log("✓Log format configured");
 
 // Create logger instance
 const logger = winston.createLogger({
@@ -37,6 +41,8 @@ const logger = winston.createLogger({
   ],
 });
 
+console.log("✓Winston logger instance created");
+
 // Performance tracking
 export const trackPerformance = (operation, startTime) => {
   const duration = Date.now() - startTime;
@@ -47,6 +53,8 @@ export const trackPerformance = (operation, startTime) => {
   });
   return duration;
 };
+
+console.log("✓Performance tracking function configured");
 
 // Request logging middleware
 export const requestLogger = (req, res, next) => {
@@ -76,16 +84,23 @@ export const requestLogger = (req, res, next) => {
   next();
 };
 
-// Error logging
-export const errorLogger = (error, req, res, next) => {
-  logger.error("Application error", {
-    error: error.message,
-    stack: error.stack,
+console.log("✓Request logging middleware configured");
+
+// Error logging middleware
+export const errorLogger = (err, req, res, next) => {
+  logger.error("Error occurred", {
+    error: err.message,
+    stack: err.stack,
     method: req.method,
     url: req.url,
+    ip: req.ip,
     userId: req.user?.id || "anonymous",
   });
-  next(error);
+  next(err);
 };
+
+console.log("✓Error logging middleware configured");
+
+console.log("✓Logging system initialization completed");
 
 export default logger; 
