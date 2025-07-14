@@ -5,6 +5,10 @@ import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import { createUserCache } from '../utils/cache.js';
 import websocketService from '../services/websocketService.js';
+import personalizationEngine from '../services/personalizationEngine.js';
+import connectionEngine from '../services/connectionEngine.js';
+import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
+import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -484,9 +488,18 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
           ShortTermMemory.insertMany([
             { userId, content: userMessage, role: "user" },
             { userId, content: fullContent.trim(), role: "assistant" }
-          ]).then(() => {
+          ]).then(async () => {
             console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
             userCache.invalidateUser(userId);
+
+            // Add to data processing pipeline
+            await dataProcessingPipeline.addEvent(userId, 'chat_message', {
+              message: userMessage,
+              response: fullContent.trim(),
+              emotion: currentEmotionalState.detectedMood,
+              context: conversationPatterns,
+              timestamp: new Date()
+            });
           }).catch(err => {
             console.error(`❌ Error saving adaptive chat conversation:`, err);
           });
@@ -540,6 +553,15 @@ Trust what you\'re sensing and speak directly to the patterns you see.`;
           ]);
           console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
           userCache.invalidateUser(userId);
+
+          // Add to data processing pipeline
+          await dataProcessingPipeline.addEvent(userId, 'chat_message', {
+            message: userMessage,
+            response: response.content.trim(),
+            emotion: currentEmotionalState.detectedMood,
+            context: conversationPatterns,
+            timestamp: new Date()
+          });
         } catch (err) {
           console.error(`❌ Error saving adaptive chat conversation:`, err);
         }

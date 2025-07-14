@@ -15,9 +15,9 @@ export const createLLMService = () => {
   
   const makeLLMRequest = async (promptOrMessages, options = {}) => {
     const {
-      stop = ["<|im_end|>", "\n<|im_start|>"],
-      n_predict = 300,
-      temperature = 0.7,
+      stop = null,
+      n_predict = 500,
+      temperature = 0.8,
     } = options;
 
     const llmStartTime = Date.now();
@@ -38,11 +38,11 @@ export const createLLMService = () => {
           "X-Title": "Numina Server",
         },
         data: {
-          model: "anthropic/claude-3-sonnet",
+          model: "openai/gpt-4o",
           messages: messages,
           max_tokens: n_predict,
           temperature: temperature,
-          stop: stop,
+          ...(stop && { stop: stop }),
         },
         timeout: 45000, // 45 seconds timeout
       });
@@ -82,9 +82,9 @@ export const createLLMService = () => {
 
   const makeStreamingRequest = async (promptOrMessages, options = {}) => {
     const {
-      stop = ["<|im_end|>", "\n<|im_start|>"],
-      n_predict = 300,
-      temperature = 0.7,
+      stop = null,
+      n_predict = 500,
+      temperature = 0.8,
     } = options;
 
     try {
@@ -103,11 +103,11 @@ export const createLLMService = () => {
           "X-Title": "Numina Server",
         },
         data: {
-          model: "anthropic/claude-3-sonnet",
+          model: "openai/gpt-4o",
           messages: messages,
           max_tokens: n_predict,
           temperature: temperature,
-          stop: stop,
+          ...(stop && { stop: stop }),
           stream: true,
         },
         responseType: "stream",
@@ -148,7 +148,7 @@ export const createLLMService = () => {
           "X-Title": "Numina Server",
         },
         data: {
-          model: "anthropic/claude-3-sonnet",
+          model: "openai/gpt-4o",
           messages: [{ role: "user", content: "Hello" }],
           max_tokens: 10,
           temperature: 0.1,
@@ -158,14 +158,14 @@ export const createLLMService = () => {
 
       return {
         status: "accessible",
-        service: "OpenRouter (Claude 3 Sonnet)",
+        service: "OpenRouter (GPT-4o)",
         responseStatus: testResponse.status,
       };
     } catch (error) {
       console.error("OpenRouter Health Check Error:", error.message);
       return {
         status: "unreachable",
-        service: "OpenRouter (Claude 3 Sonnet)",
+        service: "OpenRouter (GPT-4o)",
         error: error.message,
       };
     }

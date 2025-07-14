@@ -32,6 +32,9 @@ import mobileRoutes from "./routes/mobile.js";
 import personalInsightsRoutes from "./routes/personalInsights.js";
 import syncRoutes from "./routes/sync.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
+import personalizedAIRoutes from "./routes/personalizedAI.js";
+import testPersonalizationRoutes from "./routes/testPersonalization.js";
+import testGPT4oRoutes from "./routes/testGPT4o.js";
 
 console.log("✓All route modules imported successfully");
 
@@ -56,6 +59,7 @@ import websocketService from "./services/websocketService.js";
 import redisService from "./services/redisService.js";
 import pushNotificationService from "./services/pushNotificationService.js";
 import offlineSyncService from "./services/offlineSyncService.js";
+import dataProcessingPipeline from "./services/dataProcessingPipeline.js";
 
 console.log("✓Service modules imported successfully");
 
@@ -67,6 +71,7 @@ import "./models/EmotionalAnalyticsSession.js";
 import "./models/CollectiveDataConsent.js";
 import "./models/CollectiveSnapshot.js";
 import "./models/Event.js";
+import "./models/UserBehaviorProfile.js";
 
 console.log("✓All database models loaded successfully");
 
@@ -159,6 +164,9 @@ const initializeServer = async () => {
   // app.use("/collective-snapshots", collectiveSnapshotsRoutes);
   // app.use("/scheduled-aggregation", scheduledAggregationRoutes);
   app.use("/ai", aiRoutes);
+  app.use("/personalized-ai", personalizedAIRoutes);
+  app.use("/test-personalization", testPersonalizationRoutes);
+  app.use("/test-gpt4o", testGPT4oRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
   

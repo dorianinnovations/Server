@@ -34,7 +34,7 @@ router.get("/health", async (req, res) => {
       console.error("Health check OpenRouter test failed:", error.message);
       llmHealth = {
         status: "unreachable",
-        service: "OpenRouter (Claude 3 Sonnet)",
+        service: "OpenRouter (GPT-4o)",
         error: error.message,
       };
     }
