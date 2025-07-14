@@ -1,0 +1,458 @@
+import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
+import logger from '../utils/logger.js';
+import User from '../models/User.js';
+
+/**
+ * WebSocket Service for Real-time Communication
+ * Handles chat rooms, user presence, and live updates
+ */
+class WebSocketService {
+  constructor() {
+    this.io = null;
+    this.connectedUsers = new Map();
+    this.userRooms = new Map();
+  }
+
+  /**
+   * Initialize WebSocket server
+   */
+  initialize(server) {
+    this.io = new Server(server, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+        credentials: true
+      },
+      transports: ['websocket', 'polling'],
+      pingTimeout: 60000,
+      pingInterval: 25000
+    });
+
+    // Authentication middleware
+    this.io.use(async (socket, next) => {
+      try {
+        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+        
+        if (!token) {
+          return next(new Error('No token provided'));
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        const user = await User.findById(decoded.userId);
+        
+        if (!user) {
+          return next(new Error('User not found'));
+        }
+
+        socket.userId = user._id.toString();
+        socket.userData = {
+          id: user._id.toString(),
+          email: user.email,
+          username: user.username || user.email.split('@')[0]
+        };
+        
+        next();
+      } catch (error) {
+        logger.error('WebSocket authentication error:', error);
+        next(new Error('Authentication failed'));
+      }
+    });
+
+    // Connection handling
+    this.io.on('connection', (socket) => {
+      this.handleConnection(socket);
+    });
+
+    logger.info('WebSocket service initialized successfully');
+  }
+
+  /**
+   * Handle new socket connection
+   */
+  handleConnection(socket) {
+    const userId = socket.userId;
+    logger.info(`User connected: ${userId}`);
+
+    // Store user connection
+    this.connectedUsers.set(userId, {
+      socket,
+      userData: socket.userData,
+      connectedAt: new Date(),
+      lastActivity: new Date()
+    });
+
+    // Join user to their personal room
+    socket.join(`user:${userId}`);
+
+    // Send connection confirmation
+    socket.emit('connected', {
+      userId,
+      timestamp: new Date(),
+      message: 'Connected successfully'
+    });
+
+    // Handle chat events
+    this.setupChatHandlers(socket);
+    
+    // Handle room events
+    this.setupRoomHandlers(socket);
+    
+    // Handle user presence
+    this.setupPresenceHandlers(socket);
+    
+    // Handle emotional state updates
+    this.setupEmotionalHandlers(socket);
+
+    // Handle disconnection
+    socket.on('disconnect', () => {
+      this.handleDisconnection(socket);
+    });
+
+    // Update user activity
+    socket.on('activity', () => {
+      this.updateUserActivity(userId);
+    });
+  }
+
+  /**
+   * Setup chat-related event handlers
+   */
+  setupChatHandlers(socket) {
+    const userId = socket.userId;
+
+    // Join chat room
+    socket.on('join_chat', (data) => {
+      const { roomId, roomType = 'general' } = data;
+      socket.join(roomId);
+      
+      // Track user room membership
+      if (!this.userRooms.has(userId)) {
+        this.userRooms.set(userId, new Set());
+      }
+      this.userRooms.get(userId).add(roomId);
+
+      logger.info(`User ${userId} joined room ${roomId}`);
+      
+      // Notify others in room
+      socket.to(roomId).emit('user_joined', {
+        userId,
+        userData: socket.userData,
+        timestamp: new Date()
+      });
+    });
+
+    // Leave chat room
+    socket.on('leave_chat', (data) => {
+      const { roomId } = data;
+      socket.leave(roomId);
+      
+      if (this.userRooms.has(userId)) {
+        this.userRooms.get(userId).delete(roomId);
+      }
+
+      // Notify others in room
+      socket.to(roomId).emit('user_left', {
+        userId,
+        userData: socket.userData,
+        timestamp: new Date()
+      });
+    });
+
+    // Handle real-time chat messages
+    socket.on('chat_message', (data) => {
+      const { roomId, message, messageType = 'text' } = data;
+      
+      const messageData = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        userId,
+        userData: socket.userData,
+        message,
+        messageType,
+        timestamp: new Date(),
+        roomId
+      };
+
+      // Broadcast to room
+      this.io.to(roomId).emit('new_message', messageData);
+      
+      logger.info(`Message sent in room ${roomId} by user ${userId}`);
+    });
+
+    // Handle typing indicators
+    socket.on('typing_start', (data) => {
+      const { roomId } = data;
+      socket.to(roomId).emit('user_typing', {
+        userId,
+        userData: socket.userData,
+        timestamp: new Date()
+      });
+    });
+
+    socket.on('typing_stop', (data) => {
+      const { roomId } = data;
+      socket.to(roomId).emit('user_stopped_typing', {
+        userId,
+        timestamp: new Date()
+      });
+    });
+  }
+
+  /**
+   * Setup room-related event handlers
+   */
+  setupRoomHandlers(socket) {
+    const userId = socket.userId;
+
+    // Create new room
+    socket.on('create_room', (data) => {
+      const { roomName, roomType = 'public', maxUsers = 50 } = data;
+      const roomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      socket.join(roomId);
+      
+      const roomData = {
+        id: roomId,
+        name: roomName,
+        type: roomType,
+        createdBy: userId,
+        createdAt: new Date(),
+        maxUsers,
+        currentUsers: 1
+      };
+
+      socket.emit('room_created', roomData);
+      logger.info(`Room created: ${roomId} by user ${userId}`);
+    });
+
+    // Get room info
+    socket.on('get_room_info', async (data) => {
+      const { roomId } = data;
+      const room = this.io.sockets.adapter.rooms.get(roomId);
+      
+      if (room) {
+        const roomInfo = {
+          id: roomId,
+          userCount: room.size,
+          users: Array.from(room).map(socketId => {
+            const socket = this.io.sockets.sockets.get(socketId);
+            return socket?.userData || null;
+          }).filter(Boolean)
+        };
+        
+        socket.emit('room_info', roomInfo);
+      } else {
+        socket.emit('room_not_found', { roomId });
+      }
+    });
+  }
+
+  /**
+   * Setup presence-related event handlers
+   */
+  setupPresenceHandlers(socket) {
+    const userId = socket.userId;
+
+    // Update user status
+    socket.on('update_status', (data) => {
+      const { status, customMessage } = data;
+      
+      if (this.connectedUsers.has(userId)) {
+        const userConnection = this.connectedUsers.get(userId);
+        userConnection.status = status;
+        userConnection.customMessage = customMessage;
+        userConnection.lastActivity = new Date();
+        
+        // Broadcast status update to user's rooms
+        if (this.userRooms.has(userId)) {
+          this.userRooms.get(userId).forEach(roomId => {
+            socket.to(roomId).emit('user_status_update', {
+              userId,
+              status,
+              customMessage,
+              timestamp: new Date()
+            });
+          });
+        }
+      }
+    });
+
+    // Get online users
+    socket.on('get_online_users', () => {
+      const onlineUsers = Array.from(this.connectedUsers.entries()).map(([uid, connection]) => ({
+        userId: uid,
+        userData: connection.userData,
+        status: connection.status || 'online',
+        customMessage: connection.customMessage,
+        lastActivity: connection.lastActivity
+      }));
+
+      socket.emit('online_users', onlineUsers);
+    });
+  }
+
+  /**
+   * Setup emotional state event handlers
+   */
+  setupEmotionalHandlers(socket) {
+    const userId = socket.userId;
+
+    // Real-time emotion updates
+    socket.on('emotion_update', (data) => {
+      const { emotion, intensity, context } = data;
+      
+      const emotionData = {
+        userId,
+        emotion,
+        intensity,
+        context,
+        timestamp: new Date()
+      };
+
+      // Broadcast to user's personal room and any group rooms if opted in
+      socket.to(`user:${userId}`).emit('emotion_updated', emotionData);
+      
+      // If user is in cloud events, broadcast to those rooms
+      if (this.userRooms.has(userId)) {
+        this.userRooms.get(userId).forEach(roomId => {
+          if (roomId.startsWith('cloud_event_')) {
+            socket.to(roomId).emit('user_emotion_update', {
+              userId,
+              userData: socket.userData,
+              emotion,
+              intensity,
+              timestamp: new Date()
+            });
+          }
+        });
+      }
+
+      logger.info(`Emotion update from user ${userId}: ${emotion} (${intensity})`);
+    });
+
+    // Live analytics updates
+    socket.on('request_live_analytics', () => {
+      // This would integrate with your analytics service
+      // For now, we'll emit a placeholder
+      socket.emit('live_analytics', {
+        userId,
+        timestamp: new Date(),
+        message: 'Live analytics will be implemented with analytics service'
+      });
+    });
+  }
+
+  /**
+   * Handle user disconnection
+   */
+  handleDisconnection(socket) {
+    const userId = socket.userId;
+    logger.info(`User disconnected: ${userId}`);
+
+    // Remove from connected users
+    this.connectedUsers.delete(userId);
+
+    // Notify all rooms user was in
+    if (this.userRooms.has(userId)) {
+      this.userRooms.get(userId).forEach(roomId => {
+        socket.to(roomId).emit('user_disconnected', {
+          userId,
+          userData: socket.userData,
+          timestamp: new Date()
+        });
+      });
+      
+      // Clean up user rooms
+      this.userRooms.delete(userId);
+    }
+  }
+
+  /**
+   * Update user activity timestamp
+   */
+  updateUserActivity(userId) {
+    if (this.connectedUsers.has(userId)) {
+      this.connectedUsers.get(userId).lastActivity = new Date();
+    }
+  }
+
+  /**
+   * Send message to specific user
+   */
+  sendToUser(userId, event, data) {
+    this.io.to(`user:${userId}`).emit(event, data);
+  }
+
+  /**
+   * Send message to room
+   */
+  sendToRoom(roomId, event, data) {
+    this.io.to(roomId).emit(event, data);
+  }
+
+  /**
+   * Broadcast to all connected users
+   */
+  broadcast(event, data) {
+    this.io.emit(event, data);
+  }
+
+  /**
+   * Get connected users count
+   */
+  getConnectedUsersCount() {
+    return this.connectedUsers.size;
+  }
+
+  /**
+   * Get user connection info
+   */
+  getUserConnection(userId) {
+    return this.connectedUsers.get(userId) || null;
+  }
+
+  /**
+   * Check if user is online
+   */
+  isUserOnline(userId) {
+    return this.connectedUsers.has(userId);
+  }
+
+  /**
+   * Get room members
+   */
+  getRoomMembers(roomId) {
+    const room = this.io.sockets.adapter.rooms.get(roomId);
+    if (!room) return [];
+    
+    return Array.from(room).map(socketId => {
+      const socket = this.io.sockets.sockets.get(socketId);
+      return socket?.userData || null;
+    }).filter(Boolean);
+  }
+
+  /**
+   * Force disconnect user
+   */
+  disconnectUser(userId, reason = 'Server disconnect') {
+    const userConnection = this.connectedUsers.get(userId);
+    if (userConnection) {
+      userConnection.socket.disconnect(reason);
+    }
+  }
+
+  /**
+   * Get server statistics
+   */
+  getServerStats() {
+    return {
+      connectedUsers: this.connectedUsers.size,
+      totalRooms: this.io.sockets.adapter.rooms.size,
+      serverUptime: process.uptime(),
+      memoryUsage: process.memoryUsage()
+    };
+  }
+}
+
+// Export singleton instance
+export default new WebSocketService();
