@@ -18,17 +18,24 @@ class RedisService {
    */
   async initialize() {
     try {
+      // Skip Redis initialization if disabled
+      if (process.env.REDIS_DISABLED === 'true') {
+        logger.info('Redis disabled, using in-memory fallback');
+        this.isConnected = false;
+        return false;
+      }
+
       const redisConfig = {
         host: process.env.REDIS_HOST || 'localhost',
         port: process.env.REDIS_PORT || 6379,
         password: process.env.REDIS_PASSWORD || undefined,
         db: process.env.REDIS_DB || 0,
         retryDelayOnFailover: 100,
-        maxRetriesPerRequest: 3,
+        maxRetriesPerRequest: 1,
         lazyConnect: true,
         keepAlive: 30000,
-        connectTimeout: 10000,
-        commandTimeout: 5000,
+        connectTimeout: 2000,
+        commandTimeout: 1000,
         family: 4
       };
 
