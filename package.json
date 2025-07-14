@@ -12,7 +12,8 @@
     "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "seed-test-data": "node scripts/seedTestData.js",
     "test-api": "node scripts/testAPI.js",
-    "test-websocket": "node scripts/testWebSocket.js"
+    "test-websocket": "node scripts/testWebSocket.js",
+    "test-numina-senses": "node scripts/testNuminaSenses.js"
   },
   "dependencies": {
     "axios": "^1.10.0",

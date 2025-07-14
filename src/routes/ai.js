@@ -4,9 +4,54 @@ import { createLLMService } from '../services/llmService.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import { createUserCache } from '../utils/cache.js';
+import websocketService from '../services/websocketService.js';
 
 const router = express.Router();
 const llmService = createLLMService();
+
+// Helper functions for Dynamic Numina Senses
+function calculateEmotionConfidence(currentEmotionalState, emotionalInsights, conversationPatterns) {
+  let confidence = 0.3; // Base confidence
+  
+  // Boost confidence based on clear emotional indicators
+  if (currentEmotionalState.detectedMood !== 'neutral') confidence += 0.2;
+  if (currentEmotionalState.emotionalIntensity === 'high') confidence += 0.2;
+  if (currentEmotionalState.needsSupport) confidence += 0.15;
+  if (currentEmotionalState.sharingPersonal) confidence += 0.1;
+  
+  // Boost if we have emotional insights from context
+  if (emotionalInsights && emotionalInsights.primaryEmotion !== 'unknown') confidence += 0.15;
+  
+  // Boost for conversation depth (more data = more confidence)
+  if (conversationPatterns.conversationLength > 5) confidence += 0.1;
+  if (conversationPatterns.conversationLength > 15) confidence += 0.1;
+  
+  return Math.min(1.0, confidence);
+}
+
+function generateEmotionReasoning(currentEmotionalState, conversationPatterns) {
+  const reasons = [];
+  
+  if (currentEmotionalState.needsSupport) {
+    reasons.push('seeking support');
+  }
+  if (currentEmotionalState.sharingPersonal) {
+    reasons.push('sharing personal thoughts');
+  }
+  if (currentEmotionalState.emotionalIntensity === 'high') {
+    reasons.push('high emotional intensity');
+  }
+  if (conversationPatterns.conversationLength > 10) {
+    reasons.push('engaged conversation');
+  }
+  
+  const trend = conversationPatterns.emotionalTrend;
+  if (trend && trend.includes('→')) {
+    reasons.push(`emotional progression: ${trend}`);
+  }
+  
+  return reasons.length > 0 ? reasons.join(', ') : 'conversation tone analysis';
+}
 
 router.post('/emotional-state', protect, async (req, res) => {
   try {
@@ -259,6 +304,32 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       conversationLength: conversationPatterns.conversationLength,
       emotionalTrend: conversationPatterns.emotionalTrend
     });
+
+    // 🎯 Dynamic Numina Senses - Broadcast emotional state via WebSocket
+    try {
+      const confidenceScore = calculateEmotionConfidence(currentEmotionalState, emotionalInsights, conversationPatterns);
+      
+      if (confidenceScore >= 0.6) { // Only broadcast if we're confident
+        const emotionUpdate = {
+          emotion: currentEmotionalState.detectedMood,
+          intensity: currentEmotionalState.emotionalIntensity,
+          confidence: confidenceScore,
+          reasoning: generateEmotionReasoning(currentEmotionalState, conversationPatterns),
+          timestamp: new Date(),
+          source: 'conversation_analysis'
+        };
+
+        // Broadcast to user's personal room
+        if (websocketService && websocketService.io) {
+          websocketService.sendToUser(userId, 'numina_senses_updated', emotionUpdate);
+          console.log(`🎭 Numina Senses updated for ${userId}: ${emotionUpdate.emotion} (confidence: ${Math.round(confidenceScore * 100)}%)`);
+        } else {
+          console.log('⚠️ WebSocket service not available for emotion broadcasting');
+        }
+      }
+    } catch (error) {
+      console.error('Error broadcasting emotion update:', error);
+    }
 
     const timeContext = {
       currentTime: new Date().toLocaleTimeString(),
