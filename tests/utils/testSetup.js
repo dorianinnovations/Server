@@ -26,7 +26,11 @@ if (typeof jest !== 'undefined') {
 
 // Consolidated test database setup
 export const setupTestDatabase = async () => {
-  const mongoServer = await MongoMemoryServer.create();
+  const mongoServer = await MongoMemoryServer.create({
+    binary: {
+      version: '7.0.3', // Use compatible MongoDB version
+    }
+  });
   const mongoUri = mongoServer.getUri();
   
   await mongoose.connect(mongoUri);
@@ -57,7 +61,7 @@ export const generateTestToken = (userId) => {
 
 // Common test assertions
 export const expectValidUser = (user) => {
-  expect(user).toHaveProperty('_id');
+  expect(user).toHaveProperty('id'); // MongoDB returns 'id' not '_id' in JSON
   expect(user).toHaveProperty('email');
   expect(user).not.toHaveProperty('password'); // Should not leak password
 };

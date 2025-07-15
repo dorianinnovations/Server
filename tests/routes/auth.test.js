@@ -1,12 +1,18 @@
 import request from 'supertest';
-import app from '../../src/server.js';
+import express from 'express';
 import User from '../../src/models/User.js';
+import authRoutes from '../../src/routes/auth.js';
 import { 
   setupTestDatabase, 
   createTestUser, 
   expectValidUser,
   expectValidResponse 
 } from '../utils/testSetup.js';
+
+// Create test app
+const app = express();
+app.use(express.json());
+app.use(authRoutes);
 
 describe('Auth Routes', () => {
   let testDb;

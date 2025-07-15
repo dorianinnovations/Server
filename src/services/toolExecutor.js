@@ -13,11 +13,18 @@ class ToolExecutor {
   constructor() {
     this.llmService = createLLMService();
     this.toolCache = new Map();
-    this.loadTools();
+    // loadTools() will be called from toolRegistry.initialize()
   }
 
   async loadTools() {
     try {
+      // Wait for database connection to be ready
+      const mongoose = await import('mongoose');
+      while (mongoose.default.connection.readyState !== 1) {
+        console.log('ToolExecutor waiting for database connection...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       const tools = await Tool.find({ enabled: true });
       this.toolCache.clear();
       

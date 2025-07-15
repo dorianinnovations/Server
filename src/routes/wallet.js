@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { protect as authMiddleware } from '../middleware/auth.js';
 import toolExecutor from '../services/toolExecutor.js';
 import CreditPool from '../models/CreditPool.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
@@ -16,12 +17,24 @@ router.get('/balance', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    // Execute credit management tool to get balance
-    const result = await toolExecutor.execute({
-      toolName: 'credit_management',
-      args: { action: 'check_balance' },
-      userId
-    });
+    // Get user and credit pool for context
+    const user = await User.findById(userId);
+    const creditPool = await CreditPool.findOne({ userId: userId });
+    
+    const userContext = {
+      userId: userId,
+      user: user,
+      creditPool: creditPool,
+    };
+    
+    const toolCall = {
+      function: {
+        name: 'credit_management',
+        arguments: { action: 'check_balance' },
+      },
+    };
+    
+    const result = await toolExecutor.executeToolCall(toolCall, userContext);
 
     if (!result.success) {
       return res.status(400).json({
@@ -33,8 +46,8 @@ router.get('/balance', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       data: {
-        balance: result.data.balance,
-        currency: result.data.currency || 'USD',
+        balance: result.result.balance,
+        currency: result.result.currency || 'USD',
         lastUpdated: new Date().toISOString()
       }
     });
@@ -73,16 +86,28 @@ router.post('/transactions',
       const userId = req.user.id;
       const { amount, paymentMethodId } = req.body;
 
-      // Execute credit management tool to add funds
-      const result = await toolExecutor.execute({
-        toolName: 'credit_management',
-        args: { 
-          action: 'add_funds_stripe',
-          amount,
-          paymentMethodId
+      // Get user and credit pool for context
+      const user = await User.findById(userId);
+      const creditPool = await CreditPool.findOne({ userId: userId });
+      
+      const userContext = {
+        userId: userId,
+        user: user,
+        creditPool: creditPool,
+      };
+      
+      const toolCall = {
+        function: {
+          name: 'credit_management',
+          arguments: { 
+            action: 'add_funds_stripe',
+            amount,
+            paymentMethodId
+          },
         },
-        userId
-      });
+      };
+
+      const result = await toolExecutor.executeToolCall(toolCall, userContext);
 
       if (!result.success) {
         return res.status(400).json({
@@ -94,10 +119,10 @@ router.post('/transactions',
       res.json({
         success: true,
         data: {
-          transactionId: result.data.transactionId,
-          amount: result.data.amount,
-          newBalance: result.data.newBalance,
-          status: result.data.status
+          transactionId: result.result.transactionId,
+          amount: result.result.amount,
+          newBalance: result.result.newBalance,
+          status: result.result.status
         }
       });
 
@@ -117,16 +142,28 @@ router.get('/transactions', authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const { page = 1, limit = 50 } = req.query;
 
-    // Execute credit management tool to get transaction history
-    const result = await toolExecutor.execute({
-      toolName: 'credit_management',
-      args: { 
-        action: 'get_transactions',
-        page: parseInt(page),
-        limit: parseInt(limit)
+    // Get user and credit pool for context
+    const user = await User.findById(userId);
+    const creditPool = await CreditPool.findOne({ userId: userId });
+    
+    const userContext = {
+      userId: userId,
+      user: user,
+      creditPool: creditPool,
+    };
+    
+    const toolCall = {
+      function: {
+        name: 'credit_management',
+        arguments: { 
+          action: 'get_transactions',
+          page: parseInt(page),
+          limit: parseInt(limit)
+        },
       },
-      userId
-    });
+    };
+
+    const result = await toolExecutor.executeToolCall(toolCall, userContext);
 
     if (!result.success) {
       return res.status(400).json({
@@ -138,11 +175,11 @@ router.get('/transactions', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       data: {
-        transactions: result.data.transactions,
+        transactions: result.result.transactions,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
-          total: result.data.total
+          total: result.result.total
         }
       }
     });
@@ -161,18 +198,30 @@ router.get('/summary', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // Get user and credit pool for context
+    const user = await User.findById(userId);
+    const creditPool = await CreditPool.findOne({ userId: userId });
+    
+    const userContext = {
+      userId: userId,
+      user: user,
+      creditPool: creditPool,
+    };
+
     // Get balance and recent transactions in parallel
     const [balanceResult, transactionsResult] = await Promise.all([
-      toolExecutor.execute({
-        toolName: 'credit_management',
-        args: { action: 'check_balance' },
-        userId
-      }),
-      toolExecutor.execute({
-        toolName: 'credit_management',
-        args: { action: 'get_transactions', limit: 10 },
-        userId
-      })
+      toolExecutor.executeToolCall({
+        function: {
+          name: 'credit_management',
+          arguments: { action: 'check_balance' },
+        },
+      }, userContext),
+      toolExecutor.executeToolCall({
+        function: {
+          name: 'credit_management',
+          arguments: { action: 'get_transactions', limit: 10 },
+        },
+      }, userContext)
     ]);
 
     if (!balanceResult.success || !transactionsResult.success) {
@@ -185,9 +234,9 @@ router.get('/summary', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       data: {
-        balance: balanceResult.data.balance,
-        currency: balanceResult.data.currency || 'USD',
-        recentTransactions: transactionsResult.data.transactions,
+        balance: balanceResult.result.balance,
+        currency: balanceResult.result.currency || 'USD',
+        recentTransactions: transactionsResult.result.transactions,
         lastUpdated: new Date().toISOString()
       }
     });

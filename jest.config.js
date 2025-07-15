@@ -1,5 +1,6 @@
 export default {
   testEnvironment: 'node',
+  testTimeout: 30000, // 30 seconds for database operations
   transform: {
     '^.+\\.js$': 'babel-jest',
   },
