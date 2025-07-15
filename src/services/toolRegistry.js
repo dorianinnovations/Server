@@ -392,6 +392,18 @@ class ToolRegistry {
     return await Tool.find({ enabled: true }).sort({ name: 1 });
   }
 
+  async getToolsForOpenAI() {
+    const tools = await this.getEnabledTools();
+    return tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.schema
+      }
+    }));
+  }
+
   async getToolsByCategory(category) {
     return await Tool.find({ category: category, enabled: true }).sort({ name: 1 });
   }

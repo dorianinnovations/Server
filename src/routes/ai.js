@@ -9,6 +9,8 @@ import personalizationEngine from '../services/personalizationEngine.js';
 import connectionEngine from '../services/connectionEngine.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
+import toolRegistry from '../services/toolRegistry.js';
+import toolExecutor from '../services/toolExecutor.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -421,9 +423,15 @@ Just respond naturally to what they're sharing.`;
         
         console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength}, context: ${contextMultiplier})`);
 
+        // Get available tools for the chat
+        const availableTools = await toolRegistry.getToolsForOpenAI();
+        console.log(`🛠️ Available tools for chat: ${availableTools.length}`);
+
         streamResponse = await llmService.makeStreamingRequest(messages, {
           temperature: 0.9,
-          n_predict: finalTokens
+          n_predict: finalTokens,
+          tools: availableTools,
+          tool_choice: "auto"
         });
       } catch (err) {
         console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);
@@ -462,8 +470,10 @@ Just respond naturally to what they're sharing.`;
             
             try {
               const parsed = JSON.parse(data);
-              if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
-                const content = parsed.choices[0].delta.content;
+              const choice = parsed.choices?.[0];
+              
+              if (choice?.delta?.content) {
+                const content = choice.delta.content;
                 fullContent += content;
                 
                 // Buffer content to reduce streaming speed - send every 3-5 characters or word boundary
@@ -474,6 +484,39 @@ Just respond naturally to what they're sharing.`;
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
                   chunkBuffer = '';
+                }
+              }
+              
+              // Handle tool calls
+              if (choice?.delta?.tool_calls) {
+                console.log(`🛠️ STREAMING: Tool call detected`);
+                const toolCalls = choice.delta.tool_calls;
+                
+                for (const toolCall of toolCalls) {
+                  if (toolCall.function?.name && toolCall.function?.arguments) {
+                    try {
+                      const toolName = toolCall.function.name;
+                      const toolArgs = JSON.parse(toolCall.function.arguments);
+                      
+                      console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
+                      
+                      // Execute the tool
+                      const toolResult = await toolExecutor.executeToolCall({
+                        function: { name: toolName, arguments: toolArgs }
+                      }, { userId, user: await User.findById(userId) });
+                      
+                      // Send tool execution result to the stream
+                      const toolMessage = `\n\n🔧 **${toolName}**: ${toolResult.success ? toolResult.result : 'Tool execution failed: ' + toolResult.error}\n\n`;
+                      res.write(`data: ${JSON.stringify({ content: toolMessage })}\n\n`);
+                      res.flush && res.flush();
+                      
+                    } catch (toolError) {
+                      console.error(`❌ Error executing tool: ${toolError.message}`);
+                      const errorMessage = `\n\n❌ Tool execution failed: ${toolError.message}\n\n`;
+                      res.write(`data: ${JSON.stringify({ content: errorMessage })}\n\n`);
+                      res.flush && res.flush();
+                    }
+                  }
                 }
               }
             } catch (e) {
@@ -546,20 +589,56 @@ Just respond naturally to what they're sharing.`;
       
       console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength})`);
 
+      // Get available tools for the chat  
+      const availableTools = await toolRegistry.getToolsForOpenAI();
+      console.log(`🛠️ Available tools for chat (non-streaming): ${availableTools.length}`);
+
       const response = await llmService.makeLLMRequest(messages, {
         temperature: 0.9,
-        n_predict: finalTokens
+        n_predict: finalTokens,
+        tools: availableTools,
+        tool_choice: "auto"
       });
 
-      console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content.length}`);
-      console.log(`📤 Response content: ${response.content.substring(0, 100)}...`);
+      console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content?.length || 0}`);
+      console.log(`📤 Response content: ${response.content?.substring(0, 100) || 'No content'}...`);
+
+      let finalContent = response.content || '';
+      
+      // Handle tool calls if present
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        console.log(`🛠️ NON-STREAMING: Processing ${response.tool_calls.length} tool calls`);
+        
+        for (const toolCall of response.tool_calls) {
+          try {
+            const toolName = toolCall.function.name;
+            const toolArgs = JSON.parse(toolCall.function.arguments);
+            
+            console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
+            
+            // Execute the tool
+            const toolResult = await toolExecutor.executeToolCall({
+              function: { name: toolName, arguments: toolArgs }
+            }, { userId, user: await User.findById(userId) });
+            
+            // Append tool result to the response
+            const toolMessage = `\n\n🔧 **${toolName}**: ${toolResult.success ? toolResult.result : 'Tool execution failed: ' + toolResult.error}`;
+            finalContent += toolMessage;
+            
+          } catch (toolError) {
+            console.error(`❌ Error executing tool: ${toolError.message}`);
+            const errorMessage = `\n\n❌ Tool execution failed: ${toolError.message}`;
+            finalContent += errorMessage;
+          }
+        }
+      }
 
       // Save conversation to memory
-      if (response.content.trim()) {
+      if (finalContent.trim()) {
         try {
           await ShortTermMemory.insertMany([
             { userId, content: userMessage, role: "user" },
-            { userId, content: response.content.trim(), role: "assistant" }
+            { userId, content: finalContent.trim(), role: "assistant" }
           ]);
           console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
           userCache.invalidateUser(userId);
@@ -580,7 +659,7 @@ Just respond naturally to what they're sharing.`;
       res.json({
         success: true,
         data: {
-          response: response.content,
+          response: finalContent,
           tone: "adaptive",
           suggestedFollowUps: [],
           emotionalSupport: "",

@@ -98,6 +98,8 @@ export const createLLMService = () => {
       stop = null,
       n_predict = 500,
       temperature = 0.8,
+      tools = null,
+      tool_choice = "auto",
     } = options;
 
     try {
@@ -121,6 +123,7 @@ export const createLLMService = () => {
           max_tokens: n_predict,
           temperature: temperature,
           ...(stop && { stop: stop }),
+          ...(tools && tools.length > 0 && { tools: tools, tool_choice: tool_choice }),
           stream: true,
         },
         responseType: "stream",
