@@ -328,6 +328,7 @@ router.post("/completion", protect, async (req, res) => {
 
       let buffer = '';
       let fullContent = '';
+      let chunkBuffer = ''; // Buffer for chunked streaming to reduce speed
       
       streamResponse.data.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -350,8 +351,15 @@ router.post("/completion", protect, async (req, res) => {
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 const content = parsed.choices[0].delta.content;
                 fullContent += content;
-                res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                res.flush && res.flush();
+                
+                // Buffer content to reduce streaming speed - send every 5 characters or word boundary
+                chunkBuffer += content;
+                
+                if (chunkBuffer.length >= 5 || content.includes(' ') || content.includes('\n')) {
+                  res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
+                  res.flush && res.flush();
+                  chunkBuffer = '';
+                }
               }
             } catch (e) {
               console.error('❌ STREAMING: Error parsing OpenRouter data:', e);
@@ -361,6 +369,12 @@ router.post("/completion", protect, async (req, res) => {
       });
       
       streamResponse.data.on("end", () => {
+        // Flush any remaining content in buffer
+        if (chunkBuffer.trim()) {
+          res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
+          res.flush && res.flush();
+        }
+        
         if (fullContent.trim()) {
           // Process the complete response for metadata extraction
           processResponseAndSave(fullContent, userPrompt, userId, userCache)

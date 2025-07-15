@@ -410,6 +410,7 @@ Just respond naturally to what they're sharing.`;
 
       let buffer = '';
       let fullContent = '';
+      let chunkBuffer = ''; // Buffer for chunked streaming to reduce speed
       
       streamResponse.data.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -432,9 +433,16 @@ Just respond naturally to what they're sharing.`;
               if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                 const content = parsed.choices[0].delta.content;
                 fullContent += content;
-                console.log(`📡 STREAMING: Sending chunk: ${content}`);
-                res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                res.flush && res.flush();
+                
+                // Buffer content to reduce streaming speed - send every 3-5 characters or word boundary
+                chunkBuffer += content;
+                
+                if (chunkBuffer.length >= 5 || content.includes(' ') || content.includes('\n')) {
+                  console.log(`📡 STREAMING: Sending chunk: ${chunkBuffer}`);
+                  res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
+                  res.flush && res.flush();
+                  chunkBuffer = '';
+                }
               }
             } catch (e) {
               console.error('❌ STREAMING: Error parsing adaptive chat data:', e);
@@ -444,6 +452,13 @@ Just respond naturally to what they're sharing.`;
       });
       
       streamResponse.data.on("end", () => {
+        // Flush any remaining content in buffer
+        if (chunkBuffer.trim()) {
+          console.log(`📡 STREAMING: Flushing final chunk: ${chunkBuffer}`);
+          res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
+          res.flush && res.flush();
+        }
+        
         console.log(`✅ STREAMING: Adaptive chat completed for user ${userId}, content length: ${fullContent.length}`);
         
         // Save conversation to memory
@@ -459,7 +474,7 @@ Just respond naturally to what they're sharing.`;
             await dataProcessingPipeline.addEvent(userId, 'chat_message', {
               message: userMessage,
               response: fullContent.trim(),
-              emotion: currentEmotionalState.detectedMood,
+              emotion: detectEmotion(userMessage), // Use the detectEmotion function instead
               context: conversationPatterns,
               timestamp: new Date()
             });
@@ -521,7 +536,7 @@ Just respond naturally to what they're sharing.`;
           await dataProcessingPipeline.addEvent(userId, 'chat_message', {
             message: userMessage,
             response: response.content.trim(),
-            emotion: currentEmotionalState.detectedMood,
+            emotion: detectEmotion(userMessage), // Use the detectEmotion function instead
             context: conversationPatterns,
             timestamp: new Date()
           });
