@@ -329,6 +329,13 @@ class ToolRegistry {
     try {
       console.log('Initializing tool registry...');
       
+      // Wait for database connection to be ready
+      const mongoose = await import('mongoose');
+      while (mongoose.default.connection.readyState !== 1) {
+        console.log('Waiting for database connection...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       for (const toolConfig of defaultTools) {
         await this.registerOrUpdateTool(toolConfig);
       }
