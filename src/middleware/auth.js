@@ -7,7 +7,7 @@ console.log("🔐 Initializing authentication middleware...");
 // JWT signing function
 export const signToken = (id) =>
   jwt.sign({ id }, env.JWT_SECRET, {
-    expiresIn: SECURITY_CONFIG.JWT_EXPIRES_IN,
+    expiresIn: env.JWT_EXPIRES_IN,
   });
 
 console.log("✓JWT signing function ready.");
