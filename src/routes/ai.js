@@ -96,6 +96,18 @@ function generateEmotionReasoning(currentEmotionalState, conversationPatterns) {
 router.post('/emotional-state', protect, async (req, res) => {
   try {
     const { recentEmotions, conversationHistory, timeContext } = req.body;
+    const userId = req.user.id;
+    
+    // Create cache key based on input data
+    const cacheKey = `emotional-state:${userId}:${JSON.stringify({ recentEmotions, timeContext }).substring(0, 100)}`;
+    const userCache = createUserCache();
+    
+    // Try to get from cache first (valid for 5 minutes)
+    const cachedResult = userCache.get(cacheKey);
+    if (cachedResult) {
+      console.log(`⚡ Cache hit for emotional state analysis for user ${userId}`);
+      return res.json({ success: true, data: cachedResult });
+    }
     
     const systemPrompt = `You are an expert emotional intelligence analyst. Analyze user emotional patterns and return structured JSON data with emotional state insights.
 
@@ -126,7 +138,7 @@ Time Context: ${JSON.stringify(timeContext)}`;
 
     const response = await llmService.makeLLMRequest(messages, {
       temperature: 0.3,
-      n_predict: 512
+      n_predict: 300
     });
 
     let analysisData;
@@ -148,6 +160,10 @@ Time Context: ${JSON.stringify(timeContext)}`;
       };
     }
 
+    // Cache the result for 5 minutes
+    userCache.set(cacheKey, analysisData, 300000);
+    console.log(`💾 Cached emotional state analysis for user ${userId}`);
+
     res.json({
       success: true,
       data: analysisData
@@ -165,6 +181,18 @@ Time Context: ${JSON.stringify(timeContext)}`;
 router.post('/personality-recommendations', protect, async (req, res) => {
   try {
     const { emotionalProfile, interactionHistory, preferences } = req.body;
+    const userId = req.user.id;
+    
+    // Create cache key based on input data
+    const cacheKey = `personality-recs:${userId}:${JSON.stringify({ emotionalProfile, preferences }).substring(0, 100)}`;
+    const userCache = createUserCache();
+    
+    // Try to get from cache first (valid for 10 minutes)
+    const cachedResult = userCache.get(cacheKey);
+    if (cachedResult) {
+      console.log(`⚡ Cache hit for personality recommendations for user ${userId}`);
+      return res.json({ success: true, data: cachedResult });
+    }
     
     const systemPrompt = `You are a personality analysis expert. Generate personalized recommendations based on user's emotional profile and interaction patterns.
 
@@ -194,7 +222,7 @@ Preferences: ${JSON.stringify(preferences)}`;
 
     const response = await llmService.makeLLMRequest(messages, {
       temperature: 0.4,
-      n_predict: 512
+      n_predict: 300
     });
 
     let recommendationData;
@@ -214,6 +242,10 @@ Preferences: ${JSON.stringify(preferences)}`;
         }
       };
     }
+
+    // Cache the result for 10 minutes
+    userCache.set(cacheKey, recommendationData, 600000);
+    console.log(`💾 Cached personality recommendations for user ${userId}`);
 
     res.json({
       success: true,
@@ -474,7 +506,7 @@ Just respond naturally to what they're sharing.`;
             await dataProcessingPipeline.addEvent(userId, 'chat_message', {
               message: userMessage,
               response: fullContent.trim(),
-              emotion: detectEmotion(userMessage), // Use the detectEmotion function instead
+              emotion: detectSimpleEmotion(userMessage), // Use the detectSimpleEmotion function
               context: conversationPatterns,
               timestamp: new Date()
             });
@@ -536,7 +568,7 @@ Just respond naturally to what they're sharing.`;
           await dataProcessingPipeline.addEvent(userId, 'chat_message', {
             message: userMessage,
             response: response.content.trim(),
-            emotion: detectEmotion(userMessage), // Use the detectEmotion function instead
+            emotion: detectSimpleEmotion(userMessage), // Use the detectSimpleEmotion function
             context: conversationPatterns,
             timestamp: new Date()
           });
