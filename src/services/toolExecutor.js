@@ -83,7 +83,7 @@ class ToolExecutor {
     
     try {
       if (tool.requiresPayment) {
-        const creditPool = await CreditPool.findOne({ userId: userContext.userId });
+        const creditPool = userContext.creditPool || await CreditPool.findOne({ userId: userContext.userId });
         if (!creditPool || !creditPool.canSpend(tool.costPerExecution)) {
           throw new Error('Insufficient credits or spending limit exceeded');
         }

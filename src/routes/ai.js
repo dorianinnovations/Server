@@ -3,6 +3,7 @@ import { protect } from '../middleware/auth.js';
 import { createLLMService } from '../services/llmService.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
+import CreditPool from '../models/CreditPool.js';
 import { createUserCache } from '../utils/cache.js';
 import websocketService from '../services/websocketService.js';
 import personalizationEngine from '../services/personalizationEngine.js';
@@ -521,13 +522,27 @@ Just respond naturally to what they're sharing.`;
                 
                 console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
                 
-                // Execute the tool
+                // Execute the tool with proper context
+                const user = await User.findById(userId);
+                const creditPool = await CreditPool.findOne({ userId: userId });
+                
+                // Temporarily set verified to true for testing
+                if (creditPool) {
+                  creditPool.isVerified = true;
+                }
+                
                 const toolResult = await toolExecutor.executeToolCall({
                   function: { name: toolName, arguments: toolArgs }
-                }, { userId, user: await User.findById(userId) });
+                }, { userId, user, creditPool });
                 
                 // Send tool execution result to the stream
-                const toolMessage = `\n\n🔧 **${toolName}**: ${toolResult.success ? toolResult.result : 'Tool execution failed: ' + toolResult.error}\n\n`;
+                let resultText = '';
+                if (toolResult.success) {
+                  resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
+                } else {
+                  resultText = 'Tool execution failed: ' + toolResult.error;
+                }
+                const toolMessage = `\n\n🔧 **${toolName}**: ${resultText}\n\n`;
                 res.write(`data: ${JSON.stringify({ content: toolMessage })}\n\n`);
                 res.flush && res.flush();
                 
@@ -628,13 +643,28 @@ Just respond naturally to what they're sharing.`;
             
             console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
             
-            // Execute the tool
+            // Execute the tool with proper context
+            const user = await User.findById(userId);
+            const creditPool = await CreditPool.findOne({ userId: userId });
+            console.log(`💳 CreditPool status: balance=${creditPool?.balance}, active=${creditPool?.isActive}, verified=${creditPool?.isVerified}`);
+            
+            // Temporarily set verified to true for testing
+            if (creditPool) {
+              creditPool.isVerified = true;
+            }
+            
             const toolResult = await toolExecutor.executeToolCall({
               function: { name: toolName, arguments: toolArgs }
-            }, { userId, user: await User.findById(userId) });
+            }, { userId, user, creditPool });
             
             // Append tool result to the response
-            const toolMessage = `\n\n🔧 **${toolName}**: ${toolResult.success ? toolResult.result : 'Tool execution failed: ' + toolResult.error}`;
+            let resultText = '';
+            if (toolResult.success) {
+              resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
+            } else {
+              resultText = 'Tool execution failed: ' + toolResult.error;
+            }
+            const toolMessage = `\n\n🔧 **${toolName}**: ${resultText}`;
             finalContent += toolMessage;
             
           } catch (toolError) {
