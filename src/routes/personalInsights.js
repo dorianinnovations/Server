@@ -12,8 +12,22 @@ const router = express.Router();
 /**
  * GET /personal-insights/growth-summary
  * Generate personalized growth insights based on user's emotional journey
+ * Supports both static and streaming modes
  */
 router.get("/growth-summary", protect, rateLimiters.general, async (req, res) => {
+  const stream = req.query.stream === 'true';
+  
+  if (stream) {
+    return generateStreamingGrowthSummary(req, res);
+  } else {
+    return generateStaticGrowthSummary(req, res);
+  }
+});
+
+/**
+ * Generate static (non-streaming) growth summary
+ */
+async function generateStaticGrowthSummary(req, res) {
   try {
     const userId = req.user.id;
     const timeframe = req.query.timeframe || 'week'; // week, month, quarter
@@ -142,7 +156,187 @@ Keep it personal, specific, and under 300 words. Focus on progress, not deficits
       error: error.message
     });
   }
-});
+}
+
+/**
+ * Generate streaming growth summary with real-time progress updates
+ */
+async function generateStreamingGrowthSummary(req, res) {
+  try {
+    const userId = req.user.id;
+    const timeframe = req.query.timeframe || 'week';
+    const userCache = createUserCache(userId);
+    
+    console.log(`📊 Generating STREAMING ${timeframe} growth summary for user ${userId}`);
+    
+    // Set up streaming headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    // Send initial status
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Analyzing your emotional patterns...',
+      progress: 10
+    })}\n\n`);
+    
+    // Get user's recent emotional data
+    const user = await User.findById(userId);
+    if (!user) {
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: 'User not found' 
+      })}\n\n`);
+      res.end();
+      return;
+    }
+
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Processing your emotional journey...',
+      progress: 30
+    })}\n\n`);
+
+    // Calculate timeframe boundaries
+    const now = new Date();
+    const timeframeDays = {
+      'week': 7,
+      'month': 30,
+      'quarter': 90
+    }[timeframe] || 7;
+    
+    const startDate = new Date(now.getTime() - (timeframeDays * 24 * 60 * 60 * 1000));
+    
+    // Get emotional logs within timeframe
+    const emotionalLogs = user.emotionalLog.filter(log => 
+      new Date(log.timestamp) >= startDate
+    );
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Calculating growth metrics...',
+      progress: 50
+    })}\n\n`);
+    
+    // Get conversation history
+    const recentMemory = await getRecentMemory(userId, userCache, timeframeDays * 24 * 60);
+    const conversationCount = recentMemory.length;
+    
+    // Calculate growth metrics
+    const emotionFrequency = {};
+    let totalIntensity = 0;
+    let positiveCount = 0;
+    
+    emotionalLogs.forEach(log => {
+      const emotion = log.emotion || 'neutral';
+      emotionFrequency[emotion] = (emotionFrequency[emotion] || 0) + 1;
+      
+      if (log.intensity) {
+        totalIntensity += log.intensity;
+      }
+      
+      if (['happy', 'excited', 'grateful', 'content', 'optimistic'].includes(emotion.toLowerCase())) {
+        positiveCount++;
+      }
+    });
+    
+    const avgIntensity = emotionalLogs.length > 0 ? totalIntensity / emotionalLogs.length : 0;
+    const positivityRatio = emotionalLogs.length > 0 ? positiveCount / emotionalLogs.length : 0;
+    const engagementScore = Math.min(100, (conversationCount / timeframeDays) * 25);
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Generating personalized AI insights...',
+      progress: 70
+    })}\n\n`);
+    
+    // Generate AI insights with streaming
+    const llmService = createLLMService();
+    const insightsPrompt = `Analyze this user's ${timeframe} emotional and engagement data to provide personalized growth insights:
+
+EMOTIONAL PATTERNS:
+- Total emotional logs: ${emotionalLogs.length}
+- Most frequent emotions: ${Object.entries(emotionFrequency).sort(([,a], [,b]) => b - a).slice(0, 3).map(([emotion, count]) => `${emotion} (${count}x)`).join(', ')}
+- Average emotional intensity: ${avgIntensity.toFixed(1)}/10
+- Positivity ratio: ${(positivityRatio * 100).toFixed(1)}%
+
+ENGAGEMENT METRICS:
+- Conversation sessions: ${conversationCount}
+- Daily engagement: ${(conversationCount / timeframeDays).toFixed(1)} sessions/day
+- Engagement score: ${engagementScore.toFixed(1)}/100
+
+TASK: Create a warm, encouraging personal growth summary that:
+1. Celebrates specific improvements and patterns you notice
+2. Identifies 2-3 key growth areas with actionable suggestions
+3. Sets realistic goals for the next ${timeframe}
+4. Maintains an optimistic, supportive tone
+
+Keep it personal, specific, and under 300 words. Focus on progress, not deficits.`;
+
+    const messages = [
+      { role: 'system', content: 'You are a growth-focused wellness coach providing personalized insights. Be encouraging, specific, and actionable.' },
+      { role: 'user', content: insightsPrompt }
+    ];
+
+    const response = await llmService.makeLLMRequest(messages, {
+      temperature: 0.7,
+      n_predict: 350
+    });
+
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Finalizing your growth insights...',
+      progress: 90
+    })}\n\n`);
+
+    const insights = {
+      timeframe,
+      period: `${startDate.toLocaleDateString()} - ${now.toLocaleDateString()}`,
+      metrics: {
+        emotionalLogs: emotionalLogs.length,
+        avgIntensity: Math.round(avgIntensity * 10) / 10,
+        positivityRatio: Math.round(positivityRatio * 100),
+        engagementScore: Math.round(engagementScore),
+        conversationCount,
+        topEmotions: Object.entries(emotionFrequency)
+          .sort(([,a], [,b]) => b - a)
+          .slice(0, 5)
+          .map(([emotion, count]) => ({ emotion, count }))
+      },
+      aiInsights: response.content,
+      generatedAt: new Date().toISOString()
+    };
+
+    // Send final complete result
+    res.write(`data: ${JSON.stringify({
+      type: 'complete',
+      data: insights
+    })}\n\n`);
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    logger.info(`Streaming personal growth insights generated`, {
+      userId,
+      timeframe,
+      emotionalLogs: emotionalLogs.length,
+      engagementScore: Math.round(engagementScore)
+    });
+
+  } catch (error) {
+    console.error("Error generating streaming growth summary:", error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error', 
+      message: 'Failed to generate growth insights',
+      error: error.message 
+    })}\n\n`);
+    res.end();
+  }
+}
 
 /**
  * GET /personal-insights/milestones

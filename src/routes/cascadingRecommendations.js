@@ -12,10 +12,23 @@ import logger from "../utils/logger.js";
 const router = express.Router();
 
 /**
- * Generate cascading recommendations with reasoning trees
+ * Generate cascading recommendations with streaming support
  * These recommendations build upon each other, creating a flow of insights
  */
 router.post("/generate", protect, rateLimiters.general, async (req, res) => {
+  const { stream = false } = req.body;
+  
+  if (stream) {
+    return generateStreamingRecommendations(req, res);
+  } else {
+    return generateStaticRecommendations(req, res);
+  }
+});
+
+/**
+ * Generate static (non-streaming) cascading recommendations
+ */
+async function generateStaticRecommendations(req, res) {
   try {
     const userId = req.user.id;
     const { 
@@ -82,7 +95,125 @@ router.post("/generate", protect, rateLimiters.general, async (req, res) => {
       error: error.message
     });
   }
-});
+}
+
+/**
+ * Generate streaming cascading recommendations
+ */
+async function generateStreamingRecommendations(req, res) {
+  try {
+    const userId = req.user.id;
+    const { 
+      depth = 3, 
+      focusArea = 'general', 
+      includeReasoningTree = true,
+      contextWindow = 30 
+    } = req.body;
+    
+    console.log(`🌊 Generating STREAMING cascading recommendations for user ${userId}`);
+    
+    // Set up streaming headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    const userCache = createUserCache(userId);
+    
+    // Send initial status
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Analyzing your patterns...',
+      progress: 10
+    })}\n\n`);
+    
+    // Gather comprehensive user context
+    const [user, recentMemory, behaviorProfile] = await Promise.all([
+      User.findById(userId).lean(),
+      getRecentMemory(userId, userCache, contextWindow),
+      UserBehaviorProfile.findOne({ userId }).lean()
+    ]);
+
+    if (!user) {
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error', 
+        message: 'User not found' 
+      })}\n\n`);
+      res.end();
+      return;
+    }
+
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Generating personalized recommendations...',
+      progress: 30
+    })}\n\n`);
+
+    // Analyze user patterns and create context
+    const userContext = await analyzeUserContext(user, recentMemory, behaviorProfile);
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Building cascading recommendation tree...',
+      progress: 50
+    })}\n\n`);
+    
+    // Generate the cascading recommendation tree with streaming
+    const cascadingTree = await generateCascadingTreeWithStreaming(userContext, {
+      depth,
+      focusArea,
+      includeReasoningTree,
+      userId
+    }, (chunk) => {
+      // Stream each recommendation as it's generated
+      res.write(`data: ${JSON.stringify({ 
+        type: 'recommendation_chunk',
+        content: chunk
+      })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status', 
+      message: 'Finalizing recommendations...',
+      progress: 90
+    })}\n\n`);
+
+    // Send final complete result
+    res.write(`data: ${JSON.stringify({
+      type: 'complete',
+      data: {
+        userId,
+        focusArea,
+        depth,
+        generatedAt: new Date().toISOString(),
+        context: userContext.summary,
+        cascadingTree,
+        reasoningTree: includeReasoningTree ? cascadingTree.reasoning : null
+      }
+    })}\n\n`);
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+    logger.info(`Streaming cascading recommendations generated`, {
+      userId,
+      depth,
+      focusArea,
+      recommendationCount: cascadingTree.recommendations.length
+    });
+
+  } catch (error) {
+    console.error("Error generating streaming cascading recommendations:", error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error', 
+      message: 'Failed to generate cascading recommendations',
+      error: error.message 
+    })}\n\n`);
+    res.end();
+  }
+}
 
 /**
  * Get reasoning tree for a specific recommendation
@@ -495,6 +626,109 @@ function extractPrimaryFactors(userContext) {
     'Engagement level and consistency',
     'Temporal and contextual factors'
   ];
+}
+
+/**
+ * Generate cascading tree with streaming support
+ */
+async function generateCascadingTreeWithStreaming(userContext, options, onChunk) {
+  const llmService = createLLMService();
+  
+  const cascadingPrompt = `Create a cascading recommendation system for this user based on their context. Each recommendation should build upon the previous ones, creating a natural flow of growth and discovery.
+
+USER CONTEXT:
+${userContext.summary}
+
+EMOTIONAL PATTERNS: ${JSON.stringify(userContext.emotionalTrends)}
+INTERESTS: ${userContext.interests.map(i => i.category || i).join(', ')}
+GROWTH AREAS: ${JSON.stringify(userContext.growthAreas)}
+ENGAGEMENT: ${userContext.engagement.level} (${userContext.engagement.score}/100)
+TIME CONTEXT: ${userContext.timeContext.timeOfDay} on ${userContext.timeContext.dayOfWeek}
+
+TASK: Create a cascading recommendation tree with ${options.depth} levels, focusing on "${options.focusArea}". Each level should:
+
+1. PRIMARY LEVEL: Core recommendation based on immediate needs/patterns
+2. SECONDARY LEVEL: Supporting actions that amplify the primary recommendation
+3. TERTIARY LEVEL: Advanced opportunities that emerge from success in previous levels
+
+For each recommendation, include:
+- title: Clear, actionable title
+- description: Why this matters now
+- reasoning: Step-by-step logic for this recommendation
+- cascadeConnection: How it connects to other recommendations
+- potentialOutcomes: What success looks like
+- difficulty: 1-10 scale
+- timeframe: immediate, short-term, long-term
+- category: growth, wellness, creativity, connection, learning
+
+Return a JSON structure with cascading recommendations and reasoning tree.`;
+
+  const messages = [
+    { 
+      role: 'system', 
+      content: 'You are an advanced AI system that creates personalized cascading recommendations. Think deeply about cause-and-effect relationships and how actions build upon each other.' 
+    },
+    { role: 'user', content: cascadingPrompt }
+  ];
+
+  // For now, we'll use the non-streaming version but call the callback as we process
+  const response = await llmService.makeLLMRequest(messages, {
+    temperature: 0.8,
+    n_predict: 1200
+  });
+
+  // Stream the response content as it's processed
+  if (onChunk) {
+    onChunk("Processing AI insights...");
+  }
+
+  try {
+    // Parse the AI response as JSON
+    const aiResponse = JSON.parse(response.content);
+    
+    if (onChunk) {
+      onChunk("Generating reasoning tree...");
+    }
+    
+    // Enhance with reasoning tree if requested
+    if (options.includeReasoningTree) {
+      aiResponse.reasoning = await generateReasoningTree(aiResponse, userContext);
+    }
+    
+    if (onChunk) {
+      onChunk("Finalizing recommendations...");
+    }
+    
+    return aiResponse;
+  } catch (parseError) {
+    console.warn("Failed to parse AI response as JSON, creating fallback structure");
+    
+    if (onChunk) {
+      onChunk("Using fallback recommendations...");
+    }
+    
+    // Fallback structure if JSON parsing fails
+    return {
+      recommendations: [
+        {
+          level: 1,
+          title: "Personalized Growth Focus",
+          description: "Based on your patterns, focusing on consistent small actions will create meaningful progress.",
+          reasoning: "Your engagement patterns suggest you respond well to structured approaches.",
+          cascadeConnection: "foundation",
+          potentialOutcomes: ["Increased confidence", "Better habits", "Clearer direction"],
+          difficulty: 3,
+          timeframe: "short-term",
+          category: "growth"
+        }
+      ],
+      reasoning: options.includeReasoningTree ? {
+        methodology: "Pattern-based analysis with cascading logic",
+        confidence: 0.85,
+        primaryFactors: ["Emotional patterns", "Engagement history", "Stated preferences"]
+      } : null
+    };
+  }
 }
 
 export default router;
