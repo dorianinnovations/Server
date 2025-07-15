@@ -5,13 +5,21 @@ import compression from "compression";
 import https from "https";
 import http from "http";
 
-console.log("🚀 Starting Numina Server initialization...");
+/**
+ * Numina AI Server - Main Application Entry Point
+ * 
+ * This server provides the backend infrastructure for the Numina AI mobile application,
+ * featuring personalized AI, emotional analytics, collective intelligence, and
+ * comprehensive tool integration capabilities.
+ */
 
-// Centralized configuration
+console.log("Initializing Numina AI Server...");
+
+// Core configuration imports
 import "./config/environment.js";
 import connectDB from "./config/database.js";
 
-// Import routes
+// API route imports
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js";
 import healthRoutes from "./routes/health.js";
@@ -22,10 +30,6 @@ import emotionsRoutes from "./routes/emotions.js";
 import emotionHistoryRoutes from "./routes/emotionHistory.js";
 import emotionMetricsRoutes from "./routes/emotionMetrics.js";
 import analyticsRoutes from "./routes/analytics.js";
-// Collective data features temporarily removed for optimization
-// import collectiveDataRoutes from "./routes/collectiveData.js";
-// import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
-// import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
 import aiRoutes from "./routes/ai.js";
 import cloudRoutes from "./routes/cloud.js";
 import mobileRoutes from "./routes/mobile.js";
@@ -38,8 +42,9 @@ import testPersonalizationRoutes from "./routes/testPersonalization.js";
 import testGPT4oRoutes from "./routes/testGPT4o.js";
 import numinaPersonalityRoutes from "./routes/numinaPersonality.js";
 import toolsRoutes from "./routes/tools.js";
+import walletRoutes from "./routes/wallet.js";
 
-console.log("✓All route modules imported successfully");
+console.log("Route modules imported successfully");
 
 // Import tool system
 import toolRegistry from "./services/toolRegistry.js";
@@ -52,25 +57,24 @@ import { globalErrorHandler } from "./utils/errorHandler.js";
 import { performanceMiddleware as enhancedPerformanceMiddleware, completionPerformanceMiddleware } from "./middleware/performanceMiddleware.js";
 import cacheMiddleware from "./middleware/cacheMiddleware.js";
 
-console.log("✓All middleware modules imported successfully");
+console.log("Middleware modules imported successfully");
 
-// Import utilities
+// Utility imports
 import { createCache, setupMemoryMonitoring } from "./utils/cache.js";
 
-console.log("✓Utility modules imported successfully");
+console.log("Utility modules imported successfully");
 
-// Import services
 import taskScheduler from "./services/taskScheduler.js";
-// import scheduledAggregationService from "./services/scheduledAggregationService.js";
+
 import websocketService from "./services/websocketService.js";
 import redisService from "./services/redisService.js";
 import pushNotificationService from "./services/pushNotificationService.js";
 import offlineSyncService from "./services/offlineSyncService.js";
 import dataProcessingPipeline from "./services/dataProcessingPipeline.js";
 
-console.log("✓Service modules imported successfully");
+console.log("Service modules imported successfully");
 
-// Import models (to ensure they're loaded)
+// Database model imports (ensures models are loaded)
 import "./models/User.js";
 import "./models/ShortTermMemory.js";
 import "./models/Task.js";
@@ -80,24 +84,27 @@ import "./models/CollectiveSnapshot.js";
 import "./models/Event.js";
 import "./models/UserBehaviorProfile.js";
 
-console.log("✓All database models loaded successfully");
+console.log("Database models loaded successfully");
 
 const app = express();
 
-console.log("✓Express application created");
+console.log("Express application created");
 
-// Initialize server function
+/**
+ * Server initialization function
+ * Sets up all middleware, services, and routes
+ */
 const initializeServer = async () => {
-  console.log("🔧 Beginning server initialization...");
+  console.log("Beginning server initialization...");
   
-  // --- Memory Cleanup Middleware ---
+  // Memory cleanup middleware for performance optimization
   const memoryCleanupMiddleware = (req, res, next) => {
     res.on('finish', () => {
-      // Clean up request-specific data
+      // Clean up request-specific data to prevent memory leaks
       if (req.user) delete req.user;
       if (req.body) delete req.body;
       
-      // Suggest GC on large responses
+      // Trigger garbage collection for large responses
       if (res.get('content-length') > 100000) {
         setImmediate(() => {
           if (global.gc) global.gc();
@@ -107,16 +114,16 @@ const initializeServer = async () => {
     next();
   };
 
-  console.log("✓Memory cleanup middleware configured");
+  console.log("Memory cleanup middleware configured");
 
-  // --- Initialize Redis and WebSocket Services ---
-  console.log("🔧 Initializing Redis service...");
+  // Initialize core services
+  console.log("Initializing Redis service...");
   await redisService.initialize();
   
-  console.log("🔧 Initializing push notification service...");
+  console.log("Initializing push notification service...");
   await pushNotificationService.initialize();
 
-  // --- Security and Middleware Configuration ---
+  // Configure security and middleware stack
   app.use(enhancedPerformanceMiddleware);
   app.use(corsSecurity);
   app.use(express.json({ limit: "1mb" }));
@@ -127,22 +134,22 @@ const initializeServer = async () => {
   app.use(memoryCleanupMiddleware);
   app.use(requestLogger);
 
-  // Add caching middleware for API routes
+  // Configure caching for mobile-optimized routes
   app.use('/api', cacheMiddleware.mobileOptimizedCache());
   app.use('/mobile', cacheMiddleware.mobileOptimizedCache({ mobileTtl: 900 }));
 
-  console.log("✓All security and middleware configured");
+  console.log("Security and middleware configured");
 
-  // --- Database Connection ---
-  console.log("🗄️ Connecting to MongoDB...");
+  // Establish database connection
+  console.log("Connecting to MongoDB...");
   await connectDB();
 
-  // --- Tool System Initialization ---
-  console.log("🔧 Initializing tool system...");
+  // Initialize AI tool system
+  console.log("Initializing tool system...");
   await toolRegistry.initialize();
-  console.log("✓Tool system initialized");
+  console.log("Tool system initialized");
 
-  // --- Global HTTPS Agent for Performance ---
+  // Configure HTTPS agent for external API calls
   const globalHttpsAgent = new https.Agent({
     keepAlive: true,
     maxSockets: 50,
@@ -151,16 +158,16 @@ const initializeServer = async () => {
   });
 
   app.locals.httpsAgent = globalHttpsAgent;
-  console.log("✓HTTPS agent configured for external API calls");
+  console.log("HTTPS agent configured for external API calls");
 
-  // --- Cache and Memory Management ---
-  console.log("💾 Initializing cache and memory monitoring...");
+  // Initialize cache and memory monitoring
+  console.log("Initializing cache and memory monitoring...");
   app.locals.cache = createCache();
   setupMemoryMonitoring();
-  console.log("✓Cache and memory monitoring initialized");
+  console.log("Cache and memory monitoring initialized");
 
-  // --- Route Registration ---
-  console.log("🛣️ Registering API routes...");
+  // Register API routes
+  console.log("Registering API routes...");
   app.use("/", authRoutes);
   app.use("/", userRoutes);
   app.use("/", healthRoutes);
@@ -171,99 +178,97 @@ const initializeServer = async () => {
   app.use("/emotion-history", emotionHistoryRoutes);
   app.use("/emotion-metrics", emotionMetricsRoutes);
   app.use("/analytics", analyticsRoutes);
-  // Collective data endpoints temporarily disabled
-  // app.use("/collective-data", collectiveDataRoutes);
-  // app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-  // app.use("/scheduled-aggregation", scheduledAggregationRoutes);
   app.use("/ai", aiRoutes);
   app.use("/personalized-ai", personalizedAIRoutes);
   app.use("/test-personalization", testPersonalizationRoutes);
   app.use("/test-gpt4o", testGPT4oRoutes);
   app.use("/numina-personality", numinaPersonalityRoutes);
   app.use("/tools", toolsRoutes);
+  app.use("/wallet", walletRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
   app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
   
-  // Mobile-optimized routes
+  // Register mobile-optimized routes
   app.use("/", mobileRoutes);
   app.use("/", syncRoutes);
   app.use("/", apiDocsRoutes);
 
-  console.log("✓All API routes registered successfully");
+  console.log("API routes registered successfully");
 
-  // Simple test endpoint to verify routing
+  // Health check endpoint for monitoring
   app.get("/test", (req, res) => {
     res.json({
       success: true,
-      message: "Server is running correctly",
+      message: "Numina AI Server is operational",
       timestamp: new Date().toISOString(),
-      routes: [
-        "/collective-data/health",
-        "/collective-snapshots/health",
-        "/collective-data/formatted",
-        "/collective-snapshots/latest"
+      version: "1.0.0",
+      features: [
+        "Personalized AI",
+        "Emotional Analytics", 
+        "Collective Intelligence",
+        "Tool Integration"
       ]
     });
   });
 
-  console.log("✓Test endpoint configured");
+  console.log("Health check endpoint configured");
 
-  // --- Environment Variable Validation ---
-  console.log("🔍 Validating environment variables...");
+  // Validate required environment variables
+  console.log("Validating environment variables...");
   const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGO_URI'];
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
   if (missingEnvVars.length > 0) {
-    console.warn('⚠️ Missing required environment variables:', missingEnvVars.join(', '));
-    console.warn('⚠️ Some features may not work properly without these variables');
+    console.warn('Warning: Missing required environment variables:', missingEnvVars.join(', '));
+    console.warn('Some features may not work properly without these variables');
   } else {
-    console.log("✓All required environment variables are present");
+    console.log("All required environment variables are present");
   }
 
-  // --- Scheduled Aggregation Service ---
+  // Initialize scheduled services (production only)
   if (process.env.NODE_ENV !== 'test') {
-    console.log("⏰ Starting scheduled aggregation service...");
+    console.log("Initializing scheduled services...");
     // Scheduled aggregation service temporarily disabled for optimization
     // scheduledAggregationService.start();
-    console.log("✓Collective data services disabled - focusing on core features");
+    console.log("Collective data services disabled - focusing on core features");
   }
 
-  // --- Error Handling ---
-  console.log("🛡️ Configuring error handling middleware...");
+  // Configure error handling
+  console.log("Configuring error handling middleware...");
   app.use(errorLogger);
   app.use(globalErrorHandler);
-  console.log("✓Error handling middleware configured");
+  console.log("Error handling middleware configured");
 
-  // --- Server Start ---
+  // Start HTTP server (production only)
   if (process.env.NODE_ENV !== 'test') {
-    console.log("🌐 Starting HTTP server...");
+    console.log("Starting HTTP server...");
     const PORT = process.env.PORT || 5000;
     
     // Create HTTP server for WebSocket integration
     const server = http.createServer(app);
     
-    // Initialize WebSocket service
-    console.log("🔌 Initializing WebSocket service...");
+    // Initialize WebSocket service for real-time features
+    console.log("Initializing WebSocket service...");
     websocketService.initialize(server);
     
     server.listen(PORT, () => {
-      console.log(`✓API running → http://localhost:${PORT}`);
-      console.log(`✓WebSocket service running → ws://localhost:${PORT}`);
-      console.log(`✓Performance optimizations enabled`);
-      console.log(`✓Memory optimization enabled, initial RSS: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
-      console.log(`✓Redis service: ${redisService.isRedisConnected() ? 'Connected' : 'Fallback mode'}`);
-      console.log(`✓Push notifications: ${pushNotificationService.isInitialized ? 'Enabled' : 'Disabled'}`);
-      console.log("🎉 Server initialization completed successfully!");
+      console.log(`Numina AI Server running on port ${PORT}`);
+      console.log(`WebSocket service active on ws://localhost:${PORT}`);
+      console.log(`Performance optimizations: Enabled`);
+      console.log(`Memory usage: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
+      console.log(`Redis service: ${redisService.isRedisConnected() ? 'Connected' : 'Fallback mode'}`);
+      console.log(`Push notifications: ${pushNotificationService.isInitialized ? 'Enabled' : 'Disabled'}`);
+      console.log("Server initialization completed successfully");
     });
   }
 };
 
-// Start the server
+// Initialize server (production only)
 if (process.env.NODE_ENV !== 'test') {
-  console.log("🚀 Launching server...");
+  console.log("Launching Numina AI Server...");
   initializeServer().catch(err => {
-    console.error('❌ Failed to initialize server:', err);
+    console.error('Failed to initialize server:', err);
     process.exit(1);
   });
 }
