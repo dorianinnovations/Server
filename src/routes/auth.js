@@ -97,7 +97,7 @@ router.post(
   }
 );
 
-// Spotify Connection Routes
+// Spotify Connection Routes - Now Active
 router.post('/spotify/connect', protect, async (req, res) => {
   try {
     const { 
