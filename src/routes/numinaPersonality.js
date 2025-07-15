@@ -100,20 +100,58 @@ router.post('/react-to-interaction', protect, async (req, res) => {
 });
 
 /**
+ * EMERGENCY STOP - Clear all intervals immediately
+ */
+router.post('/emergency-stop', protect, async (req, res) => {
+  try {
+    let stoppedCount = 0;
+    
+    // Clear all normal intervals
+    if (global.numinaIntervals) {
+      Object.keys(global.numinaIntervals).forEach(userId => {
+        clearInterval(global.numinaIntervals[userId]);
+        stoppedCount++;
+      });
+      global.numinaIntervals = {};
+    }
+    
+    // Clear all rapid intervals
+    if (global.rapidNuminaIntervals) {
+      Object.keys(global.rapidNuminaIntervals).forEach(userId => {
+        clearInterval(global.rapidNuminaIntervals[userId]);
+        stoppedCount++;
+      });
+      global.rapidNuminaIntervals = {};
+    }
+    
+    logger.info(`🛑 EMERGENCY STOP: Cleared ${stoppedCount} intervals`);
+    
+    res.json({
+      success: true,
+      message: `Emergency stop completed - cleared ${stoppedCount} intervals`,
+      stoppedCount
+    });
+    
+  } catch (error) {
+    logger.error('Error during emergency stop:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to stop intervals'
+    });
+  }
+});
+
+/**
  * Generate continuous Numina personality updates (for real-time status)
+ * TEMPORARILY DISABLED TO PREVENT API SPAM
  */
 router.post('/continuous-updates', protect, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { interval = 8000 } = req.body; // Default 8 seconds for frequent updates
-
-    // Start continuous updates for this user
-    startContinuousNuminaUpdates(userId, interval);
-
+    // DISABLED: These intervals were causing continuous OpenRouter API calls
     res.json({
-      success: true,
-      message: 'Continuous Numina updates started',
-      interval
+      success: false,
+      message: 'Continuous updates temporarily disabled to prevent API spam',
+      note: 'Use /emergency-stop to clear any running intervals'
     });
 
   } catch (error) {
@@ -314,6 +352,10 @@ Be authentic, caring, and responsive to the user's emotional state.`;
  * Start continuous updates for a user
  */
 function startContinuousNuminaUpdates(userId, interval) {
+  // 🛑 EMERGENCY STOP: Function disabled to prevent API spam
+  console.log(`🛑 startContinuousNuminaUpdates DISABLED for user ${userId} - preventing API spam`);
+  return;
+  
   // Clear any existing interval for this user
   if (global.numinaIntervals && global.numinaIntervals[userId]) {
     clearInterval(global.numinaIntervals[userId]);
@@ -366,6 +408,10 @@ function startContinuousNuminaUpdates(userId, interval) {
  * Start rapid updates for active chat sessions (every 5 seconds)
  */
 function startRapidNuminaUpdates(userId) {
+  // 🛑 EMERGENCY STOP: Function disabled to prevent API spam
+  console.log(`🛑 startRapidNuminaUpdates DISABLED for user ${userId} - preventing API spam`);
+  return;
+  
   // Clear any existing intervals
   if (global.numinaIntervals && global.numinaIntervals[userId]) {
     clearInterval(global.numinaIntervals[userId]);
