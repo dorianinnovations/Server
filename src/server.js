@@ -30,6 +30,7 @@ import aiRoutes from "./routes/ai.js";
 import cloudRoutes from "./routes/cloud.js";
 import mobileRoutes from "./routes/mobile.js";
 import personalInsightsRoutes from "./routes/personalInsights.js";
+import cascadingRecommendationsRoutes from "./routes/cascadingRecommendations.js";
 import syncRoutes from "./routes/sync.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
 import personalizedAIRoutes from "./routes/personalizedAI.js";
@@ -171,6 +172,7 @@ const initializeServer = async () => {
   app.use("/numina-personality", numinaPersonalityRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
+  app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
   
   // Mobile-optimized routes
   app.use("/", mobileRoutes);
