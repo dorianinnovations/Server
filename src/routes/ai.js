@@ -561,7 +561,7 @@ Just respond naturally to what they're sharing.`;
               message: userMessage,
               response: fullContent.trim(),
               emotion: detectSimpleEmotion(userMessage), // Use the detectSimpleEmotion function
-              context: conversationPatterns,
+              context: conversationContext,
               timestamp: new Date()
             });
           }).catch(err => {
@@ -613,6 +613,7 @@ Just respond naturally to what they're sharing.`;
 
       console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content?.length || 0}`);
       console.log(`📤 Response content: ${response.content?.substring(0, 100) || 'No content'}...`);
+      console.log(`🔍 Tool calls in response:`, response.tool_calls ? response.tool_calls.length : 'None');
 
       let finalContent = response.content || '';
       
@@ -659,7 +660,7 @@ Just respond naturally to what they're sharing.`;
             message: userMessage,
             response: response.content.trim(),
             emotion: detectSimpleEmotion(userMessage), // Use the detectSimpleEmotion function
-            context: conversationPatterns,
+            context: conversationContext,
             timestamp: new Date()
           });
         } catch (err) {
