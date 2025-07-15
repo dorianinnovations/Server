@@ -37,8 +37,13 @@ import personalizedAIRoutes from "./routes/personalizedAI.js";
 import testPersonalizationRoutes from "./routes/testPersonalization.js";
 import testGPT4oRoutes from "./routes/testGPT4o.js";
 import numinaPersonalityRoutes from "./routes/numinaPersonality.js";
+import toolsRoutes from "./routes/tools.js";
 
 console.log("✓All route modules imported successfully");
+
+// Import tool system
+import toolRegistry from "./services/toolRegistry.js";
+import triggerSystem from "./services/triggerSystem.js";
 
 // Import middleware
 import { corsSecurity, securityHeaders, validateContent, sanitizeRequest } from "./middleware/security.js";
@@ -132,6 +137,11 @@ const initializeServer = async () => {
   console.log("🗄️ Connecting to MongoDB...");
   await connectDB();
 
+  // --- Tool System Initialization ---
+  console.log("🔧 Initializing tool system...");
+  await toolRegistry.initialize();
+  console.log("✓Tool system initialized");
+
   // --- Global HTTPS Agent for Performance ---
   const globalHttpsAgent = new https.Agent({
     keepAlive: true,
@@ -170,6 +180,7 @@ const initializeServer = async () => {
   app.use("/test-personalization", testPersonalizationRoutes);
   app.use("/test-gpt4o", testGPT4oRoutes);
   app.use("/numina-personality", numinaPersonalityRoutes);
+  app.use("/tools", toolsRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
   app.use("/cascading-recommendations", cascadingRecommendationsRoutes);

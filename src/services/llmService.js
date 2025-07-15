@@ -18,6 +18,8 @@ export const createLLMService = () => {
       stop = null,
       n_predict = 500,
       temperature = 0.8,
+      tools = null,
+      tool_choice = "auto",
     } = options;
 
     const llmStartTime = Date.now();
@@ -28,6 +30,20 @@ export const createLLMService = () => {
         ? promptOrMessages 
         : parsePromptToMessages(promptOrMessages);
       
+      const requestData = {
+        model: "openai/gpt-4o",
+        messages: messages,
+        max_tokens: n_predict,
+        temperature: temperature,
+        ...(stop && { stop: stop }),
+      };
+
+      // Add tool calling parameters if tools are provided
+      if (tools && tools.length > 0) {
+        requestData.tools = tools;
+        requestData.tool_choice = tool_choice;
+      }
+      
       const response = await axios({
         method: "POST",
         url: openRouterApiUrl,
@@ -37,13 +53,7 @@ export const createLLMService = () => {
           "Referer": getRefererUrl(),
           "X-Title": "Numina Server",
         },
-        data: {
-          model: "openai/gpt-4o",
-          messages: messages,
-          max_tokens: n_predict,
-          temperature: temperature,
-          ...(stop && { stop: stop }),
-        },
+        data: requestData,
         timeout: 45000, // 45 seconds timeout
       });
 
@@ -52,11 +62,14 @@ export const createLLMService = () => {
         `OpenRouter API Response Status: ${response.status} (${responseTime}ms)`
       );
 
-      // Return response in consistent format
+      const choice = response.data.choices[0];
+      
+      // Return response in consistent format with tool calls support
       return {
-        content: response.data.choices[0].message.content,
-        stop_reason: response.data.choices[0].finish_reason,
+        content: choice.message.content,
+        stop_reason: choice.finish_reason,
         usage: response.data.usage,
+        tool_calls: choice.message.tool_calls || null,
       };
     } catch (error) {
       console.error("OpenRouter API Error:", {
