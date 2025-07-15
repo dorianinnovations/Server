@@ -43,6 +43,7 @@ import testGPT4oRoutes from "./routes/testGPT4o.js";
 import numinaPersonalityRoutes from "./routes/numinaPersonality.js";
 import toolsRoutes from "./routes/tools.js";
 import walletRoutes from "./routes/wallet.js";
+import subscriptionRoutes from "./routes/subscription.js";
 import debugRoutes from "./routes/debug.js";
 
 console.log("Route modules imported successfully");
@@ -186,6 +187,7 @@ const initializeServer = async () => {
   app.use("/numina-personality", numinaPersonalityRoutes);
   app.use("/tools", toolsRoutes);
   app.use("/wallet", walletRoutes);
+  app.use("/subscription", subscriptionRoutes);
   app.use("/", debugRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);

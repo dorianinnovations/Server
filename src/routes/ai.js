@@ -526,11 +526,6 @@ Just respond naturally to what they're sharing.`;
                 const user = await User.findById(userId);
                 const creditPool = await CreditPool.findOne({ userId: userId });
                 
-                // Temporarily set verified to true for testing
-                if (creditPool) {
-                  creditPool.isVerified = true;
-                }
-                
                 const toolResult = await toolExecutor.executeToolCall({
                   function: { name: toolName, arguments: toolArgs }
                 }, { userId, user, creditPool });
@@ -647,11 +642,7 @@ Just respond naturally to what they're sharing.`;
             const user = await User.findById(userId);
             const creditPool = await CreditPool.findOne({ userId: userId });
             console.log(`💳 CreditPool status: balance=${creditPool?.balance}, active=${creditPool?.isActive}, verified=${creditPool?.isVerified}`);
-            
-            // Temporarily set verified to true for testing
-            if (creditPool) {
-              creditPool.isVerified = true;
-            }
+            console.log(`🔓 Numina Trace status: ${user?.hasActiveNuminaTrace() ? 'Active' : 'Inactive'}`);
             
             const toolResult = await toolExecutor.executeToolCall({
               function: { name: toolName, arguments: toolArgs }

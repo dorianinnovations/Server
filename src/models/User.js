@@ -29,6 +29,23 @@ const userSchema = new mongoose.Schema({
       timestamp: { type: Date, default: Date.now },
     },
   ],
+  subscription: {
+    numinaTrace: {
+      isActive: { type: Boolean, default: false },
+      startDate: { type: Date, default: null },
+      endDate: { type: Date, default: null },
+      plan: { 
+        type: String, 
+        enum: ['monthly', 'yearly', 'lifetime'], 
+        default: null 
+      },
+      paymentMethodId: { type: String, default: null },
+      autoRenew: { type: Boolean, default: true },
+      cancelledAt: { type: Date, default: null },
+      lastPaymentDate: { type: Date, default: null },
+      nextBillingDate: { type: Date, default: null }
+    }
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -45,6 +62,24 @@ userSchema.pre("save", async function (next) {
 // Method to compare passwords
 userSchema.methods.correctPassword = async function (candidatePassword, userPassword) {
   return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+// Method to check if user has active Numina Trace subscription
+userSchema.methods.hasActiveNuminaTrace = function() {
+  const trace = this.subscription?.numinaTrace;
+  if (!trace || !trace.isActive) return false;
+  
+  // Check if subscription hasn't expired
+  if (trace.endDate && new Date() > trace.endDate) {
+    return false;
+  }
+  
+  // Check if it's cancelled
+  if (trace.cancelledAt && new Date() > trace.cancelledAt) {
+    return false;
+  }
+  
+  return true;
 };
 
 // Method to get safe user data (without password)
