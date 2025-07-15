@@ -20,7 +20,12 @@ export default async function spotifyPlaylist(args, userContext) {
         success: false,
         error: 'Spotify account not connected',
         action: 'connect_spotify',
-        message: 'Please connect your Spotify account to create playlists.',
+        message: 'To create Spotify playlists, you need to connect your Spotify account. Visit the Spotify Developer Console to get access tokens, or ask me to help you find popular tracks instead.',
+        fallbackOptions: [
+          'I can suggest popular songs for your mood/genre without Spotify',
+          'I can help you create a playlist concept that you can manually add to Spotify',
+          'I can search for music recommendations online'
+        ],
       };
     }
 

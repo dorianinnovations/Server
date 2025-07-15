@@ -316,6 +316,105 @@ const defaultTools = [
       },
     ],
   },
+  {
+    name: 'web_search',
+    description: 'Search the internet for real-time information including restaurants, businesses, events, and current data',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query for finding information on the internet',
+        },
+        searchType: {
+          type: 'string',
+          enum: ['general', 'restaurants', 'businesses', 'events', 'news', 'places'],
+          description: 'Type of search to perform',
+          default: 'general',
+        },
+        location: {
+          type: 'string',
+          description: 'Location context for local searches (city, address, coordinates)',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results to return',
+          minimum: 1,
+          maximum: 20,
+          default: 10,
+        },
+      },
+      required: ['query'],
+    },
+    implementation: 'webSearch',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read'],
+    triggers: [
+      {
+        eventType: 'user_action',
+        conditions: {
+          'data.action': 'search_request',
+          'data.context.needsRealTime': true,
+        },
+        priority: 9,
+      },
+    ],
+  },
+  {
+    name: 'music_recommendations',
+    description: 'Get music recommendations and track suggestions based on mood, genre, or artist preferences without requiring Spotify',
+    category: 'entertainment',
+    schema: {
+      type: 'object',
+      properties: {
+        mood: {
+          type: 'string',
+          enum: ['happy', 'sad', 'energetic', 'calm', 'focus', 'workout', 'romantic', 'chill'],
+          description: 'Mood for music recommendations',
+        },
+        genre: {
+          type: 'string',
+          description: 'Music genre preference (e.g., pop, rock, jazz, electronic)',
+        },
+        artist: {
+          type: 'string',
+          description: 'Similar artists or specific artist to base recommendations on',
+        },
+        playlistName: {
+          type: 'string',
+          description: 'Name for the recommended playlist',
+        },
+        trackCount: {
+          type: 'number',
+          description: 'Number of track recommendations to provide',
+          minimum: 5,
+          maximum: 50,
+          default: 20,
+        },
+      },
+      required: [],
+    },
+    implementation: 'musicRecommendations',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read'],
+    triggers: [
+      {
+        eventType: 'user_action',
+        conditions: {
+          'data.action': 'music_request',
+          'data.context.noSpotify': true,
+        },
+        priority: 7,
+      },
+    ],
+  },
 ];
 
 class ToolRegistry {

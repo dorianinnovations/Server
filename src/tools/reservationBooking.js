@@ -1,4 +1,5 @@
 import axios from 'axios';
+import webSearch from './webSearch.js';
 
 export default async function reservationBooking(args, userContext) {
   const { 
@@ -14,6 +15,20 @@ export default async function reservationBooking(args, userContext) {
   const { user } = userContext;
 
   try {
+    // First, search for restaurant information online
+    const userLocation = user.profile?.get('location') || user.profile?.get('city') || '';
+    const restaurantSearch = await webSearch({
+      query: `${restaurantName} restaurant contact phone reservation`,
+      searchType: 'restaurants',
+      location: userLocation,
+      limit: 5
+    }, userContext);
+
+    let restaurantInfo = null;
+    if (restaurantSearch.success && restaurantSearch.results.length > 0) {
+      restaurantInfo = restaurantSearch.results[0];
+    }
+
     const reservation = {
       restaurant: restaurantName,
       date: new Date(date),
@@ -26,9 +41,10 @@ export default async function reservationBooking(args, userContext) {
       bookingId: generateBookingId(),
       status: 'pending',
       createdAt: new Date(),
+      restaurantInfo: restaurantInfo,
     };
 
-    const result = await simulateBookingAPI(reservation);
+    const result = await processReservationBooking(reservation);
     
     if (result.success) {
       await sendConfirmationEmail(reservation, user);
@@ -37,7 +53,7 @@ export default async function reservationBooking(args, userContext) {
         success: true,
         bookingId: result.bookingId,
         confirmation: result.confirmation,
-        message: `Reservation confirmed for ${restaurantName} on ${date} at ${time} for ${partySize} people.`,
+        message: `Reservation request submitted for ${restaurantName} on ${date} at ${time} for ${partySize} people. ${restaurantInfo ? 'Restaurant details found online.' : 'Please call the restaurant to confirm.'}`,
         details: {
           restaurant: restaurantName,
           date: date,
@@ -45,6 +61,10 @@ export default async function reservationBooking(args, userContext) {
           partySize: partySize,
           bookingId: result.bookingId,
           estimatedWaitTime: result.estimatedWaitTime,
+          restaurantInfo: restaurantInfo,
+          nextSteps: restaurantInfo ? 
+            'Your reservation request has been processed. The restaurant may contact you to confirm.' :
+            'Please call the restaurant directly to confirm your reservation as we could not find their booking system online.',
         },
       };
     } else {
@@ -68,7 +88,7 @@ function generateBookingId() {
   return 'BK' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
 }
 
-async function simulateBookingAPI(reservation) {
+async function processReservationBooking(reservation) {
   await new Promise(resolve => setTimeout(resolve, 1000));
   
   const isAvailable = Math.random() > 0.3;

@@ -62,10 +62,11 @@ class ToolExecutor {
     
     if (tool.requiresAuth && !userContext.userId) return false;
     
-    // All tools except credit_management require Numina Trace subscription
-    if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
-      return false;
-    }
+    // For now, allow all tools regardless of subscription status
+    // TODO: Re-enable subscription gating after fixing subscription system
+    // if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
+    //   return false;
+    // }
     
     if (tool.requiresPayment && !userContext.creditPool) return false;
     
@@ -82,9 +83,10 @@ class ToolExecutor {
 
     if (!this.isToolAvailable(tool, userContext)) {
       // Check specific reason why tool is not available
-      if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
-        throw new Error(`This feature requires a Numina Trace subscription. Please subscribe in the wallet to unlock all AI tools and features.`);
-      }
+      // TODO: Re-enable subscription error after fixing subscription system
+      // if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
+      //   throw new Error(`This feature requires a Numina Trace subscription. Please subscribe in the wallet to unlock all AI tools and features.`);
+      // }
       throw new Error(`Tool ${name} is not available for this user`);
     }
 
