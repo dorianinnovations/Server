@@ -1,7 +1,7 @@
 import express from "express";
 import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
-import { signToken } from "../middleware/auth.js";
+import { signToken, protect } from "../middleware/auth.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG } from "../config/constants.js";
 
 const router = express.Router();
@@ -96,5 +96,109 @@ router.post(
     }
   }
 );
+
+// Spotify Connection Routes
+router.post('/spotify/connect', protect, async (req, res) => {
+  try {
+    const { 
+      accessToken, 
+      refreshToken, 
+      spotifyUserId, 
+      spotifyEmail, 
+      spotifyDisplayName, 
+      expiresIn 
+    } = req.body;
+    
+    const userId = req.user.id;
+    
+    // Update user with Spotify connection data
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          'profile.spotifyAccessToken': accessToken,
+          'profile.spotifyRefreshToken': refreshToken,
+          'profile.spotifyUserId': spotifyUserId,
+          'profile.spotifyEmail': spotifyEmail,
+          'profile.spotifyDisplayName': spotifyDisplayName,
+          'profile.spotifyConnectedAt': new Date(),
+          'profile.spotifyTokenExpiresAt': new Date(Date.now() + (expiresIn * 1000))
+        }
+      },
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    console.log(`🎵 Spotify connected for user ${userId} (${spotifyDisplayName})`);
+    
+    res.json({
+      success: true,
+      message: 'Spotify account connected successfully',
+      data: {
+        spotifyUserId,
+        spotifyDisplayName,
+        spotifyEmail,
+        connectedAt: user.profile.spotifyConnectedAt
+      }
+    });
+    
+  } catch (error) {
+    console.error('Spotify connection error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to connect Spotify account'
+    });
+  }
+});
+
+router.post('/spotify/disconnect', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Remove Spotify data from user profile
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $unset: {
+          'profile.spotifyAccessToken': '',
+          'profile.spotifyRefreshToken': '',
+          'profile.spotifyUserId': '',
+          'profile.spotifyEmail': '',
+          'profile.spotifyDisplayName': '',
+          'profile.spotifyConnectedAt': '',
+          'profile.spotifyTokenExpiresAt': ''
+        }
+      },
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+    
+    console.log(`🎵 Spotify disconnected for user ${userId}`);
+    
+    res.json({
+      success: true,
+      message: 'Spotify account disconnected successfully'
+    });
+    
+  } catch (error) {
+    console.error('Spotify disconnection error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to disconnect Spotify account'
+    });
+  }
+});
 
 export default router; 
