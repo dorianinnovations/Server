@@ -487,37 +487,12 @@ Just respond naturally to what they're sharing.`;
                 }
               }
               
-              // Handle tool calls
+              // Handle tool calls (but don't execute in streaming - handle after completion)
               if (choice?.delta?.tool_calls) {
-                console.log(`🛠️ STREAMING: Tool call detected`);
-                const toolCalls = choice.delta.tool_calls;
-                
-                for (const toolCall of toolCalls) {
-                  if (toolCall.function?.name && toolCall.function?.arguments) {
-                    try {
-                      const toolName = toolCall.function.name;
-                      const toolArgs = JSON.parse(toolCall.function.arguments);
-                      
-                      console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
-                      
-                      // Execute the tool
-                      const toolResult = await toolExecutor.executeToolCall({
-                        function: { name: toolName, arguments: toolArgs }
-                      }, { userId, user: await User.findById(userId) });
-                      
-                      // Send tool execution result to the stream
-                      const toolMessage = `\n\n🔧 **${toolName}**: ${toolResult.success ? toolResult.result : 'Tool execution failed: ' + toolResult.error}\n\n`;
-                      res.write(`data: ${JSON.stringify({ content: toolMessage })}\n\n`);
-                      res.flush && res.flush();
-                      
-                    } catch (toolError) {
-                      console.error(`❌ Error executing tool: ${toolError.message}`);
-                      const errorMessage = `\n\n❌ Tool execution failed: ${toolError.message}\n\n`;
-                      res.write(`data: ${JSON.stringify({ content: errorMessage })}\n\n`);
-                      res.flush && res.flush();
-                    }
-                  }
-                }
+                console.log(`🛠️ STREAMING: Tool call detected - will execute after stream completes`);
+                // Store tool calls for execution after streaming
+                if (!streamResponse.toolCalls) streamResponse.toolCalls = [];
+                streamResponse.toolCalls.push(...choice.delta.tool_calls);
               }
             } catch (e) {
               console.error('❌ STREAMING: Error parsing adaptive chat data:', e);
@@ -526,12 +501,48 @@ Just respond naturally to what they're sharing.`;
         }
       });
       
-      streamResponse.data.on("end", () => {
+      streamResponse.data.on("end", async () => {
         // Flush any remaining content in buffer
         if (chunkBuffer.trim()) {
           console.log(`📡 STREAMING: Flushing final chunk: ${chunkBuffer}`);
           res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
           res.flush && res.flush();
+        }
+        
+        // Execute any tool calls after streaming completes
+        if (streamResponse.toolCalls && streamResponse.toolCalls.length > 0) {
+          console.log(`🛠️ STREAMING: Executing ${streamResponse.toolCalls.length} tool calls`);
+          
+          for (const toolCall of streamResponse.toolCalls) {
+            if (toolCall.function?.name && toolCall.function?.arguments) {
+              try {
+                const toolName = toolCall.function.name;
+                const toolArgs = JSON.parse(toolCall.function.arguments);
+                
+                console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
+                
+                // Execute the tool
+                const toolResult = await toolExecutor.executeToolCall({
+                  function: { name: toolName, arguments: toolArgs }
+                }, { userId, user: await User.findById(userId) });
+                
+                // Send tool execution result to the stream
+                const toolMessage = `\n\n🔧 **${toolName}**: ${toolResult.success ? toolResult.result : 'Tool execution failed: ' + toolResult.error}\n\n`;
+                res.write(`data: ${JSON.stringify({ content: toolMessage })}\n\n`);
+                res.flush && res.flush();
+                
+                fullContent += toolMessage;
+                
+              } catch (toolError) {
+                console.error(`❌ Error executing tool: ${toolError.message}`);
+                const errorMessage = `\n\n❌ Tool execution failed: ${toolError.message}\n\n`;
+                res.write(`data: ${JSON.stringify({ content: errorMessage })}\n\n`);
+                res.flush && res.flush();
+                
+                fullContent += errorMessage;
+              }
+            }
+          }
         }
         
         console.log(`✅ STREAMING: Adaptive chat completed for user ${userId}, content length: ${fullContent.length}`);
