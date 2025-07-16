@@ -22,40 +22,43 @@ function isToolRequiredMessage(message) {
   
   const lowerMessage = message.toLowerCase();
   
-  // Obvious tool-requiring patterns
+  // Natural, seamless tool-requiring patterns
   const toolTriggers = [
-    // Search requests
-    /search|find|look up|google|what.*about|tell me about|information on/,
+    // Natural search requests
+    /what.*is|who.*is|where.*is|when.*is|how.*to|can you find|show me|get me|i need.*info/,
     
-    // Weather requests
-    /weather|forecast|temperature|rain|snow|sunny|cloudy/,
+    // Weather (very natural)
+    /weather|forecast|temperature|rain|snow|sunny|cloudy|how.*hot|how.*cold/,
     
-    // Financial requests
-    /stock|crypto|bitcoin|ethereum|currency|exchange rate|price of.*\$/,
+    // Financial (natural language)
+    /stock.*price|bitcoin.*price|how much.*cost|currency.*rate|dollar.*euro/,
     
-    // Music requests
-    /music|song|playlist|recommend.*music|play.*music/,
+    // Music (seamless)
+    /play.*music|some music|music for|songs for|playlist|recommend.*songs/,
     
-    // Restaurant/booking requests
-    /restaurant|book.*table|reservation|food near|dinner/,
+    // Food/restaurants (natural)
+    /hungry|food|restaurant|where.*eat|dinner|lunch|good.*food/,
     
-    // Travel requests
-    /travel|trip|flight|hotel|itinerary|vacation/,
+    // Travel (seamless)
+    /going to|visiting|trip to|travel to|vacation|flight to|hotel in/,
     
-    // Calculator requests
-    /calculate|math|equation|\d+.*[\+\-\*\/].*\d+/,
+    // Math (natural)
+    /calculate|what.*plus|what.*minus|how much.*is|\d+.*[\+\-\*\/].*\d+/,
     
-    // Translation requests
-    /translate|in.*language|how.*say.*in/,
+    // Translation (seamless)
+    /how.*say|translate|in.*language|speak.*spanish|mean in/,
     
-    // Code/technical requests
-    /code|programming|function|script|debug/,
+    // Code help (natural)
+    /code.*help|programming|write.*function|debug|error in.*code/,
     
-    // Time/date requests
-    /time|timezone|convert.*time|what time/,
+    // Time (natural)
+    /what time|time.*in|timezone|convert.*time|time difference/,
     
-    // QR/password generation
-    /qr code|generate.*password|password.*strong/,
+    // Quick generation (seamless)
+    /qr.*code|need.*password|secure.*password|generate/,
+    
+    // Question words that often need tools
+    /^(what|where|when|who|how|why).*\?/,
   ];
   
   // Check if message matches any tool triggers
@@ -747,11 +750,11 @@ Just respond naturally to what they're sharing.`;
               ...toolMessages
             ];
             
-            // Make follow-up request for AI response to tools
+            // Make follow-up request for AI response to tools - OPTIMIZED FOR SPEED
             console.log(`🔄 Making follow-up request with ${toolMessages.length} tool results`);
             const followUpResponse = await llmService.makeStreamingRequest(followUpMessages, {
-              temperature: 0.9,
-              n_predict: 300,
+              temperature: 0.7,  // Lower temp = faster responses
+              n_predict: 120,    // Much smaller for speed
               tools: [],
               tool_choice: "none"
             });
