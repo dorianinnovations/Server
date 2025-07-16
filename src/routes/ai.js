@@ -19,38 +19,95 @@ const llmService = createLLMService();
 // Helper function to generate user-friendly tool execution messages
 function getToolExecutionMessage(toolName, toolArgs) {
   switch (toolName) {
+    // Search Tools (FAST)
     case 'web_search':
       return `🔍 Searching the web for: "${toolArgs.query}"`;
-    case 'music_recommendations':
-      return `🎵 Finding music recommendations for mood: ${toolArgs.mood}`;
+    case 'news_search':
+      return `📰 Searching latest news: "${toolArgs.query}"`;
+    case 'social_search':
+      return `🐦 Searching ${toolArgs.platform || 'social media'}: "${toolArgs.query}"`;
+    case 'academic_search':
+      return `🎓 Searching academic papers: "${toolArgs.query}"`;
+    case 'image_search':
+      return `🖼️ Finding images: "${toolArgs.query}"`;
+    
+    // Quick Utilities
     case 'weather_check':
       return `🌤️ Checking weather for: ${toolArgs.location}`;
+    case 'timezone_converter':
+      return `🕐 Converting time: ${toolArgs.time} ${toolArgs.fromTimezone} → ${toolArgs.toTimezone}`;
+    case 'calculator':
+      return `🧮 Calculating: ${toolArgs.expression}`;
+    case 'translation':
+      return `🌐 Translating to ${toolArgs.toLanguage}: "${toolArgs.text?.substring(0, 30)}..."`;
+    
+    // Financial Tools
+    case 'stock_lookup':
+      return `📈 Getting ${toolArgs.symbol} stock data`;
+    case 'crypto_lookup':
+      return `₿ Getting ${toolArgs.symbol} crypto price`;
+    case 'currency_converter':
+      return `💱 Converting ${toolArgs.amount} ${toolArgs.fromCurrency} → ${toolArgs.toCurrency}`;
+    
+    // Music & Entertainment
+    case 'music_recommendations':
+      return `🎵 Finding music recommendations for mood: ${toolArgs.mood || 'general'}`;
+    case 'spotify_playlist':
+      return `🎧 Creating Spotify playlist: "${toolArgs.playlistName}"`;
+    
+    // Creative & Professional
+    case 'text_generator':
+      return `✍️ Generating ${toolArgs.type} content: "${toolArgs.topic}"`;
+    case 'code_generator':
+      return `💻 Writing ${toolArgs.language} code: "${toolArgs.description?.substring(0, 40)}..."`;
+    case 'linkedin_helper':
+      return `💼 Creating LinkedIn ${toolArgs.type}: "${toolArgs.topic}"`;
+    case 'email_assistant':
+      return `📧 ${toolArgs.action === 'draft' ? 'Drafting' : 'Processing'} email: "${toolArgs.subject || 'message'}"`;
+    
+    // Health & Wellness
+    case 'fitness_tracker':
+      return `💪 ${toolArgs.action === 'log_workout' ? 'Logging' : 'Tracking'} fitness: ${toolArgs.workoutType || 'activity'}`;
+    case 'nutrition_lookup':
+      return `🥗 Analyzing nutrition for: ${toolArgs.food}`;
+    
+    // Lifestyle Tools
     case 'reservation_booking':
-      return `📅 Booking reservation at ${toolArgs.restaurantName} for ${toolArgs.partySize} people`;
+      return `🍽️ Booking at ${toolArgs.restaurantName} for ${toolArgs.partySize} people`;
+    case 'itinerary_generator':
+      return `✈️ Planning ${toolArgs.duration}-day trip to ${toolArgs.destination}`;
+    case 'credit_management':
+      return `💳 ${toolArgs.action === 'check_balance' ? 'Checking' : 'Managing'} credits`;
+    
+    // Quick Generators
+    case 'qr_generator':
+      return `📱 Generating QR code for ${toolArgs.type}: "${toolArgs.content?.substring(0, 30)}..."`;
+    case 'password_generator':
+      return `🔒 ${toolArgs.action === 'generate' ? 'Generating' : 'Checking'} secure password`;
+    
+    // Legacy tools
     case 'calendar_management':
       return `📆 Managing calendar event: ${toolArgs.title}`;
     case 'email_management':
       return `📧 Processing email: ${toolArgs.subject}`;
     case 'text_analysis':
-      return `📝 Analyzing text for sentiment and insights`;
+      return `📝 Analyzing text for insights`;
     case 'image_analysis':
       return `🖼️ Analyzing image content`;
-    case 'language_translation':
-      return `🌐 Translating text to ${toolArgs.targetLanguage}`;
-    case 'math_calculation':
-      return `🧮 Performing calculation: ${toolArgs.expression}`;
     case 'file_management':
       return `📁 Managing file: ${toolArgs.fileName}`;
     case 'social_media_post':
-      return `📱 Creating social media post for ${toolArgs.platform}`;
+      return `📱 Creating ${toolArgs.platform} post`;
     case 'expense_tracking':
-      return `💰 Tracking expense: $${toolArgs.amount} for ${toolArgs.category}`;
+      return `💰 Tracking $${toolArgs.amount} expense`;
     case 'habit_tracking':
       return `✅ Tracking habit: ${toolArgs.habitName}`;
     case 'goal_management':
       return `🎯 Managing goal: ${toolArgs.goalTitle}`;
+    
     default:
-      return `⚙️ Executing ${toolName}...`;
+      const displayName = toolName.replace(/_/g, ' ');
+      return `⚙️ Executing ${displayName}...`;
   }
 }
 

@@ -415,6 +415,413 @@ const defaultTools = [
       },
     ],
   },
+  // FAST SEARCH VARIANTS
+  {
+    name: 'news_search',
+    description: 'Search for latest news articles and breaking news on any topic',
+    category: 'information',
+    schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'News search query' },
+        timeRange: { type: 'string', enum: ['hour', 'day', 'week', 'month'], default: 'day' },
+        source: { type: 'string', description: 'Specific news source (optional)' },
+        category: { type: 'string', enum: ['general', 'business', 'tech', 'sports', 'entertainment'] }
+      },
+      required: ['query']
+    },
+    implementation: 'newsSearch',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'social_search',
+    description: 'Search social media platforms for trending topics and discussions',
+    category: 'social',
+    schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Social media search query' },
+        platform: { type: 'string', enum: ['twitter', 'reddit', 'linkedin', 'all'], default: 'all' },
+        timeRange: { type: 'string', enum: ['hour', 'day', 'week'], default: 'day' }
+      },
+      required: ['query']
+    },
+    implementation: 'socialSearch',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'academic_search',
+    description: 'Search academic papers, research articles, and scholarly content',
+    category: 'research',
+    schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Academic search query' },
+        field: { type: 'string', description: 'Academic field or discipline' },
+        yearRange: { type: 'string', description: 'Year range (e.g., 2020-2024)' }
+      },
+      required: ['query']
+    },
+    implementation: 'academicSearch',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'image_search',
+    description: 'Search for images based on descriptions or keywords',
+    category: 'media',
+    schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Image search query' },
+        size: { type: 'string', enum: ['small', 'medium', 'large'], default: 'medium' },
+        color: { type: 'string', description: 'Dominant color filter' },
+        type: { type: 'string', enum: ['photo', 'illustration', 'vector'], default: 'photo' }
+      },
+      required: ['query']
+    },
+    implementation: 'imageSearch',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+
+  // QUICK UTILITY TOOLS
+  {
+    name: 'weather_check',
+    description: 'Get current weather and forecast for any location',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        location: { type: 'string', description: 'City, address, or coordinates' },
+        days: { type: 'number', minimum: 1, maximum: 7, default: 1, description: 'Forecast days' },
+        units: { type: 'string', enum: ['metric', 'imperial'], default: 'metric' }
+      },
+      required: ['location']
+    },
+    implementation: 'weatherCheck',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'timezone_converter',
+    description: 'Convert time between different time zones',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        time: { type: 'string', description: 'Time to convert (HH:MM or full datetime)' },
+        fromTimezone: { type: 'string', description: 'Source timezone (e.g., EST, PST, UTC)' },
+        toTimezone: { type: 'string', description: 'Target timezone' },
+        date: { type: 'string', description: 'Date for conversion (YYYY-MM-DD)' }
+      },
+      required: ['time', 'fromTimezone', 'toTimezone']
+    },
+    implementation: 'timezoneConverter',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'calculator',
+    description: 'Perform mathematical calculations and conversions',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        expression: { type: 'string', description: 'Mathematical expression to calculate' },
+        type: { type: 'string', enum: ['basic', 'scientific', 'unit_conversion'], default: 'basic' },
+        fromUnit: { type: 'string', description: 'Unit to convert from (for conversions)' },
+        toUnit: { type: 'string', description: 'Unit to convert to (for conversions)' }
+      },
+      required: ['expression']
+    },
+    implementation: 'calculator',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+
+  // FINANCIAL TOOLS
+  {
+    name: 'stock_lookup',
+    description: 'Get real-time stock prices, market data, and financial information',
+    category: 'finance',
+    schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Stock ticker symbol (e.g., AAPL, GOOGL)' },
+        timeRange: { type: 'string', enum: ['1d', '1w', '1m', '1y'], default: '1d' },
+        includeNews: { type: 'boolean', default: false, description: 'Include recent news about the stock' }
+      },
+      required: ['symbol']
+    },
+    implementation: 'stockLookup',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'crypto_lookup',
+    description: 'Get cryptocurrency prices, market cap, and trading data',
+    category: 'finance',
+    schema: {
+      type: 'object',
+      properties: {
+        symbol: { type: 'string', description: 'Crypto symbol (e.g., BTC, ETH, DOGE)' },
+        currency: { type: 'string', default: 'USD', description: 'Base currency for prices' },
+        timeRange: { type: 'string', enum: ['1h', '24h', '7d', '30d'], default: '24h' }
+      },
+      required: ['symbol']
+    },
+    implementation: 'cryptoLookup',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'currency_converter',
+    description: 'Convert between different currencies with live exchange rates',
+    category: 'finance',
+    schema: {
+      type: 'object',
+      properties: {
+        amount: { type: 'number', description: 'Amount to convert' },
+        fromCurrency: { type: 'string', description: 'Source currency code (e.g., USD, EUR)' },
+        toCurrency: { type: 'string', description: 'Target currency code' }
+      },
+      required: ['amount', 'fromCurrency', 'toCurrency']
+    },
+    implementation: 'currencyConverter',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+
+  // CREATIVE TOOLS
+  {
+    name: 'text_generator',
+    description: 'Generate creative text content like emails, posts, stories, and marketing copy',
+    category: 'creative',
+    schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['email', 'social_post', 'blog_post', 'story', 'marketing_copy', 'poem'] },
+        topic: { type: 'string', description: 'Topic or subject for the content' },
+        tone: { type: 'string', enum: ['professional', 'casual', 'funny', 'formal', 'creative'], default: 'professional' },
+        length: { type: 'string', enum: ['short', 'medium', 'long'], default: 'medium' },
+        targetAudience: { type: 'string', description: 'Target audience for the content' }
+      },
+      required: ['type', 'topic']
+    },
+    implementation: 'textGenerator',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: true,
+    costPerExecution: 0.50,
+    permissions: ['read', 'execute']
+  },
+  {
+    name: 'code_generator',
+    description: 'Generate code snippets, functions, and programming solutions',
+    category: 'development',
+    schema: {
+      type: 'object',
+      properties: {
+        language: { type: 'string', description: 'Programming language (e.g., JavaScript, Python, Java)' },
+        description: { type: 'string', description: 'Description of what the code should do' },
+        framework: { type: 'string', description: 'Framework or library to use (optional)' },
+        complexity: { type: 'string', enum: ['simple', 'intermediate', 'advanced'], default: 'simple' }
+      },
+      required: ['language', 'description']
+    },
+    implementation: 'codeGenerator',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: true,
+    costPerExecution: 1.00,
+    permissions: ['read', 'execute']
+  },
+
+  // HEALTH & WELLNESS
+  {
+    name: 'fitness_tracker',
+    description: 'Track workouts, set fitness goals, and get exercise recommendations',
+    category: 'health',
+    schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['log_workout', 'get_recommendation', 'track_progress'] },
+        workoutType: { type: 'string', description: 'Type of workout (cardio, strength, yoga, etc.)' },
+        duration: { type: 'number', description: 'Workout duration in minutes' },
+        intensity: { type: 'string', enum: ['low', 'medium', 'high'] },
+        goal: { type: 'string', description: 'Fitness goal (weight loss, muscle gain, endurance)' }
+      },
+      required: ['action']
+    },
+    implementation: 'fitnessTracker',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read', 'write']
+  },
+  {
+    name: 'nutrition_lookup',
+    description: 'Get nutritional information for foods and meal planning',
+    category: 'health',
+    schema: {
+      type: 'object',
+      properties: {
+        food: { type: 'string', description: 'Food item or meal to look up' },
+        quantity: { type: 'string', description: 'Quantity or serving size' },
+        includeAlternatives: { type: 'boolean', default: false, description: 'Include healthier alternatives' }
+      },
+      required: ['food']
+    },
+    implementation: 'nutritionLookup',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+
+  // SOCIAL & COMMUNICATION
+  {
+    name: 'linkedin_helper',
+    description: 'Generate LinkedIn posts, connection messages, and professional content',
+    category: 'professional',
+    schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['post', 'connection_message', 'comment', 'article_idea'] },
+        topic: { type: 'string', description: 'Topic or theme for the content' },
+        industry: { type: 'string', description: 'Industry context' },
+        tone: { type: 'string', enum: ['professional', 'thought_leadership', 'inspirational'], default: 'professional' }
+      },
+      required: ['type', 'topic']
+    },
+    implementation: 'linkedinHelper',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: true,
+    costPerExecution: 0.25,
+    permissions: ['read', 'execute']
+  },
+  {
+    name: 'email_assistant',
+    description: 'Draft, reply to, and manage emails with AI assistance',
+    category: 'productivity',
+    schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['draft', 'reply', 'summarize', 'schedule'] },
+        subject: { type: 'string', description: 'Email subject' },
+        recipient: { type: 'string', description: 'Recipient name or context' },
+        tone: { type: 'string', enum: ['formal', 'casual', 'friendly', 'urgent'], default: 'professional' },
+        content: { type: 'string', description: 'Email content or original message to reply to' }
+      },
+      required: ['action']
+    },
+    implementation: 'emailAssistant',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: true,
+    costPerExecution: 0.25,
+    permissions: ['read', 'write', 'execute']
+  },
+
+  // QUICK LOOKUPS
+  {
+    name: 'translation',
+    description: 'Translate text between languages instantly',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Text to translate' },
+        fromLanguage: { type: 'string', description: 'Source language (auto-detect if not specified)' },
+        toLanguage: { type: 'string', description: 'Target language' },
+        includePhonetic: { type: 'boolean', default: false, description: 'Include phonetic pronunciation' }
+      },
+      required: ['text', 'toLanguage']
+    },
+    implementation: 'translation',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'qr_generator',
+    description: 'Generate QR codes for URLs, text, contact info, and more',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'Content to encode in QR code' },
+        type: { type: 'string', enum: ['url', 'text', 'email', 'phone', 'wifi'], default: 'text' },
+        size: { type: 'string', enum: ['small', 'medium', 'large'], default: 'medium' }
+      },
+      required: ['content']
+    },
+    implementation: 'qrGenerator',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
+    name: 'password_generator',
+    description: 'Generate secure passwords and check password strength',
+    category: 'security',
+    schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['generate', 'check_strength'], default: 'generate' },
+        length: { type: 'number', minimum: 8, maximum: 64, default: 16 },
+        includeSymbols: { type: 'boolean', default: true },
+        includeNumbers: { type: 'boolean', default: true },
+        password: { type: 'string', description: 'Password to check strength (for check_strength action)' }
+      }
+    },
+    implementation: 'passwordGenerator',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  }
 ];
 
 class ToolRegistry {
