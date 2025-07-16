@@ -427,12 +427,18 @@ Just respond naturally to what they're sharing.`;
         // Get available tools for the chat
         const availableTools = await toolRegistry.getToolsForOpenAI();
         console.log(`🛠️ Available tools for chat: ${availableTools.length}`);
+        console.log(`📝 Messages being sent:`, JSON.stringify(messages, null, 2));
+        console.log(`⚙️ Request options:`, { temperature: 0.9, n_predict: finalTokens, toolsCount: availableTools.length });
+
+        // TEMPORARY DEBUG: Try without tools first to see if that's the issue
+        const useTools = availableTools.length > 0 && availableTools.length < 10; // Limit tools for debugging
+        console.log(`🧪 DEBUG: Using tools: ${useTools}, tools count: ${availableTools.length}`);
 
         streamResponse = await llmService.makeStreamingRequest(messages, {
           temperature: 0.9,
           n_predict: finalTokens,
-          tools: availableTools,
-          tool_choice: "auto"
+          tools: useTools ? availableTools : [],
+          tool_choice: useTools ? "auto" : "none"
         });
       } catch (err) {
         console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);

@@ -108,6 +108,25 @@ export const createLLMService = () => {
         ? promptOrMessages 
         : parsePromptToMessages(promptOrMessages);
       
+      const requestData = {
+        model: "openai/gpt-4o",
+        messages: messages,
+        max_tokens: n_predict,
+        temperature: temperature,
+        ...(stop && { stop: stop }),
+        ...(tools && tools.length > 0 && { tools: tools, tool_choice: tool_choice }),
+        stream: true,
+      };
+
+      console.log(`🌊 OpenRouter streaming request:`, {
+        model: requestData.model,
+        messagesCount: requestData.messages.length,
+        max_tokens: requestData.max_tokens,
+        temperature: requestData.temperature,
+        toolsCount: requestData.tools?.length || 0,
+        hasTools: !!requestData.tools
+      });
+
       const response = await axios({
         method: "POST",
         url: openRouterApiUrl,
@@ -117,15 +136,7 @@ export const createLLMService = () => {
           "Referer": getRefererUrl(),
           "X-Title": "Numina Server",
         },
-        data: {
-          model: "openai/gpt-4o",
-          messages: messages,
-          max_tokens: n_predict,
-          temperature: temperature,
-          ...(stop && { stop: stop }),
-          ...(tools && tools.length > 0 && { tools: tools, tool_choice: tool_choice }),
-          stream: true,
-        },
+        data: requestData,
         responseType: "stream",
         timeout: 45000,
       });
