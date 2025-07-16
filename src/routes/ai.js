@@ -24,6 +24,12 @@ function isToolRequiredMessage(message) {
   
   // Natural, seamless tool-requiring patterns
   const toolTriggers = [
+    // Search requests (CRITICAL - was missing!)
+    /search|google|find.*info|look.*up|search.*for|use.*search/,
+    
+    // Tool usage (CRITICAL - was missing!)
+    /use.*tool|search.*tool|run.*tool|execute.*tool|tool/,
+    
     // Natural search requests
     /what.*is|who.*is|where.*is|when.*is|how.*to|can you find|show me|get me|i need.*info/,
     
