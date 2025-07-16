@@ -16,6 +16,58 @@ import toolExecutor from '../services/toolExecutor.js';
 const router = express.Router();
 const llmService = createLLMService();
 
+// Helper function to determine if a message requires tool usage
+function isToolRequiredMessage(message) {
+  if (!message || typeof message !== 'string') return false;
+  
+  const lowerMessage = message.toLowerCase();
+  
+  // Obvious tool-requiring patterns
+  const toolTriggers = [
+    // Search requests
+    /search|find|look up|google|what.*about|tell me about|information on/,
+    
+    // Weather requests
+    /weather|forecast|temperature|rain|snow|sunny|cloudy/,
+    
+    // Financial requests
+    /stock|crypto|bitcoin|ethereum|currency|exchange rate|price of.*\$/,
+    
+    // Music requests
+    /music|song|playlist|recommend.*music|play.*music/,
+    
+    // Restaurant/booking requests
+    /restaurant|book.*table|reservation|food near|dinner/,
+    
+    // Travel requests
+    /travel|trip|flight|hotel|itinerary|vacation/,
+    
+    // Calculator requests
+    /calculate|math|equation|\d+.*[\+\-\*\/].*\d+/,
+    
+    // Translation requests
+    /translate|in.*language|how.*say.*in/,
+    
+    // Code/technical requests
+    /code|programming|function|script|debug/,
+    
+    // Time/date requests
+    /time|timezone|convert.*time|what time/,
+    
+    // QR/password generation
+    /qr code|generate.*password|password.*strong/,
+  ];
+  
+  // Check if message matches any tool triggers
+  const needsTools = toolTriggers.some(pattern => pattern.test(lowerMessage));
+  
+  // Exclude simple greetings and conversational messages
+  const isSimpleGreeting = /^(hi|hello|hey|good morning|good evening|good afternoon|thanks|thank you|bye|goodbye|yes|no|okay|ok)[\.\!\?]*$/i.test(message.trim());
+  const isSimpleResponse = message.trim().length < 15 && !/\?/.test(message);
+  
+  return needsTools && !isSimpleGreeting && !isSimpleResponse;
+}
+
 // Helper function to generate user-friendly tool execution messages
 function getToolExecutionMessage(toolName, toolArgs) {
   switch (toolName) {
@@ -525,15 +577,16 @@ Just respond naturally to what they're sharing.`;
         console.log(`📝 Messages being sent:`, JSON.stringify(messages, null, 2));
         console.log(`⚙️ Request options:`, { temperature: 0.9, n_predict: finalTokens, toolsCount: availableTools.length });
 
-        // Enable tools for adaptive chat
-        const useTools = availableTools.length > 0;
-        console.log(`🧪 DEBUG: Using tools: ${useTools}, tools count: ${availableTools.length}`);
+        // Smart tool usage - only enable tools for requests that actually need them
+        const needsTools = isToolRequiredMessage(userMessage);
+        const useTools = availableTools.length > 0 && needsTools;
+        console.log(`🧪 DEBUG: Message needs tools: ${needsTools}, Using tools: ${useTools}, tools count: ${availableTools.length}`);
 
         streamResponse = await llmService.makeStreamingRequest(messages, {
           temperature: 0.9,
           n_predict: finalTokens,
           tools: useTools ? availableTools : [],
-          tool_choice: useTools ? "required" : "none"
+          tool_choice: useTools ? "auto" : "none"  // Changed from "required" to "auto"
         });
       } catch (err) {
         console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);
