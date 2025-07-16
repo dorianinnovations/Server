@@ -775,8 +775,8 @@ Just respond naturally to what they're sharing.`;
             // Make follow-up request for AI response to tools - OPTIMIZED FOR SPEED
             console.log(`🔄 Making follow-up request with ${toolMessages.length} tool results`);
             const followUpResponse = await llmService.makeStreamingRequest(followUpMessages, {
-              temperature: 0.7,  // Lower temp = faster responses
-              n_predict: 120,    // Much smaller for speed
+              temperature: 0.9,
+              n_predict: 400,
               tools: [],
               tool_choice: "none"
             });
