@@ -30,6 +30,9 @@ function isToolRequiredMessage(message) {
     // Tool usage (CRITICAL - was missing!)
     /use.*tool|search.*tool|run.*tool|execute.*tool|tool/,
     
+    // Recommendations and suggestions (CRITICAL - for "recommend" queries)
+    /recommend|suggest|good.*places|best.*places|spots.*you.*recommend|any.*suggestions/,
+    
     // Natural search requests
     /what.*is|who.*is|where.*is|when.*is|how.*to|can you find|show me|get me|i need.*info/,
     
@@ -70,11 +73,15 @@ function isToolRequiredMessage(message) {
   // Check if message matches any tool triggers
   const needsTools = toolTriggers.some(pattern => pattern.test(lowerMessage));
   
-  // Exclude simple greetings and conversational messages
+  // Exclude ONLY simple standalone greetings (not greetings with additional content)
   const isSimpleGreeting = /^(hi|hello|hey|good morning|good evening|good afternoon|thanks|thank you|bye|goodbye|yes|no|okay|ok)[\.\!\?]*$/i.test(message.trim());
-  const isSimpleResponse = message.trim().length < 15 && !/\?/.test(message);
+  const isSimpleResponse = message.trim().length < 8 && !/\?/.test(message); // Reduced from 15 to 8
   
-  return needsTools && !isSimpleGreeting && !isSimpleResponse;
+  // Don't exclude if the message has additional meaningful content beyond greeting
+  const hasAdditionalContent = message.trim().split(/\s+/).length > 1;
+  const shouldExclude = (isSimpleGreeting || isSimpleResponse) && !hasAdditionalContent;
+  
+  return needsTools && !shouldExclude;
 }
 
 // Helper function to generate user-friendly tool execution messages
@@ -625,6 +632,7 @@ Just respond naturally to what they're sharing.`;
       let fullContent = '';
       let chunkBuffer = ''; // Buffer for chunked streaming to reduce speed
       let toolCallAccumulator = {}; // Accumulate tool call fragments
+      let lastSendTime = Date.now(); // For throttling
       
       streamResponse.data.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -649,10 +657,10 @@ Just respond naturally to what they're sharing.`;
                 const content = choice.delta.content;
                 fullContent += content;
                 
-                // Buffer content to reduce streaming speed - send every 3-5 characters or word boundary
+                // Buffer content to reduce streaming speed - send every 8-12 characters or word boundary
                 chunkBuffer += content;
                 
-                if (chunkBuffer.length >= 5 || content.includes(' ') || content.includes('\n')) {
+                if (chunkBuffer.length >= 10 || content.includes(' ') || content.includes('\n')) {
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
                   chunkBuffer = '';
@@ -687,7 +695,7 @@ Just respond naturally to what they're sharing.`;
                 }
               }
               
-              // Just accumulate tool calls during streaming - don't execute yet
+              // Accumulate tool calls during streaming - execution occurs after stream ends
               if (choice?.finish_reason === 'tool_calls') {
                 console.log(`🔧 Tool calls complete, will execute after stream ends`);
               }

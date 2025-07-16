@@ -378,7 +378,7 @@ async function addPaymentMethod(creditPool, paymentMethodId, user) {
   if (result.success) {
     const paymentMethod = result.paymentMethod;
     
-    // Add to our database
+    // Add to database
     const newPaymentMethod = {
       id: Date.now().toString(),
       stripePaymentMethodId: paymentMethod.id,
@@ -461,7 +461,7 @@ async function removePaymentMethod(creditPool, paymentMethodId) {
 }
 
 async function addFundsStripe(creditPool, amount, paymentMethodId, user) {
-  // For testing, we'll simulate a successful payment without Stripe dependency
+      // Simulate successful payment for testing without Stripe dependency
   const result = await stripeService.simulatePaymentSuccess('pi_test_' + Date.now());
 
   if (result.success) {

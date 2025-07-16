@@ -148,7 +148,7 @@ async function getCurrentUsage(userId, featureName, usageType) {
   const usageKey = `usage.${featureName}.${usageType}`;
   const lastResetKey = `usage.${featureName}.lastReset.${usageType}`;
   
-  // Check if we need to reset usage
+      // Check if usage reset is needed
   const lastReset = user.get(lastResetKey) || new Date(0);
   if (lastReset < startDate) {
     await User.findByIdAndUpdate(userId, {

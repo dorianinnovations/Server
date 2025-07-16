@@ -253,12 +253,12 @@ async function testInsufficientFunds() {
   try {
     console.log('\n🚫 Testing Insufficient Funds Scenario...');
     
-    // First, let's check if we can spend more than we have
+    // Test spending more than available balance
     const response = await axios.post(`${API_BASE}/tools/execute`, {
       toolName: 'credit_management',
       arguments: {
         action: 'check_spending',
-        amount: 1000 // More than we should have
+        amount: 1000 // Amount exceeding expected limit
       }
     }, {
       headers: { Authorization: `Bearer ${authToken}` }

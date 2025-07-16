@@ -17,7 +17,7 @@ const verifyTestUser = async () => {
     // Step 2: Directly update the credit pool via a direct API call
     console.log('\n⚡ Manually verifying credit pool...');
     
-    // We'll simulate what a verified credit pool should look like
+    // Simulate verified credit pool structure
     // by adding sufficient funds and marking it as verified
     
     const verifyResponse = await axios.post(`${API_BASE}/tools/execute`, {

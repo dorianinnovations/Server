@@ -7,7 +7,7 @@ export default async function textGenerator(args, userContext) {
     }
 
     // This would typically use OpenAI API directly for text generation
-    // For now, return structured guidance
+    // Return structured guidance
     const templates = {
       email: {
         subject: `Re: ${topic}`,

@@ -87,7 +87,7 @@ describe('Admin Protection Middleware', () => {
       .get('/admin')
       .set('Authorization', `Bearer ${adminToken}`);
     
-    // This test would need proper JWT mocking
+    // This test would need proper JWT mocking implementation
     expect(response.status).toBe(401); // Will fail without proper JWT setup
   });
 

@@ -62,7 +62,7 @@ export function cacheResponse(options = {}) {
       const originalJson = res.json;
       res.json = async function(data) {
         try {
-          // Check if we should cache this response
+          // Check if response should be cached
           if (shouldCache(req, res)) {
             const responseData = {
               statusCode: res.statusCode,

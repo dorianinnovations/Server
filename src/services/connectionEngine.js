@@ -211,8 +211,8 @@ class ConnectionEngine {
         compatibilityScore: await this.calculateDetailedCompatibility(userId1, userId2)
       };
 
-      // Store connection (you might want to create a Connection model)
-      // For now, we'll use the websocket to notify users
+              // Store connection (consider creating a Connection model)
+      // Use websocket to notify users
 
       // Notify the target user via websocket
       websocketService.sendToUser(userId2, 'connection_request', {

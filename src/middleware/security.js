@@ -12,8 +12,8 @@ export const requireAdmin = (req, res, next) => {
       });
     }
 
-    // For now, we'll use a simple check based on user ID or email
-    // In production, implement proper role-based access control
+    // Simple check based on user ID or email
+    // TODO: Implement proper role-based access control in production
     const adminUserIds = process.env.ADMIN_USER_IDS?.split(',') || [];
     const adminEmails = process.env.ADMIN_EMAILS?.split(',') || [];
     
@@ -29,8 +29,8 @@ export const requireAdmin = (req, res, next) => {
       return next();
     }
 
-    // For development, you might want to allow certain operations
-    // In production, remove this and implement proper admin roles
+    // Development mode allows certain operations
+    // TODO: Remove development bypass and implement proper admin roles in production
     if (process.env.NODE_ENV === 'development' && req.user.id) {
       logger.warn("Admin access granted in development mode", {
         userId: req.user.id,

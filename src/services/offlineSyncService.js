@@ -302,7 +302,7 @@ class OfflineSyncService {
       };
 
       // This would integrate with your conversation storage system
-      // For now, we'll cache the conversations in Redis
+      // Cache conversations in Redis
       
       for (const conversation of clientConversations) {
         try {

@@ -55,7 +55,7 @@ export const createTestUser = (overrides = {}) => ({
 
 // JWT token helpers
 export const generateTestToken = (userId) => {
-  // This would typically use your JWT utility
+  // This would typically use JWT utility
   return `Bearer test-token-${userId}`;
 };
 
@@ -63,7 +63,7 @@ export const generateTestToken = (userId) => {
 export const expectValidUser = (user) => {
   expect(user).toHaveProperty('id'); // MongoDB returns 'id' not '_id' in JSON
   expect(user).toHaveProperty('email');
-  expect(user).not.toHaveProperty('password'); // Should not leak password
+      expect(user).not.toHaveProperty('password'); // Password should not be exposed in response
 };
 
 export const expectValidResponse = (response, statusCode = 200) => {

@@ -424,9 +424,8 @@ router.get("/stats", rateLimiters.collectiveData, async (req, res) => {
 // POST /collective-data/cache/clear - Clear cache (admin only)
 router.post("/cache/clear", protect, requireAdmin, rateLimiters.admin, async (req, res) => {
   try {
-    // Check if user is admin (you can implement your own admin check)
-    // For now, we'll allow any authenticated user to clear cache
-    // In production, you should implement proper admin authorization
+    // Check if user is admin
+    // TODO: Implement proper admin authorization in production
     
     collectiveDataService.clearCache();
 

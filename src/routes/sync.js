@@ -221,7 +221,7 @@ router.post('/sync/conflict-resolution',
       logger.info(`Conflict resolution for user ${userId}, conflict ${conflictId}: ${resolution}`);
 
       // This would implement conflict resolution logic
-      // For now, we'll return a success response
+      // Return success response for now
       res.json({
         success: true,
         conflictId,
@@ -256,7 +256,7 @@ router.delete('/sync/cleanup',
       logger.info(`Cleanup request for user ${userId}`);
 
       // This would implement cleanup logic
-      // For now, we'll return a success response
+      // Return success response for now
       res.json({
         success: true,
         message: 'Cleanup completed successfully',

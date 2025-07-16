@@ -589,7 +589,7 @@ Keep the tone supportive and constructive. Focus on growth and self-awareness.`;
 
   // Parse insights from LLM response
   parseInsightsFromResponse(response) {
-    // Simple parsing - in production, you might want more sophisticated parsing
+    // Simple parsing - consider more sophisticated parsing in production
     const insights = {
       moodPatterns: "Pattern analysis completed",
       emotionClusters: "Cluster analysis completed",

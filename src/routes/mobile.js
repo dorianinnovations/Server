@@ -161,7 +161,7 @@ router.get('/mobile/sync', authenticateToken, async (req, res) => {
 
     // Sync conversations if requested
     if (requestedTypes.includes('conversations')) {
-      // This would integrate with your conversation storage
+      // This would integrate with conversation storage
       syncData.data.conversations = {
         updated: false,
         data: [],
@@ -545,7 +545,7 @@ async function handleChatHistoryRequest(userId, method, data) {
       return { success: true, data: cachedHistory };
     }
     
-    // This would integrate with your conversation storage
+    // This would integrate with conversation storage
     const chatHistory = {
       userId,
       conversations: [],
@@ -561,7 +561,7 @@ async function handleChatHistoryRequest(userId, method, data) {
 async function handleCloudEventsRequest(userId, method, data) {
   try {
     if (method === 'GET') {
-      const events = []; // This would fetch from your cloud events storage
+      const events = []; // This would fetch from cloud events storage
       return { success: true, data: events };
     }
     

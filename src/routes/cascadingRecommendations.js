@@ -225,7 +225,7 @@ router.get("/reasoning/:recommendationId", protect, async (req, res) => {
     
     console.log(`🧠 Fetching reasoning tree for recommendation ${recommendationId}`);
     
-    // This would typically fetch from a database, but for now we'll generate on demand
+    // Generate on demand instead of fetching from database
     const reasoningTree = await generateDetailedReasoningTree(userId, recommendationId);
     
     res.json({
@@ -461,7 +461,7 @@ Provide a clear, logical reasoning tree that helps the user understand WHY these
  */
 async function generateDetailedReasoningTree(userId, recommendationId) {
   // This would fetch the specific recommendation and generate detailed reasoning
-  // For now, we'll create a comprehensive reasoning structure
+      // Create comprehensive reasoning structure
   
   return {
     recommendationId,
@@ -671,7 +671,7 @@ Return a JSON structure with cascading recommendations and reasoning tree.`;
     { role: 'user', content: cascadingPrompt }
   ];
 
-  // For now, we'll use the non-streaming version but call the callback as we process
+      // Use non-streaming version with callback processing
   const response = await llmService.makeLLMRequest(messages, {
     temperature: 0.8,
     n_predict: 1200

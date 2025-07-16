@@ -153,7 +153,7 @@ async function seedEvents() {
       console.log('🔍 Creating test user for event organization...');
       testUser = new User({
         email: 'test@example.com',
-        password: 'hashedpassword' // This would normally be hashed
+        password: 'hashedpassword' // This would normally be properly hashed
       });
       await testUser.save();
     }

@@ -62,8 +62,8 @@ class ToolExecutor {
     
     if (tool.requiresAuth && !userContext.userId) return false;
     
-    // For now, allow all tools regardless of subscription status
-    // TODO: Re-enable subscription gating after fixing subscription system
+    // Temporarily allow all tools regardless of subscription status
+    // TODO: Re-enable subscription gating after subscription system is fixed
     // if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
     //   return false;
     // }
@@ -83,7 +83,7 @@ class ToolExecutor {
 
     if (!this.isToolAvailable(tool, userContext)) {
       // Check specific reason why tool is not available
-      // TODO: Re-enable subscription error after fixing subscription system
+      // TODO: Re-enable subscription error after subscription system is fixed
       // if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
       //   throw new Error(`This feature requires a Numina Trace subscription. Please subscribe in the wallet to unlock all AI tools and features.`);
       // }
@@ -107,7 +107,7 @@ class ToolExecutor {
       }
 
       await this.updateTask(taskId, 'completed', result);
-      // await this.updateToolMetrics(tool.name, true); // Temporarily disabled
+      // await this.updateToolMetrics(tool.name, true); // Temporarily disabled for optimization
       
       return {
         success: true,
@@ -116,7 +116,7 @@ class ToolExecutor {
       };
     } catch (error) {
       await this.updateTask(taskId, 'failed', { error: error.message });
-      // await this.updateToolMetrics(tool.name, false); // Temporarily disabled
+      // await this.updateToolMetrics(tool.name, false); // Temporarily disabled for optimization
       
       throw error;
     }

@@ -185,7 +185,7 @@ async function testEndpoints() {
 }
 
 function generateTestToken(userId) {
-  // This is a simplified token for testing - use your actual JWT logic
+  // Simplified token for testing - replace with actual JWT logic in production
   return Buffer.from(JSON.stringify({ userId: userId.toString() })).toString('base64');
 }
 
