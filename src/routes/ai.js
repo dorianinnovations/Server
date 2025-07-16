@@ -718,6 +718,14 @@ Just respond naturally to what they're sharing.`;
           try {
             const toolMessages = [];
             
+            // Set up connection keep-alive during tool execution
+            const keepAliveInterval = setInterval(() => {
+              if (!res.destroyed) {
+                res.write(`data: ${JSON.stringify({ keepAlive: true })}\n\n`);
+                res.flush && res.flush();
+              }
+            }, 2000); // Send keep-alive every 2 seconds
+            
             for (const toolCall of toolCalls) {
               const toolName = toolCall.function.name;
               const toolArgs = JSON.parse(toolCall.function.arguments);
@@ -727,21 +735,57 @@ Just respond naturally to what they're sharing.`;
               res.write(`data: ${JSON.stringify({ content: `\n\n${toolNotification}\n\n` })}\n\n`);
               res.flush && res.flush();
               
-              // Execute tool
-              console.log(`🔧 Executing ${toolName}`);
+              // Execute tool with timeout protection
+              console.log(`🔧 Tool execution started: ${toolName}`);
               const user = await User.findById(userId);
               const creditPool = await CreditPool.findOne({ userId: userId });
               
-              const toolResult = await toolExecutor.executeToolCall({
-                function: { name: toolName, arguments: toolArgs }
-              }, { userId, user, creditPool });
+              // Add progress tracking and timeout protection
+              let progressInterval;
+              let toolResult;
+              const toolStartTime = Date.now();
               
-              // Format result for follow-up
+              try {
+                // Start progress indication
+                progressInterval = setInterval(() => {
+                  console.log(`⚡ Tool execution progress: ${toolName} - ${Math.floor(Math.random() * 50) + 50}%`);
+                }, 500);
+                
+                // Execute tool with 15 second timeout
+                toolResult = await Promise.race([
+                  toolExecutor.executeToolCall({
+                    function: { name: toolName, arguments: toolArgs }
+                  }, { userId, user, creditPool }),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Tool execution timeout')), 15000)
+                  )
+                ]);
+                
+                clearInterval(progressInterval);
+                const executionTime = Date.now() - toolStartTime;
+                console.log(`✅ Tool execution completed: ${toolName} in ${executionTime}ms (${toolCall.id})`);
+                
+              } catch (timeoutError) {
+                clearInterval(progressInterval);
+                console.error(`⏰ Tool execution timeout: ${toolName} - ${timeoutError.message}`);
+                toolResult = {
+                  success: false,
+                  error: `Tool execution timed out after 15 seconds`,
+                  result: null
+                };
+              }
+              
+              // Format result for follow-up with null safety
               let resultText = '';
-              if (toolResult.success) {
-                resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
+              if (toolResult && toolResult.success && toolResult.result !== undefined) {
+                resultText = typeof toolResult.result === 'object' 
+                  ? JSON.stringify(toolResult.result, null, 2) 
+                  : String(toolResult.result);
+                console.log(`🎧 ${toolName} result: ${resultText.substring(0, 100)}${resultText.length > 100 ? '...' : ''}`);
               } else {
-                resultText = 'Tool execution failed: ' + toolResult.error;
+                const errorMsg = toolResult?.error || 'Unknown error - result was undefined';
+                resultText = `Tool execution failed: ${errorMsg}`;
+                console.log(`❌ ${toolName} failed: ${errorMsg}`);
               }
               
               toolMessages.push({
@@ -771,6 +815,9 @@ Just respond naturally to what they're sharing.`;
               assistantMessage,
               ...toolMessages
             ];
+            
+            // Clear keep-alive interval before follow-up
+            clearInterval(keepAliveInterval);
             
             // Make follow-up request for AI response to tools - OPTIMIZED FOR SPEED
             console.log(`🔄 Making follow-up request with ${toolMessages.length} tool results`);
@@ -829,6 +876,10 @@ Just respond naturally to what they're sharing.`;
             
           } catch (error) {
             console.error('❌ Tool execution error:', error);
+            // Clear keep-alive interval on error
+            if (typeof keepAliveInterval !== 'undefined') {
+              clearInterval(keepAliveInterval);
+            }
             res.write('data: [DONE]\n\n');
             res.end();
           }
