@@ -13,7 +13,23 @@ const toolSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['booking', 'entertainment', 'finance', 'communication', 'productivity', 'utility'],
+    enum: [
+      'booking', 
+      'entertainment', 
+      'finance', 
+      'communication', 
+      'productivity', 
+      'utility',
+      'information',     // news_search, academic_search
+      'social',          // social_search
+      'research',        // academic_search  
+      'media',           // image_search
+      'creative',        // text_generator, code_generator
+      'development',     // code_generator
+      'health',          // fitness_tracker, nutrition_lookup
+      'professional',    // linkedin_helper
+      'security'         // password_generator
+    ],
   },
   schema: {
     type: Object,
