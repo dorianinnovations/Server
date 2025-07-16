@@ -1,3 +1,5 @@
+import { createLLMService } from '../services/llmService.js';
+
 export default async function codeGenerator(args, userContext) {
   try {
     const { language, description, framework, complexity = 'simple' } = args;
@@ -6,22 +8,21 @@ export default async function codeGenerator(args, userContext) {
       throw new Error('Language and description are required');
     }
 
-    const webSearch = (await import('./webSearch.js')).default;
+    const llmService = createLLMService();
     
-    let codeQuery = `${language} code example ${description}`;
-    if (framework) codeQuery += ` ${framework}`;
-    if (complexity) codeQuery += ` ${complexity}`;
-    codeQuery += ' tutorial github stackoverflow';
+    let prompt = `Generate ${complexity} ${language} code for: ${description}`;
+    if (framework) prompt += ` using ${framework}`;
+    prompt += '\n\nRequirements:\n- Write clean, well-commented code\n- Include example usage\n- Follow best practices\n- Explain what the code does\n\nProvide the complete code with explanations:';
 
-    const searchResult = await webSearch({
-      query: codeQuery,
-      searchType: 'general',
-      limit: 5
-    }, userContext);
+    const messages = [
+      { role: 'system', content: 'You are an expert programmer. Generate high-quality, production-ready code with clear explanations.' },
+      { role: 'user', content: prompt }
+    ];
 
-    if (!searchResult.success) {
-      throw new Error('Failed to search for code examples');
-    }
+    const response = await llmService.makeLLMRequest(messages, {
+      temperature: 0.3,
+      n_predict: 800
+    });
 
     return {
       success: true,
@@ -30,14 +31,14 @@ export default async function codeGenerator(args, userContext) {
         description,
         framework,
         complexity,
-        codeExamples: searchResult.results,
-        query: codeQuery
+        generatedCode: response.content,
+        prompt: prompt
       },
-      message: `Code examples for ${language}: "${description}"`,
+      message: `Generated ${language} code for: "${description}"`,
       instructions: [
-        'Check the search results for code examples and tutorials',
-        'For AI-generated code, configure OpenAI API key',
-        'Review and test any code before using in production'
+        'Review the generated code carefully',
+        'Test the code in your development environment',
+        'Modify as needed for your specific use case'
       ]
     };
 
