@@ -16,6 +16,44 @@ import toolExecutor from '../services/toolExecutor.js';
 const router = express.Router();
 const llmService = createLLMService();
 
+// Helper function to generate user-friendly tool execution messages
+function getToolExecutionMessage(toolName, toolArgs) {
+  switch (toolName) {
+    case 'web_search':
+      return `🔍 Searching the web for: "${toolArgs.query}"`;
+    case 'music_recommendations':
+      return `🎵 Finding music recommendations for mood: ${toolArgs.mood}`;
+    case 'weather_check':
+      return `🌤️ Checking weather for: ${toolArgs.location}`;
+    case 'reservation_booking':
+      return `📅 Booking reservation at ${toolArgs.restaurantName} for ${toolArgs.partySize} people`;
+    case 'calendar_management':
+      return `📆 Managing calendar event: ${toolArgs.title}`;
+    case 'email_management':
+      return `📧 Processing email: ${toolArgs.subject}`;
+    case 'text_analysis':
+      return `📝 Analyzing text for sentiment and insights`;
+    case 'image_analysis':
+      return `🖼️ Analyzing image content`;
+    case 'language_translation':
+      return `🌐 Translating text to ${toolArgs.targetLanguage}`;
+    case 'math_calculation':
+      return `🧮 Performing calculation: ${toolArgs.expression}`;
+    case 'file_management':
+      return `📁 Managing file: ${toolArgs.fileName}`;
+    case 'social_media_post':
+      return `📱 Creating social media post for ${toolArgs.platform}`;
+    case 'expense_tracking':
+      return `💰 Tracking expense: $${toolArgs.amount} for ${toolArgs.category}`;
+    case 'habit_tracking':
+      return `✅ Tracking habit: ${toolArgs.habitName}`;
+    case 'goal_management':
+      return `🎯 Managing goal: ${toolArgs.goalTitle}`;
+    default:
+      return `⚙️ Executing ${toolName}...`;
+  }
+}
+
 // Helper functions for Dynamic Numina Senses
 // Background emotion processing (non-blocking)
 async function processEmotionInBackground(userId, userMessage, recentMemory, recentEmotions) {
@@ -430,15 +468,15 @@ Just respond naturally to what they're sharing.`;
         console.log(`📝 Messages being sent:`, JSON.stringify(messages, null, 2));
         console.log(`⚙️ Request options:`, { temperature: 0.9, n_predict: finalTokens, toolsCount: availableTools.length });
 
-        // TEMPORARY DEBUG: Try without tools first to see if that's the issue
-        const useTools = availableTools.length > 0 && availableTools.length < 10; // Limit tools for debugging
+        // Enable tools for adaptive chat
+        const useTools = availableTools.length > 0;
         console.log(`🧪 DEBUG: Using tools: ${useTools}, tools count: ${availableTools.length}`);
 
         streamResponse = await llmService.makeStreamingRequest(messages, {
           temperature: 0.9,
           n_predict: finalTokens,
           tools: useTools ? availableTools : [],
-          tool_choice: useTools ? "auto" : "none"
+          tool_choice: useTools ? "required" : "none"
         });
       } catch (err) {
         console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);
@@ -470,18 +508,14 @@ Just respond naturally to what they're sharing.`;
             const data = line.substring(6).trim();
             
             if (data === '[DONE]') {
-              console.log('🏁 STREAMING: Adaptive chat [DONE] signal');
-              res.write('data: [DONE]\n\n');
-              res.end();
+              console.log('🏁 STREAMING: Initial stream [DONE] - continuing to tool execution');
+              // DON'T end connection - let streamResponse.data.on("end") handle it
               return;
             }
             
             try {
-              console.log(`🔍 STREAMING: Raw data before parsing:`, data);
               const parsed = JSON.parse(data);
               const choice = parsed.choices?.[0];
-              
-              console.log(`🔍 STREAMING: Parsed data:`, JSON.stringify(parsed, null, 2));
               
               if (choice?.delta?.content) {
                 const content = choice.delta.content;
@@ -491,7 +525,6 @@ Just respond naturally to what they're sharing.`;
                 chunkBuffer += content;
                 
                 if (chunkBuffer.length >= 5 || content.includes(' ') || content.includes('\n')) {
-                  console.log(`📡 STREAMING: Sending chunk: ${chunkBuffer}`);
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
                   chunkBuffer = '';
@@ -500,8 +533,6 @@ Just respond naturally to what they're sharing.`;
               
               // Handle tool calls - accumulate fragments and execute when complete
               if (choice?.delta?.tool_calls) {
-                console.log(`🛠️ STREAMING: Tool call detected`);
-                
                 for (const toolCallDelta of choice.delta.tool_calls) {
                   const index = toolCallDelta.index || 0;
                   
@@ -520,54 +551,49 @@ Just respond naturally to what they're sharing.`;
                   // Accumulate function name and arguments
                   if (toolCallDelta.function?.name) {
                     toolCallAccumulator[index].function.name += toolCallDelta.function.name;
-                    console.log(`🔧 STREAMING: Tool name accumulated: ${toolCallAccumulator[index].function.name}`);
                   }
                   
                   if (toolCallDelta.function?.arguments) {
                     toolCallAccumulator[index].function.arguments += toolCallDelta.function.arguments;
-                    console.log(`🔧 STREAMING: Tool args accumulated: ${toolCallAccumulator[index].function.arguments}`);
                   }
                 }
               }
               
               // Just accumulate tool calls during streaming - don't execute yet
               if (choice?.finish_reason === 'tool_calls') {
-                console.log(`🏁 STREAMING: Tool calls complete, will execute after stream ends`);
+                console.log(`🔧 Tool calls complete, will execute after stream ends`);
               }
             } catch (e) {
-              console.error('❌ STREAMING: Error parsing adaptive chat data:', e);
+              console.error('❌ Error parsing streaming data:', e);
             }
           }
         }
       });
       
       streamResponse.data.on("end", async () => {
-        // Flush any remaining content in buffer
         if (chunkBuffer.trim()) {
-          console.log(`📡 STREAMING: Flushing final chunk: ${chunkBuffer}`);
           res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
           res.flush && res.flush();
         }
         
-        console.log(`✅ STREAMING: Initial stream completed with ${fullContent.length} characters`);
-        
-        // Check if we have accumulated tool calls to execute
         const toolCalls = Object.values(toolCallAccumulator).filter(tc => tc.function?.name && tc.function?.arguments);
+        console.log(`🔧 Found ${toolCalls.length} tool calls to execute`);
         
         if (toolCalls.length > 0) {
-          console.log(`🔧 STREAMING: Executing ${toolCalls.length} accumulated tool calls after stream completion`);
-          
           try {
-            // Execute all tool calls and collect results
             const toolMessages = [];
             
             for (const toolCall of toolCalls) {
               const toolName = toolCall.function.name;
               const toolArgs = JSON.parse(toolCall.function.arguments);
               
-              console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
+              // Send tool notification
+              const toolNotification = getToolExecutionMessage(toolName, toolArgs);
+              res.write(`data: ${JSON.stringify({ content: `\n\n${toolNotification}\n\n` })}\n\n`);
+              res.flush && res.flush();
               
-              // Execute the tool
+              // Execute tool
+              console.log(`🔧 Executing ${toolName}`);
               const user = await User.findById(userId);
               const creditPool = await CreditPool.findOne({ userId: userId });
               
@@ -575,7 +601,7 @@ Just respond naturally to what they're sharing.`;
                 function: { name: toolName, arguments: toolArgs }
               }, { userId, user, creditPool });
               
-              // Format tool result for OpenAI format
+              // Format result for follow-up
               let resultText = '';
               if (toolResult.success) {
                 resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
@@ -583,19 +609,15 @@ Just respond naturally to what they're sharing.`;
                 resultText = 'Tool execution failed: ' + toolResult.error;
               }
               
-              const toolMessage = {
+              toolMessages.push({
                 role: 'tool',
                 tool_call_id: toolCall.id,
                 name: toolName,
                 content: resultText
-              };
-              
-              toolMessages.push(toolMessage);
+              });
             }
             
-            console.log(`🔄 STREAMING: Making follow-up request with ${toolMessages.length} tool results`);
-            
-            // Build conversation with tool calls and results
+            // Build follow-up conversation
             const assistantMessage = {
               role: 'assistant',
               content: fullContent.trim() || null,
@@ -615,17 +637,15 @@ Just respond naturally to what they're sharing.`;
               ...toolMessages
             ];
             
-            // Make follow-up streaming request with tool results (no tools to save costs)
+            // Make follow-up request for AI response to tools
+            console.log(`🔄 Making follow-up request with ${toolMessages.length} tool results`);
             const followUpResponse = await llmService.makeStreamingRequest(followUpMessages, {
               temperature: 0.9,
-              n_predict: 200, // Reduced tokens to save costs
-              tools: [], // No tools in follow-up to avoid recursive calls
+              n_predict: 300,
+              tools: [],
               tool_choice: "none"
             });
             
-            console.log(`📡 STREAMING: Starting follow-up stream with tool results`);
-            
-            // Stream the follow-up response
             let followUpBuffer = '';
             
             followUpResponse.data.on('data', (chunk) => {
@@ -638,9 +658,9 @@ Just respond naturally to what they're sharing.`;
                   const data = line.substring(6).trim();
                   
                   if (data === '[DONE]') {
-                    console.log('🏁 STREAMING: Follow-up [DONE] signal');
                     res.write('data: [DONE]\n\n');
                     res.end();
+                    saveConversationToMemory();
                     return;
                   }
                   
@@ -650,8 +670,6 @@ Just respond naturally to what they're sharing.`;
                     
                     if (choice?.delta?.content) {
                       const content = choice.delta.content;
-                      fullContent += content;
-                      console.log(`📡 STREAMING: Follow-up content: ${content}`);
                       res.write(`data: ${JSON.stringify({ content })}\n\n`);
                       res.flush && res.flush();
                     }
@@ -663,32 +681,25 @@ Just respond naturally to what they're sharing.`;
             });
             
             followUpResponse.data.on('end', () => {
-              console.log('✅ STREAMING: Follow-up completed, ending stream');
               res.write('data: [DONE]\n\n');
               res.end();
-              
-              // Save complete conversation to memory
               saveConversationToMemory();
             });
             
             followUpResponse.data.on('error', (err) => {
-              console.error('❌ Follow-up stream error:', err);
+              console.error('❌ Follow-up error:', err);
               res.write('data: [DONE]\n\n');
               res.end();
             });
             
           } catch (error) {
-            console.error('❌ Error executing tools or making follow-up request:', error);
+            console.error('❌ Tool execution error:', error);
             res.write('data: [DONE]\n\n');
             res.end();
           }
         } else {
-          // No tool calls, just end the stream normally
-          console.log(`✅ STREAMING: No tool calls, ending stream normally`);
           res.write('data: [DONE]\n\n');
           res.end();
-          
-          // Save conversation to memory
           saveConversationToMemory();
         }
         
@@ -699,7 +710,7 @@ Just respond naturally to what they're sharing.`;
               { userId, content: userMessage, role: "user" },
               { userId, content: fullContent.trim(), role: "assistant" }
             ]).then(async () => {
-              console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
+              console.log(`💾 Saved conversation to memory`);
               userCache.invalidateUser(userId);
 
               // Add to data processing pipeline
@@ -711,7 +722,7 @@ Just respond naturally to what they're sharing.`;
                 timestamp: new Date()
               });
             }).catch(err => {
-              console.error(`❌ Error saving adaptive chat conversation:`, err);
+              console.error(`❌ Error saving conversation:`, err);
             });
           }
         }
