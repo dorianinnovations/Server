@@ -602,9 +602,8 @@ Just respond naturally to what they're sharing.`;
         console.log(`📝 Messages being sent:`, JSON.stringify(messages, null, 2));
         console.log(`⚙️ Request options:`, { temperature: 0.9, n_predict: finalTokens, toolsCount: availableTools.length });
 
-        // Smart tool usage - only enable tools for requests that actually need them
         const needsTools = isToolRequiredMessage(userMessage);
-        const useTools = availableTools.length > 0 && needsTools;
+        const useTools = availableTools.length > 0;
         console.log(`🧪 DEBUG: Message needs tools: ${needsTools}, Using tools: ${useTools}, tools count: ${availableTools.length}`);
 
         streamResponse = await llmService.makeStreamingRequest(messages, {
