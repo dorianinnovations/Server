@@ -452,6 +452,7 @@ Just respond naturally to what they're sharing.`;
       let buffer = '';
       let fullContent = '';
       let chunkBuffer = ''; // Buffer for chunked streaming to reduce speed
+      let toolCallAccumulator = {}; // Accumulate tool call fragments
       
       streamResponse.data.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -470,8 +471,11 @@ Just respond naturally to what they're sharing.`;
             }
             
             try {
+              console.log(`🔍 STREAMING: Raw data before parsing:`, data);
               const parsed = JSON.parse(data);
               const choice = parsed.choices?.[0];
+              
+              console.log(`🔍 STREAMING: Parsed data:`, JSON.stringify(parsed, null, 2));
               
               if (choice?.delta?.content) {
                 const content = choice.delta.content;
@@ -488,12 +492,41 @@ Just respond naturally to what they're sharing.`;
                 }
               }
               
-              // Handle tool calls (but don't execute in streaming - handle after completion)
+              // Handle tool calls - accumulate fragments and execute when complete
               if (choice?.delta?.tool_calls) {
-                console.log(`🛠️ STREAMING: Tool call detected - will execute after stream completes`);
-                // Store tool calls for execution after streaming
-                if (!streamResponse.toolCalls) streamResponse.toolCalls = [];
-                streamResponse.toolCalls.push(...choice.delta.tool_calls);
+                console.log(`🛠️ STREAMING: Tool call detected`);
+                
+                for (const toolCallDelta of choice.delta.tool_calls) {
+                  const index = toolCallDelta.index || 0;
+                  
+                  // Initialize accumulator for this tool call index
+                  if (!toolCallAccumulator[index]) {
+                    toolCallAccumulator[index] = {
+                      id: toolCallDelta.id || `tool_${index}`,
+                      type: toolCallDelta.type || 'function',
+                      function: {
+                        name: '',
+                        arguments: ''
+                      }
+                    };
+                  }
+                  
+                  // Accumulate function name and arguments
+                  if (toolCallDelta.function?.name) {
+                    toolCallAccumulator[index].function.name += toolCallDelta.function.name;
+                    console.log(`🔧 STREAMING: Tool name accumulated: ${toolCallAccumulator[index].function.name}`);
+                  }
+                  
+                  if (toolCallDelta.function?.arguments) {
+                    toolCallAccumulator[index].function.arguments += toolCallDelta.function.arguments;
+                    console.log(`🔧 STREAMING: Tool args accumulated: ${toolCallAccumulator[index].function.arguments}`);
+                  }
+                }
+              }
+              
+              // Just accumulate tool calls during streaming - don't execute yet
+              if (choice?.finish_reason === 'tool_calls') {
+                console.log(`🏁 STREAMING: Tool calls complete, will execute after stream ends`);
               }
             } catch (e) {
               console.error('❌ STREAMING: Error parsing adaptive chat data:', e);
@@ -510,77 +543,172 @@ Just respond naturally to what they're sharing.`;
           res.flush && res.flush();
         }
         
-        // Execute any tool calls after streaming completes
-        if (streamResponse.toolCalls && streamResponse.toolCalls.length > 0) {
-          console.log(`🛠️ STREAMING: Executing ${streamResponse.toolCalls.length} tool calls`);
+        console.log(`✅ STREAMING: Initial stream completed with ${fullContent.length} characters`);
+        
+        // Check if we have accumulated tool calls to execute
+        const toolCalls = Object.values(toolCallAccumulator).filter(tc => tc.function?.name && tc.function?.arguments);
+        
+        if (toolCalls.length > 0) {
+          console.log(`🔧 STREAMING: Executing ${toolCalls.length} accumulated tool calls after stream completion`);
           
-          for (const toolCall of streamResponse.toolCalls) {
-            if (toolCall.function?.name && toolCall.function?.arguments) {
-              try {
-                const toolName = toolCall.function.name;
-                const toolArgs = JSON.parse(toolCall.function.arguments);
-                
-                console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
-                
-                // Execute the tool with proper context
-                const user = await User.findById(userId);
-                const creditPool = await CreditPool.findOne({ userId: userId });
-                
-                const toolResult = await toolExecutor.executeToolCall({
-                  function: { name: toolName, arguments: toolArgs }
-                }, { userId, user, creditPool });
-                
-                // Send tool execution result to the stream
-                let resultText = '';
-                if (toolResult.success) {
-                  resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
-                } else {
-                  resultText = 'Tool execution failed: ' + toolResult.error;
-                }
-                const toolMessage = `\n\n🔧 **${toolName}**: ${resultText}\n\n`;
-                res.write(`data: ${JSON.stringify({ content: toolMessage })}\n\n`);
-                res.flush && res.flush();
-                
-                fullContent += toolMessage;
-                
-              } catch (toolError) {
-                console.error(`❌ Error executing tool: ${toolError.message}`);
-                const errorMessage = `\n\n❌ Tool execution failed: ${toolError.message}\n\n`;
-                res.write(`data: ${JSON.stringify({ content: errorMessage })}\n\n`);
-                res.flush && res.flush();
-                
-                fullContent += errorMessage;
+          try {
+            // Execute all tool calls and collect results
+            const toolMessages = [];
+            
+            for (const toolCall of toolCalls) {
+              const toolName = toolCall.function.name;
+              const toolArgs = JSON.parse(toolCall.function.arguments);
+              
+              console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
+              
+              // Execute the tool
+              const user = await User.findById(userId);
+              const creditPool = await CreditPool.findOne({ userId: userId });
+              
+              const toolResult = await toolExecutor.executeToolCall({
+                function: { name: toolName, arguments: toolArgs }
+              }, { userId, user, creditPool });
+              
+              // Format tool result for OpenAI format
+              let resultText = '';
+              if (toolResult.success) {
+                resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
+              } else {
+                resultText = 'Tool execution failed: ' + toolResult.error;
               }
+              
+              const toolMessage = {
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: toolName,
+                content: resultText
+              };
+              
+              toolMessages.push(toolMessage);
             }
+            
+            console.log(`🔄 STREAMING: Making follow-up request with ${toolMessages.length} tool results`);
+            
+            // Build conversation with tool calls and results
+            const assistantMessage = {
+              role: 'assistant',
+              content: fullContent.trim() || null,
+              tool_calls: toolCalls.map(tc => ({
+                id: tc.id,
+                type: 'function',
+                function: {
+                  name: tc.function.name,
+                  arguments: tc.function.arguments
+                }
+              }))
+            };
+            
+            const followUpMessages = [
+              ...messages,
+              assistantMessage,
+              ...toolMessages
+            ];
+            
+            // Make follow-up streaming request with tool results (no tools to save costs)
+            const followUpResponse = await llmService.makeStreamingRequest(followUpMessages, {
+              temperature: 0.9,
+              n_predict: 200, // Reduced tokens to save costs
+              tools: [], // No tools in follow-up to avoid recursive calls
+              tool_choice: "none"
+            });
+            
+            console.log(`📡 STREAMING: Starting follow-up stream with tool results`);
+            
+            // Stream the follow-up response
+            let followUpBuffer = '';
+            
+            followUpResponse.data.on('data', (chunk) => {
+              followUpBuffer += chunk.toString();
+              const lines = followUpBuffer.split('\n');
+              followUpBuffer = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.substring(6).trim();
+                  
+                  if (data === '[DONE]') {
+                    console.log('🏁 STREAMING: Follow-up [DONE] signal');
+                    res.write('data: [DONE]\n\n');
+                    res.end();
+                    return;
+                  }
+                  
+                  try {
+                    const parsed = JSON.parse(data);
+                    const choice = parsed.choices?.[0];
+                    
+                    if (choice?.delta?.content) {
+                      const content = choice.delta.content;
+                      fullContent += content;
+                      console.log(`📡 STREAMING: Follow-up content: ${content}`);
+                      res.write(`data: ${JSON.stringify({ content })}\n\n`);
+                      res.flush && res.flush();
+                    }
+                  } catch (e) {
+                    // Ignore parsing errors
+                  }
+                }
+              }
+            });
+            
+            followUpResponse.data.on('end', () => {
+              console.log('✅ STREAMING: Follow-up completed, ending stream');
+              res.write('data: [DONE]\n\n');
+              res.end();
+              
+              // Save complete conversation to memory
+              saveConversationToMemory();
+            });
+            
+            followUpResponse.data.on('error', (err) => {
+              console.error('❌ Follow-up stream error:', err);
+              res.write('data: [DONE]\n\n');
+              res.end();
+            });
+            
+          } catch (error) {
+            console.error('❌ Error executing tools or making follow-up request:', error);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+        } else {
+          // No tool calls, just end the stream normally
+          console.log(`✅ STREAMING: No tool calls, ending stream normally`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          
+          // Save conversation to memory
+          saveConversationToMemory();
+        }
+        
+        // Function to save conversation to memory
+        function saveConversationToMemory() {
+          if (fullContent.trim()) {
+            ShortTermMemory.insertMany([
+              { userId, content: userMessage, role: "user" },
+              { userId, content: fullContent.trim(), role: "assistant" }
+            ]).then(async () => {
+              console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
+              userCache.invalidateUser(userId);
+
+              // Add to data processing pipeline
+              await dataProcessingPipeline.addEvent(userId, 'chat_message', {
+                message: userMessage,
+                response: fullContent.trim(),
+                emotion: detectSimpleEmotion(userMessage),
+                context: conversationContext,
+                timestamp: new Date()
+              });
+            }).catch(err => {
+              console.error(`❌ Error saving adaptive chat conversation:`, err);
+            });
           }
         }
-        
-        console.log(`✅ STREAMING: Adaptive chat completed for user ${userId}, content length: ${fullContent.length}`);
-        
-        // Save conversation to memory
-        if (fullContent.trim()) {
-          ShortTermMemory.insertMany([
-            { userId, content: userMessage, role: "user" },
-            { userId, content: fullContent.trim(), role: "assistant" }
-          ]).then(async () => {
-            console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
-            userCache.invalidateUser(userId);
-
-            // Add to data processing pipeline
-            await dataProcessingPipeline.addEvent(userId, 'chat_message', {
-              message: userMessage,
-              response: fullContent.trim(),
-              emotion: detectSimpleEmotion(userMessage), // Use the detectSimpleEmotion function
-              context: conversationContext,
-              timestamp: new Date()
-            });
-          }).catch(err => {
-            console.error(`❌ Error saving adaptive chat conversation:`, err);
-          });
-        }
-        
-        res.write('data: [DONE]\n\n');
-        res.end();
       });
       
       streamResponse.data.on("error", (err) => {
