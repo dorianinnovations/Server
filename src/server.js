@@ -46,6 +46,7 @@ import walletRoutes from "./routes/wallet.js";
 import subscriptionRoutes from "./routes/subscription.js";
 import debugRoutes from "./routes/debug.js";
 import testUBPMRoutes from "./routes/testUBPM.js";
+import dataCleanupRoutes from "./routes/dataCleanup.js";
 
 console.log("Route modules imported successfully");
 
@@ -192,6 +193,7 @@ const initializeServer = async () => {
   app.use("/subscription", subscriptionRoutes);
   app.use("/", debugRoutes);
   app.use("/test-ubpm", testUBPMRoutes);
+  app.use("/data-cleanup", dataCleanupRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
   app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
