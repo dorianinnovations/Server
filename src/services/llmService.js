@@ -20,15 +20,16 @@ export const createLLMService = () => {
       temperature = 0.8,
       tools = null,
       tool_choice = "auto",
+      attachments = null,
     } = options;
 
     const llmStartTime = Date.now();
 
     try {
-      // Handle both string prompts and messages array
+      // Handle both string prompts and messages array with vision support
       const messages = Array.isArray(promptOrMessages) 
         ? promptOrMessages 
-        : parsePromptToMessages(promptOrMessages);
+        : parsePromptToMessages(promptOrMessages, attachments);
       
       const requestData = {
         model: "openai/gpt-4o",
@@ -103,10 +104,10 @@ export const createLLMService = () => {
     } = options;
 
     try {
-      // Handle both string prompts and messages array
+      // Handle both string prompts and messages array with vision support
       const messages = Array.isArray(promptOrMessages) 
         ? promptOrMessages 
-        : parsePromptToMessages(promptOrMessages);
+        : parsePromptToMessages(promptOrMessages, attachments);
       
       const requestData = {
         model: "openai/gpt-4o",
@@ -202,11 +203,12 @@ export const createLLMService = () => {
     makeLLMRequest,
     makeStreamingRequest,
     healthCheck,
+    buildMultiModalMessage, // Export for direct use in routes
   };
 };
 
-// Helper function to parse chat-ml format to OpenRouter message format
-const parsePromptToMessages = (prompt) => {
+// Helper function to parse chat-ml format to OpenRouter message format with vision support
+const parsePromptToMessages = (prompt, attachments = []) => {
   const messages = [];
   
   // Split by the chat-ml markers
@@ -246,11 +248,87 @@ const parsePromptToMessages = (prompt) => {
   
   // If no chat-ml format detected, treat the entire prompt as a user message
   if (messages.length === 0) {
-    messages.push({
-      role: "user",
-      content: prompt.trim()
-    });
+    // Check if we have image attachments - use multi-modal format
+    if (attachments && attachments.length > 0) {
+      const imageAttachments = attachments.filter(att => 
+        att.type === 'image' && att.url && att.url.startsWith('data:image')
+      );
+      
+      if (imageAttachments.length > 0) {
+        // Create multi-modal message with text and images
+        const content = [
+          { type: 'text', text: prompt.trim() }
+        ];
+        
+        // Add up to 4 images (GPT-4o Vision limitation)
+        imageAttachments.slice(0, 4).forEach(image => {
+          content.push({
+            type: 'image_url',
+            image_url: { 
+              url: image.url,
+              detail: 'auto' // Can be 'low', 'high', or 'auto'
+            }
+          });
+        });
+        
+        messages.push({
+          role: "user",
+          content: content
+        });
+        
+        console.log('🖼️ GPT-4o VISION: Created multi-modal message with', imageAttachments.length, 'images');
+        console.log('🖼️ GPT-4o VISION: Image details:', imageAttachments.map(img => ({
+          type: img.type,
+          size: img.url?.length || 0,
+          format: img.url?.substring(5, 15) // data:image/...
+        })));
+      } else {
+        // No valid images, use text-only
+        messages.push({
+          role: "user",
+          content: prompt.trim()
+        });
+      }
+    } else {
+      // No attachments, use text-only
+      messages.push({
+        role: "user",
+        content: prompt.trim()
+      });
+    }
   }
   
   return messages;
+};
+
+// Helper function to build multi-modal messages from text and attachments
+const buildMultiModalMessage = (text, attachments = []) => {
+  const imageAttachments = attachments.filter(att => 
+    att.type === 'image' && att.url && 
+    (att.url.startsWith('data:image') || att.url.startsWith('http'))
+  );
+  
+  if (imageAttachments.length === 0) {
+    // No images, return simple text message
+    return { role: 'user', content: text };
+  }
+  
+  // Build multi-modal content array
+  const content = [
+    { type: 'text', text: text || 'Please analyze these images.' }
+  ];
+  
+  // Add images (limit to 4 for GPT-4o Vision)
+  imageAttachments.slice(0, 4).forEach(image => {
+    content.push({
+      type: 'image_url',
+      image_url: { 
+        url: image.url,
+        detail: 'auto' // Balances cost and performance
+      }
+    });
+  });
+  
+  console.log(`🖼️ Built multi-modal message with ${imageAttachments.length} images`);
+  return { role: 'user', content: content };
 };

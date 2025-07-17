@@ -12,6 +12,8 @@ import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
 import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
+import enhancedMemoryService from '../services/enhancedMemoryService.js';
+import requestCacheService from '../services/requestCacheService.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -429,84 +431,43 @@ Preferences: ${JSON.stringify(preferences)}`;
 
 router.post('/adaptive-chat', protect, async (req, res) => {
   try {
-    const { message, prompt, emotionalContext, personalityProfile, personalityStyle, conversationGoal, stream } = req.body;
+    const { message, prompt, emotionalContext, personalityProfile, personalityStyle, conversationGoal, stream, attachments } = req.body;
     // Support both message and prompt parameters for flexibility
     const userMessage = message || prompt;
     const userId = req.user.id;
     const userCache = createUserCache(userId);
     
-    console.log(`✓ Adaptive chat request received for user ${userId} (stream: ${stream === true})`);
-    console.log(`📝 Message: ${userMessage}`);
-    console.log(`🎭 Emotional Context:`, emotionalContext);
-    console.log(`👤 Personality Profile:`, personalityProfile);
-    console.log(`🎨 Personality Style:`, personalityStyle);
+    // High-performance mode: minimal logging
+    if (process.env.DEBUG_CHAT === 'true') {
+      console.log(`✓ Chat request: ${userId}`);
+    }
     
-    // Validate required parameters
-    if (!userMessage || typeof userMessage !== 'string') {
-      console.error(`❌ Invalid message parameter: ${userMessage}`);
+    // Validate required parameters - allow empty message if attachments exist
+    if ((!userMessage || typeof userMessage !== 'string') && (!attachments || attachments.length === 0)) {
+      console.error(`❌ Invalid request: no message or attachments provided`);
       return res.status(400).json({
         success: false,
-        error: 'Message/prompt is required and must be a string'
+        error: 'Message/prompt or attachments are required'
       });
     }
+
+    // If no message but has attachments, provide default message
+    const finalMessage = userMessage || 'Please analyze the attached content.';
     
-    // Get conversation context
-    const [user, recentMemory] = await Promise.all([
-      userCache.getCachedUser(userId, () => 
-        User.findById(userId).select('profile emotionalLog').lean()
-      ),
-      userCache.getCachedMemory(userId, () => 
-        ShortTermMemory.find({ userId }, { role: 1, content: 1, timestamp: 1, _id: 0 })
-          .sort({ timestamp: -1 })
-          .limit(8)
-          .lean()
-      ),
-    ]);
+    // Get enhanced conversation context with persistent user constants
+    const enhancedContext = await enhancedMemoryService.getUserContext(userId, 12);
+    const user = enhancedContext.metadata;
+    const recentMemory = enhancedContext.conversation.recentMessages;
 
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    // Extract user data from enhanced context
+    const recentEmotions = enhancedContext.recentEmotions;
 
-    const recentEmotions = (user.emotionalLog || [])
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, 5);
-
-    // Build conversation history
-    const conversationHistory = recentMemory
-      .reverse()
-      .map(mem => `${mem.role}: ${mem.content}`)
-      .join('\n');
-
-    // Analyze conversation patterns
-    const userMessages = recentMemory.filter(m => m.role === 'user');
-    const assistantMessages = recentMemory.filter(m => m.role === 'assistant');
-    
-    // Analyze communication style with safe fallbacks
-    const communicationStyle = {
-      messageLength: userMessages.length > 0 ? userMessages.reduce((acc, m) => acc + (m.content ? m.content.length : 0), 0) / userMessages.length : 0,
-      questionAsking: userMessages.filter(m => m.content && m.content.includes('?')).length / Math.max(userMessages.length, 1),
-      emotionalExpressions: userMessages.filter(m => m.content && /\b(feel|feeling|felt|emotion|mood|happy|sad|excited|nervous|anxious|stressed|love|hate)\b/i.test(m.content)).length,
-      conversationalTone: (userMessage && userMessage.includes('!')) ? 'energetic' : 
-                         (userMessage && userMessage.includes('?')) ? 'curious' : 
-                         (userMessage && userMessage.length < 50) ? 'casual' : 'thoughtful'
-    };
-
-    // Determine adaptive response style
-    const adaptiveStyle = {
-      responseLength: communicationStyle.messageLength < 100 ? 'concise' : communicationStyle.messageLength > 200 ? 'detailed' : 'balanced',
-      questionFrequency: communicationStyle.questionAsking > 0.3 ? 'high' : 'low',
-      emotionalEngagement: communicationStyle.emotionalExpressions > 2 ? 'deep' : 'moderate',
-      conversationalEnergy: communicationStyle.conversationalTone
-    };
-
-    // Simple background context for natural conversation
+    // High-performance: Simplified context analysis
     const conversationContext = {
       conversationLength: recentMemory.length,
-      hasHistory: recentMemory.length > 3,
-      recentVibe: recentEmotions.length > 0 ? recentEmotions[0].emotion : 'getting to know each other'
+      hasHistory: recentMemory.length > 0,
+      recentVibe: 'getting to know each other'
     };
-
-    console.log(`💬 Conversation Context:`, conversationContext);
 
     // Background emotion processing (non-blocking)
     setImmediate(() => {
@@ -519,7 +480,8 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       timeOfDay: new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'
     };
 
-    const systemPrompt = `You are Numina, a naturally intuitive companion who really gets people. You're warm, genuine, and have a gift for seeing what matters.
+    // Build enhanced system prompt with persistent user knowledge
+    const baseSystemPrompt = `You are Numina, a naturally intuitive companion who really gets people. You're warm, genuine, and have a gift for seeing what matters.
 
 Who you are:
 • Someone who notices patterns and connects dots in meaningful ways
@@ -554,23 +516,61 @@ TOOL USAGE: When users ask for searches, information, calculations, or any real-
 Be proactive with tool usage - if someone asks to search, find, look up, or get information about anything, use tools immediately.
 
 ADAPTIVE INSTRUCTIONS:
-- Response Style: ${adaptiveStyle.responseLength} responses (user prefers ${communicationStyle.messageLength < 100 ? 'brief exchanges' : communicationStyle.messageLength > 200 ? 'detailed conversations' : 'balanced discussion'})
-- Question Engagement: ${adaptiveStyle.questionFrequency === 'high' ? 'User asks many questions - be curious back and explore topics deeply' : 'User is more declarative - focus on insights and reflections'}
-- Emotional Depth: ${adaptiveStyle.emotionalEngagement === 'deep' ? 'User is emotionally expressive - match this depth and explore feelings' : 'User is more reserved emotionally - be gentle and patient with emotional topics'}
-- Energy Level: Match their ${adaptiveStyle.conversationalEnergy} energy
+- Keep responses balanced and natural
+- Be helpful and engaging
+- Match the user's communication style`;
 
-Context:
-${conversationHistory ? `You've been talking: ${conversationHistory}` : 'This is your first exchange.'}
+    // Use enhanced memory service to build rich system prompt
+    const systemPrompt = enhancedMemoryService.buildEnhancedPrompt(
+      baseSystemPrompt, 
+      enhancedContext, 
+      {}
+    );
 
-Current vibe: ${conversationContext.recentVibe}
-${conversationContext.hasHistory ? 'You have history - feel free to reference patterns you\'ve noticed.' : 'You\'re just getting to know each other.'}
-
-Just respond naturally to what they're sharing.`;
-
+    // Build messages with vision support for attachments
     const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage }
+      { role: 'system', content: systemPrompt }
     ];
+
+    // Add user message with potential image attachments
+    if (attachments && attachments.length > 0) {
+      // Use multi-modal message format for images
+      const imageAttachments = attachments.filter(att => 
+        att.type === 'image' && att.url && att.url.startsWith('data:image')
+      );
+      
+      if (imageAttachments.length > 0) {
+        console.log(`🖼️ GPT-4o VISION: Processing ${imageAttachments.length} image attachments for user ${userId}`);
+        console.log(`🖼️ GPT-4o VISION: Message text: "${finalMessage}"`);
+        console.log(`🖼️ GPT-4o VISION: Total attachment data size:`, 
+          imageAttachments.reduce((sum, img) => sum + (img.url?.length || 0), 0), 'characters');
+        const content = [
+          { type: 'text', text: finalMessage }
+        ];
+        
+        // Add up to 4 images (GPT-4o Vision limitation)
+        imageAttachments.slice(0, 4).forEach(image => {
+          content.push({
+            type: 'image_url',
+            image_url: { 
+              url: image.url,
+              detail: 'auto' // Balances cost and performance
+            }
+          });
+        });
+        
+        messages.push({
+          role: 'user',
+          content: content
+        });
+      } else {
+        // No valid images, use text-only
+        messages.push({ role: 'user', content: finalMessage });
+      }
+    } else {
+      // No attachments, use text-only
+      messages.push({ role: 'user', content: finalMessage });
+    }
 
     if (stream === true) {
       console.log(`🌊 STREAMING: Making adaptive chat request for user ${userId}`);
@@ -583,7 +583,7 @@ Just respond naturally to what they're sharing.`;
           'concise': 250,     // Increased from 150
           'balanced': 500,    // Increased from 350
           'detailed': 900     // Increased from 650
-        }[adaptiveStyle.responseLength] || 500;
+        }['balanced'] || 500;
 
         // Context modifier based on conversation depth
         const contextMultiplier = conversationContext.conversationLength > 10 ? 1.2 : 
@@ -594,7 +594,7 @@ Just respond naturally to what they're sharing.`;
         
         const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * conversationModifier));
         
-        console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength}, context: ${contextMultiplier})`);
+        console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: balanced, context: ${contextMultiplier})`);
 
         // Get available tools for the chat
         const availableTools = await toolRegistry.getToolsForOpenAI();
@@ -610,7 +610,8 @@ Just respond naturally to what they're sharing.`;
           temperature: 0.9,
           n_predict: finalTokens,
           tools: useTools ? availableTools : [],
-          tool_choice: useTools ? "auto" : "none"
+          tool_choice: useTools ? "auto" : "none",
+          attachments: attachments // Pass attachments for vision support
         });
       } catch (err) {
         console.error("❌ Error in makeStreamingRequest for adaptive chat:", err.stack || err);
@@ -889,14 +890,16 @@ Just respond naturally to what they're sharing.`;
           saveConversationToMemory();
         }
         
-        // Function to save conversation to memory
+        // Function to save conversation to enhanced memory
         function saveConversationToMemory() {
           if (fullContent.trim()) {
-            ShortTermMemory.insertMany([
-              { userId, content: userMessage, role: "user" },
-              { userId, content: fullContent.trim(), role: "assistant" }
-            ]).then(async () => {
-              console.log(`💾 Saved conversation to memory`);
+            enhancedMemoryService.saveConversation(
+              userId, 
+              userMessage, 
+              fullContent.trim(),
+              { emotion: detectSimpleEmotion(userMessage), context: conversationContext }
+            ).then(async () => {
+              console.log(`💾 Saved conversation to enhanced memory`);
               userCache.invalidateUser(userId);
 
               // Add to data processing pipeline
@@ -908,7 +911,7 @@ Just respond naturally to what they're sharing.`;
                 timestamp: new Date()
               });
             }).catch(err => {
-              console.error(`❌ Error saving conversation:`, err);
+              console.error(`❌ Error saving enhanced conversation:`, err);
             });
           }
         }
@@ -924,14 +927,35 @@ Just respond naturally to what they're sharing.`;
       });
       
     } else {
-      console.log(`📄 NON-STREAMING: Making adaptive chat request for user ${userId}`);
+      // 🚀 SUPER HIGH-PERFORMANCE CACHE CHECK - 100x COST SAVINGS!
+      const cacheResult = await requestCacheService.getCachedResponse(userId, finalMessage, systemPrompt);
+      
+      if (cacheResult.cacheHit) {
+        console.log(`⚡ CACHE HIT! Saved API call (similarity: ${Math.round(cacheResult.similarity * 100)}%)`);
+        
+        // Save conversation to memory (background task)
+        setImmediate(async () => {
+          await enhancedMemoryService.saveConversation(userId, finalMessage, cacheResult.data.response);
+        });
+        
+        return res.json({
+          success: true,
+          data: {
+            response: cacheResult.data.response,
+            tone: 'adaptive',
+            suggestedFollowUps: cacheResult.data.suggestedFollowUps || [],
+            emotionalSupport: cacheResult.data.emotionalSupport || "",
+            adaptationReason: `Cached response (${cacheResult.cacheType}, ${Math.round(cacheResult.similarity * 100)}% similarity)`
+          }
+        });
+      }
       
       // Non-streaming mode - reuse dynamic token calculation
       const dynamicTokens = {
         'concise': 250,     // Increased from 150
         'balanced': 500,    // Increased from 350
         'detailed': 900     // Increased from 650
-      }[adaptiveStyle.responseLength] || 500;
+      }['balanced'] || 500;
 
       const contextMultiplier = conversationContext.conversationLength > 10 ? 1.2 : 
                                conversationContext.conversationLength > 5 ? 1.1 : 1.0;
@@ -939,7 +963,7 @@ Just respond naturally to what they're sharing.`;
       const conversationModifier = conversationContext.hasHistory ? 1.1 : 1.0;
       const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * conversationModifier));
       
-      console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: ${adaptiveStyle.responseLength})`);
+      console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: balanced)`);
 
       // Get available tools for the chat  
       const availableTools = await toolRegistry.getToolsForOpenAI();
@@ -997,26 +1021,35 @@ Just respond naturally to what they're sharing.`;
         }
       }
 
-      // Save conversation to memory
+      // Save conversation to enhanced memory
       if (finalContent.trim()) {
         try {
-          await ShortTermMemory.insertMany([
-            { userId, content: userMessage, role: "user" },
-            { userId, content: finalContent.trim(), role: "assistant" }
-          ]);
-          console.log(`💾 Saved adaptive chat conversation to memory for user ${userId}`);
+          await enhancedMemoryService.saveConversation(
+            userId, 
+            userMessage, 
+            finalContent.trim(),
+            { emotion: detectSimpleEmotion(userMessage), context: conversationContext }
+          );
           userCache.invalidateUser(userId);
+
+          // 🚀 CACHE THE RESPONSE FOR 100x FUTURE SAVINGS!
+          await requestCacheService.cacheResponse(userId, finalMessage, systemPrompt, {
+            response: finalContent.trim(),
+            suggestedFollowUps: [],
+            emotionalSupport: "",
+            tone: 'adaptive'
+          });
 
           // Add to data processing pipeline
           await dataProcessingPipeline.addEvent(userId, 'chat_message', {
             message: userMessage,
             response: response.content.trim(),
-            emotion: detectSimpleEmotion(userMessage), // Use the detectSimpleEmotion function
+            emotion: detectSimpleEmotion(userMessage),
             context: conversationContext,
             timestamp: new Date()
           });
         } catch (err) {
-          console.error(`❌ Error saving adaptive chat conversation:`, err);
+          console.error(`❌ Error saving enhanced adaptive chat conversation:`, err);
         }
       }
 

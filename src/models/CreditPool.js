@@ -168,7 +168,7 @@ const creditPoolSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-creditPoolSchema.index({ userId: 1 });
+// userId index automatically created by unique: true in schema
 creditPoolSchema.index({ 'transactions.timestamp': -1 });
 creditPoolSchema.index({ 'transactions.type': 1 });
 

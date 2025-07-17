@@ -6,7 +6,7 @@ const shortTermMemorySchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-  conversationId: { type: String, required: false, index: true },
+  conversationId: { type: String, required: false },
   timestamp: { type: Date, default: Date.now, expires: "24h" }, 
   content: { type: String, required: true },
   role: { type: String, enum: ["user", "assistant"], required: true },

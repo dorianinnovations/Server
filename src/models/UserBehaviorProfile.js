@@ -185,7 +185,7 @@ const userBehaviorProfileSchema = new mongoose.Schema({
 });
 
 // Indexes for performance
-userBehaviorProfileSchema.index({ userId: 1 });
+// userId index automatically created by unique: true in schema
 userBehaviorProfileSchema.index({ 'lifecycleStage.stage': 1 });
 userBehaviorProfileSchema.index({ 'interests.category': 1 });
 userBehaviorProfileSchema.index({ 'personalityTraits.trait': 1 });

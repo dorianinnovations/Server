@@ -101,7 +101,7 @@ const toolSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-toolSchema.index({ name: 1 });
+// Name index automatically created by unique: true in schema
 toolSchema.index({ category: 1 });
 toolSchema.index({ enabled: 1 });
 
