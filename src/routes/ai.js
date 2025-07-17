@@ -666,22 +666,59 @@ ADAPTIVE INSTRUCTIONS:
     // Get UBPM context for AI (behavioral patterns)
     const ubpmContext = await ubpmService.getUBPMContextForAI(userId);
     
-    // Use enhanced memory service to build rich system prompt
-    let systemPrompt = enhancedMemoryService.buildEnhancedPrompt(
-      baseSystemPrompt, 
-      enhancedContext, 
-      {}
-    );
+    // Build concise system prompt (conversation history added separately)
+    let systemPrompt = baseSystemPrompt;
+    
+    // Add persistent user knowledge from enhanced memory
+    const { userConstants } = enhancedContext;
+    
+    // Add user knowledge if available
+    if (userConstants && Object.keys(userConstants.personal || {}).length > 0) {
+      systemPrompt += `\n\n**USER CONTEXT:**\n`;
+      if (userConstants.personal.name) {
+        systemPrompt += `• Name: ${userConstants.personal.preferredName || userConstants.personal.name}\n`;
+      }
+      if (userConstants.personal.occupation) {
+        systemPrompt += `• Occupation: ${userConstants.personal.occupation}\n`;
+      }
+      if (userConstants.communicationStyle) {
+        systemPrompt += `• Communication style: ${Object.entries(userConstants.communicationStyle).map(([k,v]) => `${k}: ${v}`).join(', ')}\n`;
+      }
+    }
+    
+    // Add recent emotional context
+    if (recentEmotions && recentEmotions.length > 0) {
+      const latestEmotion = recentEmotions[0];
+      systemPrompt += `\n**RECENT MOOD:** ${latestEmotion.emotion}`;
+      if (latestEmotion.intensity) {
+        systemPrompt += ` (${latestEmotion.intensity}/10)`;
+      }
+      systemPrompt += '\n';
+    }
+    
+    systemPrompt += '\n**REMEMBER:** Reference conversation history naturally. Use tools proactively for any information requests.';
     
     // Add UBPM context if available
     if (ubpmContext) {
       systemPrompt += `\n\n${ubpmContext}`;
     }
 
-    // Build messages with vision support for attachments
+    // Build messages with conversation history and vision support
     const messages = [
       { role: 'system', content: systemPrompt }
     ];
+
+    // Add recent conversation history (last 6-8 messages for context)
+    const conversationHistory = recentMemory
+      .filter(msg => msg && msg.content && typeof msg.content === 'string' && msg.content.trim() && msg.role) // Only valid messages with content
+      .slice(-6) // Last 6 messages for context
+      .map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'assistant', // Ensure valid roles
+        content: msg.content.trim()
+      }));
+    
+    // Add conversation history to messages
+    messages.push(...conversationHistory);
 
     // Add user message with potential image attachments
     if (attachments && attachments.length > 0) {
