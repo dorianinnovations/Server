@@ -5,7 +5,7 @@ const defaultTools = [
   {
     name: 'ubpm_analysis',
     description: 'User Behavior Pattern Modeling - Advanced temporal analysis of interaction vectors, behavioral deltas, and confidence matrices for deep behavioral insights',
-    category: 'analytics',
+    category: 'utility',
     schema: {
       type: 'object',
       properties: {
@@ -56,7 +56,7 @@ const defaultTools = [
     requiresAuth: true,
     requiresPayment: false,
     costPerExecution: 0,
-    permissions: ['read', 'analytics'],
+    permissions: ['read', 'execute'],
     triggers: [
       {
         eventType: 'user_action',
