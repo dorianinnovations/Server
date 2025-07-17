@@ -629,7 +629,17 @@ ADAPTIVE INSTRUCTIONS:
         let availableTools = [];
         const needsTools = isToolRequiredMessage(userMessage);
         
-        if (needsTools) {
+        // ANTI-DUPLICATION: Check recent memory for similar search requests
+        const recentSearchCheck = await checkRecentSearchDuplication(userId, userMessage, recentMemory);
+        if (recentSearchCheck.isDuplicate) {
+          console.log(`🚫 DUPLICATE SEARCH: Similar request found, referencing previous result`);
+          res.write(`data: ${JSON.stringify({ 
+            content: `I found a similar search in our recent conversation. ${recentSearchCheck.reference}\n\n` 
+          })}\n\n`);
+          res.flush && res.flush();
+        }
+        
+        if (needsTools && !recentSearchCheck.shouldSkipTools) {
           console.log('🔧 SELECTIVE TOOLS: Message requires tools, loading relevant ones');
           try {
             const allTools = await toolRegistry.getToolsForOpenAI();
@@ -924,6 +934,19 @@ ADAPTIVE INSTRUCTIONS:
             // Clear keep-alive interval before follow-up
             if (typeof keepAliveInterval !== 'undefined') {
               clearInterval(keepAliveInterval);
+            }
+            
+            // OPTIMIZATION: Skip follow-up for simple single-tool responses to prevent double responses
+            const skipFollowUp = toolMessages.length === 1 && 
+              ['web_search', 'weather_check', 'calculator', 'translation'].includes(toolMessages[0].name) &&
+              fullContent.trim().length < 50; // Very short initial response
+            
+            if (skipFollowUp) {
+              console.log(`🚀 OPTIMIZATION: Skipping follow-up for simple ${toolMessages[0].name} response`);
+              res.write('data: [DONE]\n\n');
+              res.end();
+              saveConversationToMemory();
+              return;
             }
             
             // SPEED OPTIMIZATION: Make follow-up request with reduced token limit for faster response
@@ -1441,5 +1464,39 @@ Timeframe: ${timeframe || 'current'}`;
     });
   }
 });
+
+// Helper function to check for recent search duplication
+async function checkRecentSearchDuplication(userId, userMessage, recentMemory) {
+  const searchKeywords = ['search', 'find', 'google', 'look up', 'what is', 'who is', 'where is'];
+  const isSearchQuery = searchKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
+  
+  if (!isSearchQuery || recentMemory.length === 0) {
+    return { isDuplicate: false, shouldSkipTools: false, reference: null };
+  }
+  
+  // Check last 5 messages for similar search terms
+  const recentUserMessages = recentMemory
+    .filter(msg => msg.role === 'user')
+    .slice(-5);
+    
+  for (const msg of recentUserMessages) {
+    if (!msg.content) continue;
+    
+    // Simple similarity check - if 3+ words match, consider it duplicate
+    const currentWords = userMessage.toLowerCase().split(' ').filter(w => w.length > 3);
+    const pastWords = msg.content.toLowerCase().split(' ').filter(w => w.length > 3);
+    const commonWords = currentWords.filter(word => pastWords.includes(word));
+    
+    if (commonWords.length >= 3) {
+      return {
+        isDuplicate: true,
+        shouldSkipTools: false, // Still allow tools but notify about duplication
+        reference: `Here's what I found about "${msg.content.substring(0, 50)}..." earlier.`
+      };
+    }
+  }
+  
+  return { isDuplicate: false, shouldSkipTools: false, reference: null };
+}
 
 export default router;

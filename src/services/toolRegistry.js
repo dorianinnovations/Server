@@ -3,6 +3,88 @@ import toolExecutor from './toolExecutor.js';
 
 const defaultTools = [
   {
+    name: 'ubpm_analysis',
+    description: 'User Behavior Pattern Modeling - Advanced temporal analysis of interaction vectors, behavioral deltas, and confidence matrices for deep behavioral insights',
+    category: 'analytics',
+    schema: {
+      type: 'object',
+      properties: {
+        analysisMode: {
+          type: 'string',
+          enum: ['temporal_delta', 'pattern_confidence', 'behavioral_vector', 'interaction_clustering', 'comprehensive'],
+          description: 'Type of UBPM analysis to perform',
+          default: 'behavioral_vector'
+        },
+        timeframe: {
+          type: 'string',
+          enum: ['session', 'daily', 'weekly', 'monthly', 'all_time'],
+          description: 'Temporal scope for behavioral analysis',
+          default: 'weekly'
+        },
+        confidenceThreshold: {
+          type: 'number',
+          minimum: 0.1,
+          maximum: 1.0,
+          description: 'Minimum confidence threshold for pattern validation',
+          default: 0.5
+        },
+        includeRawMetrics: {
+          type: 'boolean',
+          description: 'Include raw computational metrics and vector spaces',
+          default: true
+        },
+        vectorComponents: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['curiosity', 'technical_depth', 'interaction_complexity', 'emotional_variance', 'goal_orientation']
+          },
+          description: 'Behavioral vector components to compute',
+          default: ['curiosity', 'technical_depth', 'interaction_complexity', 'emotional_variance']
+        },
+        temporalGranularity: {
+          type: 'string',
+          enum: ['hourly', 'daily', 'weekly'],
+          description: 'Granularity for temporal delta calculations',
+          default: 'daily'
+        }
+      },
+      required: []
+    },
+    implementation: 'ubpmAnalysis',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read', 'analytics'],
+    triggers: [
+      {
+        eventType: 'user_action',
+        conditions: {
+          'data.action': 'behavioral_analysis_request',
+          'data.context.type': 'self_analysis'
+        },
+        priority: 10
+      },
+      {
+        eventType: 'user_behavior_pattern',
+        conditions: {
+          'data.pattern': 'introspection',
+          'data.confidence': { '$gte': 0.7 }
+        },
+        priority: 9
+      },
+      {
+        eventType: 'user_data_update',
+        conditions: {
+          'data.dataType': 'behavioral_profile',
+          'data.significance': 'high'
+        },
+        priority: 8
+      }
+    ]
+  },
+  {
     name: 'reservation_booking',
     description: 'Book restaurant reservations based on user preferences and availability',
     category: 'booking',
