@@ -185,6 +185,128 @@ function getToolExecutionMessage(toolName, toolArgs) {
   }
 }
 
+// Format tool results for user-friendly display (CRITICAL: Prevents JSON leakage)
+function formatToolResultForUser(toolName, result) {
+  try {
+    // Don't show raw JSON to users - format appropriately
+    if (!result) return null;
+    
+    // Parse result if it's a string
+    let parsedResult = result;
+    if (typeof result === 'string') {
+      try {
+        parsedResult = JSON.parse(result);
+      } catch (e) {
+        // If not JSON, return the string directly for simple tools
+        return `🔧 **${toolName.replace(/_/g, ' ')}**: ${result}`;
+      }
+    }
+    
+    // Format specific tool types with user-friendly output
+    switch (toolName) {
+      case 'web_search':
+        if (parsedResult.results && Array.isArray(parsedResult.results)) {
+          const resultCount = parsedResult.results.length;
+          const topResults = parsedResult.results.slice(0, 3).map(r => 
+            `• **${r.title}** - ${r.snippet || r.displayLink}`
+          ).join('\n');
+          return `🔍 **Found ${resultCount} search results:**\n${topResults}${resultCount > 3 ? `\n...and ${resultCount - 3} more results` : ''}`;
+        }
+        break;
+        
+      case 'weather_check':
+        if (parsedResult.weather) {
+          return `🌤️ **Weather:** ${parsedResult.weather.description}, ${parsedResult.weather.temperature}°${parsedResult.weather.unit || 'C'}`;
+        }
+        break;
+        
+      case 'calculator':
+        if (parsedResult.result !== undefined) {
+          return `🧮 **Calculation:** ${parsedResult.expression || ''} = ${parsedResult.result}`;
+        }
+        break;
+        
+      case 'translation':
+        if (parsedResult.translatedText) {
+          return `🌐 **Translation:** ${parsedResult.translatedText}`;
+        }
+        break;
+        
+      case 'stock_lookup':
+        if (parsedResult.symbol && parsedResult.price) {
+          return `📈 **${parsedResult.symbol}:** $${parsedResult.price} ${parsedResult.change ? `(${parsedResult.change})` : ''}`;
+        }
+        break;
+        
+      case 'crypto_lookup':
+        if (parsedResult.symbol && parsedResult.price) {
+          return `₿ **${parsedResult.symbol}:** $${parsedResult.price} ${parsedResult.change ? `(${parsedResult.change})` : ''}`;
+        }
+        break;
+        
+      case 'currency_converter':
+        if (parsedResult.result) {
+          return `💱 **Currency:** ${parsedResult.amount} ${parsedResult.from} = ${parsedResult.result} ${parsedResult.to}`;
+        }
+        break;
+        
+      case 'news_search':
+        if (parsedResult.articles && Array.isArray(parsedResult.articles)) {
+          const topNews = parsedResult.articles.slice(0, 3).map(a => 
+            `• **${a.title}** - ${a.source || 'News'}`
+          ).join('\n');
+          return `📰 **Latest News:**\n${topNews}`;
+        }
+        break;
+        
+      case 'social_search':
+        if (parsedResult.posts && Array.isArray(parsedResult.posts)) {
+          const topPosts = parsedResult.posts.slice(0, 3).map(p => 
+            `• **${p.title}** - ${p.platform || 'Social'}`
+          ).join('\n');
+          return `🐦 **Social Results:**\n${topPosts}`;
+        }
+        break;
+        
+      case 'music_recommendations':
+        if (parsedResult.tracks && Array.isArray(parsedResult.tracks)) {
+          return `🎵 **Music Recommendations:** ${parsedResult.tracks.length} tracks found`;
+        }
+        break;
+        
+      case 'qr_generator':
+        if (parsedResult.success) {
+          return `📱 **QR Code generated successfully**`;
+        }
+        break;
+        
+      case 'password_generator':
+        if (parsedResult.password) {
+          return `🔒 **Secure password generated** (${parsedResult.strength || 'strong'})`;
+        }
+        break;
+        
+      default:
+        // For other tools, try to extract a meaningful message
+        if (parsedResult.message) {
+          return `🔧 **${toolName.replace(/_/g, ' ')}**: ${parsedResult.message}`;
+        } else if (parsedResult.success) {
+          return `✅ **${toolName.replace(/_/g, ' ')} completed successfully**`;
+        } else if (parsedResult.error) {
+          return `❌ **${toolName.replace(/_/g, ' ')} error**: ${parsedResult.error}`;
+        }
+        break;
+    }
+    
+    // Fallback: Don't show raw JSON, just acknowledge completion
+    return `✅ **${toolName.replace(/_/g, ' ')} completed**`;
+    
+  } catch (error) {
+    console.error(`Error formatting tool result for ${toolName}:`, error);
+    return `✅ **${toolName.replace(/_/g, ' ')} completed**`;
+  }
+}
+
 // Helper functions for Dynamic Numina Senses
 // Background emotion processing (non-blocking)
 async function processEmotionInBackground(userId, userMessage, recentMemory, recentEmotions) {
@@ -843,15 +965,15 @@ ADAPTIVE INSTRUCTIONS:
                 const executionTime = Date.now() - toolStartTime;
                 console.log(`✅ SEQUENTIAL [${i + 1}/${toolCalls.length}]: ${toolName} completed in ${executionTime}ms`);
                 
-                // Send immediate result streaming
+                // Send immediate result streaming with user-friendly formatting
                 if (toolResult && toolResult.success && toolResult.result !== undefined) {
-                  let resultText = typeof toolResult.result === 'object' 
-                    ? JSON.stringify(toolResult.result, null, 2) 
-                    : String(toolResult.result);
+                  const formattedResult = formatToolResultForUser(toolName, toolResult.result);
                   
-                  const toolResponse = `\n\n🔧 **${toolName}**: ${resultText}`;
-                  res.write(`data: ${JSON.stringify({ content: toolResponse })}\n\n`);
-                  res.flush && res.flush();
+                  if (formattedResult) {
+                    const toolResponse = `\n\n${formattedResult}`;
+                    res.write(`data: ${JSON.stringify({ content: toolResponse })}\n\n`);
+                    res.flush && res.flush();
+                  }
                 }
                 
                 toolResults.push({ toolCall, toolResult, executionTime });
@@ -1198,15 +1320,11 @@ ADAPTIVE INSTRUCTIONS:
               function: { name: toolName, arguments: toolArgs }
             }, { userId, user, creditPool });
             
-            // Append tool result to the response
-            let resultText = '';
-            if (toolResult.success) {
-              resultText = typeof toolResult.result === 'object' ? JSON.stringify(toolResult.result, null, 2) : toolResult.result;
-            } else {
-              resultText = 'Tool execution failed: ' + toolResult.error;
+            // Append tool result to the response with user-friendly formatting
+            const formattedResult = formatToolResultForUser(toolName, toolResult.success ? toolResult.result : { error: toolResult.error });
+            if (formattedResult) {
+              finalContent += `\n\n${formattedResult}`;
             }
-            const toolMessage = `\n\n🔧 **${toolName}**: ${resultText}`;
-            finalContent += toolMessage;
             
           } catch (toolError) {
             console.error(`❌ Error executing tool: ${toolError.message}`);
