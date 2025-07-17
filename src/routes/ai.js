@@ -14,6 +14,7 @@ import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import requestCacheService from '../services/requestCacheService.js';
+import ubpmService from '../services/ubpmService.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -469,6 +470,11 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       recentVibe: 'getting to know each other'
     };
 
+    // Background UBPM analysis (non-blocking) - analyze patterns from this interaction
+    setImmediate(() => {
+      ubpmService.analyzeUserBehaviorPatterns(userId, 'chat_interaction');
+    });
+
     // Background emotion processing (non-blocking)
     setImmediate(() => {
       processEmotionInBackground(userId, userMessage, recentMemory, recentEmotions);
@@ -520,12 +526,20 @@ ADAPTIVE INSTRUCTIONS:
 - Be helpful and engaging
 - Match the user's communication style`;
 
+    // Get UBPM context for AI (behavioral patterns)
+    const ubpmContext = await ubpmService.getUBPMContextForAI(userId);
+    
     // Use enhanced memory service to build rich system prompt
-    const systemPrompt = enhancedMemoryService.buildEnhancedPrompt(
+    let systemPrompt = enhancedMemoryService.buildEnhancedPrompt(
       baseSystemPrompt, 
       enhancedContext, 
       {}
     );
+    
+    // Add UBPM context if available
+    if (ubpmContext) {
+      systemPrompt += `\n\n${ubpmContext}`;
+    }
 
     // Build messages with vision support for attachments
     const messages = [

@@ -45,6 +45,7 @@ import toolsRoutes from "./routes/tools.js";
 import walletRoutes from "./routes/wallet.js";
 import subscriptionRoutes from "./routes/subscription.js";
 import debugRoutes from "./routes/debug.js";
+import testUBPMRoutes from "./routes/testUBPM.js";
 
 console.log("Route modules imported successfully");
 
@@ -190,6 +191,7 @@ const initializeServer = async () => {
   app.use("/wallet", walletRoutes);
   app.use("/subscription", subscriptionRoutes);
   app.use("/", debugRoutes);
+  app.use("/test-ubpm", testUBPMRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
   app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
@@ -312,6 +314,7 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/wallet", walletRoutes);
       app.use("/subscription", subscriptionRoutes);
       app.use("/", debugRoutes);
+      app.use("/test-ubpm", testUBPMRoutes);
       app.use("/cloud", cloudRoutes);
       app.use("/personal-insights", personalInsightsRoutes);
       app.use("/cascading-recommendations", cascadingRecommendationsRoutes);

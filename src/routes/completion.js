@@ -10,8 +10,74 @@ import { getRecentMemory } from "../utils/memory.js";
 import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from "../utils/imageCompressionBasic.js";
 import { getIncrementalMemory, optimizeContextSize } from "../utils/incrementalMemory.js";
 import { trackMemoryUsage, calculateOptimizationSavings } from "../utils/memoryAnalytics.js";
+import ubpmService from "../services/ubpmService.js";
+import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
+import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
+
+// UBPM Query Detection
+const detectUBPMQuery = (userPrompt) => {
+  const prompt = userPrompt.toLowerCase();
+  const ubpmKeywords = [
+    'ubpm', 'my ubpm', 'whats my ubpm', "what's my ubpm", 
+    'user behavior profile', 'behavioral profile', 'my behavior profile',
+    'my patterns', 'behavioral patterns', 'my behavioral patterns',
+    'tell me about myself', 'analyze me', 'what do you know about me',
+    'my personality', 'my communication style', 'how do i behave',
+    'my habits', 'my preferences', 'my tendencies'
+  ];
+  
+  return ubpmKeywords.some(keyword => prompt.includes(keyword));
+};
+
+// Get Rich UBPM Data for GPT-4o
+const getRichUBPMData = async (userId) => {
+  try {
+    const [user, behaviorProfile, recentMemories, emotionalSessions] = await Promise.all([
+      User.findById(userId).select('emotionalLog profile createdAt'),
+      UserBehaviorProfile.findOne({ userId }),
+      ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(50),
+      EmotionalAnalyticsSession.find({ userId }).sort({ weekStartDate: -1 }).limit(8)
+    ]);
+
+    if (!behaviorProfile) {
+      return {
+        hasProfile: false,
+        message: "No behavioral profile available yet - keep chatting to build your UBPM!"
+      };
+    }
+
+    return {
+      hasProfile: true,
+      profile: behaviorProfile,
+      recentActivity: {
+        totalMessages: recentMemories.length,
+        userMessages: recentMemories.filter(m => m.role === 'user').length,
+        avgMessageLength: recentMemories.filter(m => m.role === 'user')
+          .reduce((sum, m) => sum + (m.content?.length || 0), 0) / 
+          Math.max(1, recentMemories.filter(m => m.role === 'user').length),
+        timeRange: recentMemories.length > 0 ? 
+          `${new Date(recentMemories[recentMemories.length - 1].timestamp).toLocaleDateString()} - ${new Date(recentMemories[0].timestamp).toLocaleDateString()}` : 'No recent activity'
+      },
+      emotionalInsights: emotionalSessions.slice(0, 4).map(session => ({
+        week: session.weekStartDate.toLocaleDateString(),
+        primaryEmotion: session.primaryEmotion,
+        intensity: session.averageIntensity,
+        interactions: session.totalInteractions
+      })),
+      accountAge: user.createdAt ? 
+        Math.floor((Date.now() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24)) : 0
+    };
+  } catch (error) {
+    logger.error('Error getting rich UBPM data:', error);
+    return {
+      hasProfile: false,
+      message: "Unable to retrieve behavioral profile at this time"
+    };
+  }
+};
 
 // Optimized regex for combined pattern matching
 const CLEANUP_REGEX = /(?:TASK_INFERENCE|EMOTION_LOG):?\s*(?:\{[\s\S]*?\})?\s*?/g;
@@ -113,7 +179,7 @@ const buildUserContext = async (userId, userCache) => {
 };
 
 // Common function to build messages for OpenRouter with GPT-4o vision support
-const buildMessages = (userProfile, formattedEmotionalLog, recentMemory, userPrompt, attachments = []) => {
+const buildMessages = (userProfile, formattedEmotionalLog, recentMemory, userPrompt, attachments = [], ubpmData = null) => {
   const messages = [];
   
   // Build conversation history
@@ -121,8 +187,8 @@ const buildMessages = (userProfile, formattedEmotionalLog, recentMemory, userPro
     .map(mem => `${mem.role === "user" ? "user" : "assistant"}\n${mem.content}`)
     .join("\n");
 
- // System message - DYNAMIC LENGTH
-const systemMessage = `You are Numina, a warm and naturally intuitive companion. You genuinely care about people and have a gift for understanding what matters to them.
+ // System message - DYNAMIC LENGTH with UBPM enhancement
+let systemMessage = `You are Numina, a warm and naturally intuitive companion. You genuinely care about people and have a gift for understanding what matters to them.
 
 Who you are:
 • Someone who really listens and remembers what people share
@@ -136,6 +202,8 @@ How to respond:
 • Share what you're picking up on naturally
 • Ask thoughtful questions that feel genuine
 • Reference past conversations when it makes sense
+• Avoid ending messages with emojis - they feel forced and repetitive
+• Use emojis only when they genuinely enhance meaning, not as default punctuation
 
 ${userProfile ? `About them: ${userProfile}` : ''}
 ${conversationHistory.length > 0 ? `Recent chat: ${conversationHistory}` : ''}
@@ -145,6 +213,64 @@ Just be yourself and respond naturally to what they're sharing.
 
 EMOTION_LOG: {"emotion": "stressed", "intensity": 7, "context": "work deadline"}
 TASK_INFERENCE: {"taskType": "plan_day", "parameters": {"priority": "focus"}}`;
+
+  // Enhanced system message for UBPM queries
+  if (ubpmData && ubpmData.hasProfile) {
+    const profile = ubpmData.profile;
+    const recentActivity = ubpmData.recentActivity;
+    const emotionalInsights = ubpmData.emotionalInsights;
+    
+    systemMessage += `\n\n🧠 UBPM REQUEST DETECTED - Provide a comprehensive behavioral analysis:
+
+📊 BEHAVIORAL PROFILE DATA:
+• Account Age: ${ubpmData.accountAge} days
+• Total Interactions: ${recentActivity.totalMessages} messages
+• Average Message Length: ${Math.round(recentActivity.avgMessageLength)} characters
+• Active Period: ${recentActivity.timeRange}
+
+🎯 BEHAVIORAL PATTERNS (${profile.behaviorPatterns.length} detected):
+${profile.behaviorPatterns.slice(0, 5).map(pattern => 
+  `• ${pattern.pattern}: ${pattern.description} (${Math.round(pattern.confidence * 100)}% confidence)`
+).join('\n')}
+
+💡 PERSONALITY TRAITS (${profile.personalityTraits.length} identified):
+${profile.personalityTraits.slice(0, 5).map(trait => 
+  `• ${trait.trait}: ${Math.round(trait.score * 100)}% strength (${Math.round(trait.confidence * 100)}% confidence)`
+).join('\n')}
+
+🎨 COMMUNICATION STYLE:
+• Preferred Tone: ${profile.communicationStyle?.preferredTone || 'analyzing...'}
+• Response Length: ${profile.communicationStyle?.responseLength || 'analyzing...'}
+• Complexity Level: ${profile.communicationStyle?.complexityLevel || 'analyzing...'}
+
+😊 EMOTIONAL PATTERNS (last 4 weeks):
+${emotionalInsights.map(insight => 
+  `• ${insight.week}: ${insight.primaryEmotion} (${insight.intensity}/10 intensity, ${insight.interactions} interactions)`
+).join('\n')}
+
+📈 DATA QUALITY:
+• Completeness: ${Math.round((profile.dataQuality?.completeness || 0) * 100)}%
+• Freshness: ${Math.round((profile.dataQuality?.freshness || 0) * 100)}%
+• Reliability: ${Math.round((profile.dataQuality?.reliability || 0) * 100)}%
+
+INSTRUCTIONS: Create a beautiful, personalized UBPM summary that:
+1. Explains what UBPM means in simple terms
+2. Highlights their unique behavioral patterns with specific examples
+3. Provides actionable insights about their communication style
+4. Explains how this data helps personalize their AI experience
+5. Uses a warm, encouraging tone that makes them feel understood
+6. Formats the response in an engaging, easy-to-read way
+7. Do NOT end with emojis - keep the closing professional and thoughtful`;
+  } else if (ubpmData && !ubpmData.hasProfile) {
+    systemMessage += `\n\n🧠 UBPM REQUEST DETECTED - No profile yet:
+    
+INSTRUCTIONS: Explain UBPM warmly and encourage continued interaction:
+1. Define UBPM (User Behavior Profile Model) in simple terms
+2. Explain how it learns from conversations to personalize responses
+3. Mention they need more interactions to build their profile
+4. Encourage them to keep chatting to unlock these insights
+5. Be encouraging and explain the benefits they'll get`;
+  }
 
 
   messages.push({ role: "system", content: systemMessage });
@@ -418,13 +544,23 @@ router.post("/completion", protect, async (req, res) => {
       return res.status(500).json({ status: "error", message: "Error building user context: " + err.message });
     }
 
+    // Check if user is asking about UBPM
+    const isUBPMQuery = detectUBPMQuery(userPrompt);
+    let ubpmData = null;
+    
+    if (isUBPMQuery) {
+      // Get rich UBPM data for detailed response
+      ubpmData = await getRichUBPMData(userId);
+    }
+
     // Build messages for OpenRouter with GPT-4o vision support
     const messages = buildMessages(
       context.userProfile,
       context.formattedEmotionalLog,
       context.recentMemory,
       userPrompt,
-      attachments
+      attachments,
+      ubpmData
     );
 
     const llmService = createLLMService();

@@ -212,12 +212,12 @@ userBehaviorProfileSchema.methods.calculateDataQuality = function() {
   
   if (this.behaviorPatterns.length > 0) filledFields++;
   if (this.personalityTraits.length > 0) filledFields++;
-  if (this.interests.length > 0) filledFields++;
-  if (this.communicationStyle.preferredTone) filledFields++;
-  if (this.temporalPatterns.mostActiveHours.length > 0) filledFields++;
-  if (this.emotionalProfile.baselineEmotion) filledFields++;
-  if (this.goals.shortTerm.length > 0 || this.goals.longTerm.length > 0) filledFields++;
-  if (this.socialProfile.connectionStyle) filledFields++;
+  if (this.interests && this.interests.length > 0) filledFields++;
+  if (this.communicationStyle && this.communicationStyle.preferredTone) filledFields++;
+  if (this.temporalPatterns && this.temporalPatterns.mostActiveHours && this.temporalPatterns.mostActiveHours.length > 0) filledFields++;
+  if (this.emotionalProfile && this.emotionalProfile.baselineEmotion) filledFields++;
+  if (this.goals && (this.goals.shortTerm?.length > 0 || this.goals.longTerm?.length > 0)) filledFields++;
+  if (this.socialProfile && this.socialProfile.connectionStyle) filledFields++;
   
   this.dataQuality.completeness = filledFields / totalFields;
   
