@@ -149,7 +149,7 @@ class UBPMService {
     const patterns = [];
     const userMessages = memories.filter(m => m.role === 'user');
     
-    if (userMessages.length < 5) return patterns;
+    if (userMessages.length < 2) return patterns;
 
     // Message length analysis
     const avgLength = userMessages.reduce((sum, m) => sum + m.content.length, 0) / userMessages.length;
@@ -195,7 +195,7 @@ class UBPMService {
   analyzeEmotionalPatterns(emotionalLog, emotionalSessions) {
     const patterns = [];
     
-    if (!emotionalLog || emotionalLog.length < 5) return patterns;
+    if (!emotionalLog || emotionalLog.length < 2) return patterns;
 
     // Recent emotional data (last 30 days)
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -252,7 +252,7 @@ class UBPMService {
   analyzeTemporalPatterns(memories, emotionalLog) {
     const patterns = [];
     
-    if (memories.length < 10) return patterns;
+    if (memories.length < 3) return patterns;
 
     // Activity timing analysis
     const activityHours = memories.map(m => new Date(m.timestamp).getHours());
@@ -322,7 +322,7 @@ class UBPMService {
   analyzeStressResponse(emotionalLog, memories) {
     const patterns = [];
     
-    if (!emotionalLog || emotionalLog.length < 5) return patterns;
+    if (!emotionalLog || emotionalLog.length < 2) return patterns;
 
     // Identify stress-related emotions
     const stressEmotions = ['anxious', 'stressed', 'overwhelmed', 'frustrated', 'worried'];
@@ -401,7 +401,7 @@ class UBPMService {
     // Update profile metadata
     profile.lastAnalysisDate = new Date();
     profile.dataQuality.freshness = 1.0; // Fresh data
-    profile.dataQuality.completeness = Math.min(1.0, profile.behaviorPatterns.length / 10);
+    profile.dataQuality.completeness = Math.min(1.0, profile.behaviorPatterns.length / 5);
 
     await profile.save();
     return profile;
@@ -436,17 +436,42 @@ class UBPMService {
    * Generate AI context string for OpenRouter GPT-4o
    */
   generateAIContext(profile, newPatterns) {
-    const patternSummaries = newPatterns.map(p => 
-      `${p.pattern}: ${p.description} (confidence: ${Math.round(p.confidence * 100)}%)`
-    ).join('; ');
+    // UBPM Definition for AI understanding
+    const ubpmDefinition = `**UBPM (User Behavior Pattern Modeling)** is Numina's advanced behavioral analysis system that tracks and analyzes user interaction patterns, communication styles, emotional responses, and temporal behaviors to create personalized AI experiences. When users ask "What is UBPM?", explain it as your behavioral pattern analysis system that helps you understand them better.`;
 
-    const topTraits = profile.personalityTraits
-      ?.sort((a, b) => b.score - a.score)
-      ?.slice(0, 3)
-      ?.map(t => `${t.trait}: ${Math.round(t.score * 100)}%`)
-      ?.join(', ') || 'analyzing...';
+    // Handle undefined or empty patterns gracefully
+    let patternSummaries = '';
+    if (newPatterns && newPatterns.length > 0) {
+      patternSummaries = newPatterns
+        .filter(p => p && p.pattern && p.description && p.confidence !== undefined)
+        .map(p => `${p.pattern}: ${p.description} (confidence: ${Math.round(p.confidence * 100)}%)`)
+        .join('; ');
+    }
 
-    return `UBPM Context: User shows patterns of ${patternSummaries}. Top personality traits: ${topTraits}. Respond with awareness of these behavioral patterns.`;
+    // Handle undefined personality traits gracefully
+    let topTraits = 'analyzing...';
+    if (profile && profile.personalityTraits && profile.personalityTraits.length > 0) {
+      topTraits = profile.personalityTraits
+        .filter(t => t && t.trait && t.score !== undefined)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3)
+        .map(t => `${t.trait}: ${Math.round(t.score * 100)}%`)
+        .join(', ') || 'analyzing...';
+    }
+
+    // Build comprehensive UBPM context
+    let contextString = ubpmDefinition;
+    
+    if (patternSummaries) {
+      contextString += `\n\n**Current User Patterns**: ${patternSummaries}`;
+    } else {
+      contextString += `\n\n**Current User Patterns**: Building pattern analysis from interactions (new user or insufficient data)`;
+    }
+    
+    contextString += `\n\n**Top Personality Traits**: ${topTraits}`;
+    contextString += `\n\n**UBPM Instructions**: Use this behavioral analysis to personalize your responses. Reference specific patterns naturally when relevant. When asked about UBPM, explain it as your built-in system for understanding user behavior patterns.`;
+
+    return contextString;
   }
 
   /**
