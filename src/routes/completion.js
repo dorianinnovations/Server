@@ -14,8 +14,78 @@ import ubpmService from "../services/ubpmService.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
 import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import logger from "../utils/logger.js";
+import toolRegistry from "../services/toolRegistry.js";
+import toolExecutor from "../services/toolExecutor.js";
 
 const router = express.Router();
+
+// Helper function to determine if a message requires tool usage
+function isToolRequiredMessage(message) {
+  if (!message || typeof message !== 'string') return false;
+  
+  const lowerMessage = message.toLowerCase();
+  
+  // Natural, seamless tool-requiring patterns
+  const toolTriggers = [
+    // Search requests (CRITICAL - was missing!)
+    /search|google|find.*info|look.*up|search.*for|use.*search/,
+    
+    // Tool usage (CRITICAL - was missing!)
+    /use.*tool|search.*tool|run.*tool|execute.*tool|tool/,
+    
+    // Recommendations and suggestions (CRITICAL - for "recommend" queries)
+    /recommend|suggest|good.*places|best.*places|spots.*you.*recommend|any.*suggestions/,
+    
+    // Natural search requests
+    /what.*is|who.*is|where.*is|when.*is|how.*to|can you find|show me|get me|i need.*info/,
+    
+    // Weather (very natural)
+    /weather|forecast|temperature|rain|snow|sunny|cloudy|how.*hot|how.*cold/,
+    
+    // Financial (natural language)
+    /stock.*price|bitcoin.*price|how much.*cost|currency.*rate|dollar.*euro/,
+    
+    // Music (seamless)
+    /play.*music|some music|music for|songs for|playlist|recommend.*songs/,
+    
+    // Food/restaurants (natural)
+    /hungry|food|restaurant|where.*eat|dinner|lunch|good.*food/,
+    
+    // Travel (seamless)
+    /going to|visiting|trip to|travel to|vacation|flight to|hotel in/,
+    
+    // Math (natural)
+    /calculate|what.*plus|what.*minus|how much.*is|\d+.*[\+\-\*\/].*\d+/,
+    
+    // Translation (seamless)
+    /how.*say|translate|in.*language|speak.*spanish|mean in/,
+    
+    // Code help (natural)
+    /code.*help|programming|write.*function|debug|error in.*code/,
+    
+    // Time (natural)
+    /what time|time.*in|timezone|convert.*time|time difference/,
+    
+    // Quick generation (seamless)
+    /qr.*code|need.*password|secure.*password|generate/,
+    
+    // Question words that often need tools
+    /^(what|where|when|who|how|why).*\?/,
+  ];
+  
+  // Check if message matches any tool triggers
+  const needsTools = toolTriggers.some(pattern => pattern.test(lowerMessage));
+  
+  // Exclude ONLY simple standalone greetings (not greetings with additional content)
+  const isSimpleGreeting = /^(hi|hello|hey|good morning|good evening|good afternoon|thanks|thank you|bye|goodbye|yes|no|okay|ok)[\.\!\?]*$/i.test(message.trim());
+  const isSimpleResponse = message.trim().length < 8 && !/\?/.test(message); // Reduced from 15 to 8
+  
+  // Don't exclude if the message has additional meaningful content beyond greeting
+  const hasAdditionalContent = message.trim().split(/\s+/).length > 1;
+  const shouldExclude = (isSimpleGreeting || isSimpleResponse) && !hasAdditionalContent;
+  
+  return needsTools && !shouldExclude;
+}
 
 // UBPM Query Detection - Enhanced with context awareness
 const detectUBPMQuery = (userPrompt, recentMemory = []) => {
@@ -592,6 +662,18 @@ router.post("/completion", protect, async (req, res) => {
 
     const llmService = createLLMService();
 
+    // Tool detection and loading
+    let tools = [];
+    const shouldUseTools = isToolRequiredMessage(userPrompt);
+    
+    if (shouldUseTools) {
+      console.log('🔧 TOOLS: Message requires tools, loading tool registry');
+      tools = await toolRegistry.getAllTools();
+      console.log(`🔧 TOOLS: Loaded ${tools.length} tools for GPT-4o`);
+    } else {
+      console.log('🔧 TOOLS: Message does not require tools, skipping tool load');
+    }
+
     if (stream) {
       // Streaming mode
       console.log(`🔍 STREAMING: Making OpenRouter request for user ${userId}`);
@@ -601,6 +683,7 @@ router.post("/completion", protect, async (req, res) => {
           stop,
           n_predict,
           temperature,
+          tools,
         });
       } catch (err) {
         console.error("Error in makeStreamingRequest:", err.stack || err);
@@ -694,6 +777,7 @@ router.post("/completion", protect, async (req, res) => {
           stop,
           n_predict,
           temperature,
+          tools,
         });
       } catch (err) {
         console.error("Error in makeLLMRequest:", err.stack || err);
