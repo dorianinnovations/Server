@@ -1,7 +1,30 @@
 import axios from "axios";
 import dotenv from "dotenv";
+import https from "https";
+import http from "http";
 
 dotenv.config();
+
+// HIGH-PERFORMANCE CONNECTION POOLING
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000, // 30 seconds
+  maxSockets: 50, // Max concurrent connections
+  maxFreeSockets: 10, // Keep 10 connections open
+  timeout: 45000, // 45 second timeout
+});
+
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 45000,
+});
+
+// Configure axios defaults for connection pooling
+axios.defaults.httpsAgent = httpsAgent;
+axios.defaults.httpAgent = httpAgent;
 
 // Helper function to get a clean referer URL
 const getRefererUrl = () => {
@@ -41,8 +64,31 @@ export const createLLMService = () => {
 
       // Add tool calling parameters if tools are provided
       if (tools && tools.length > 0) {
-        requestData.tools = tools;
+        // Debug log the tools being sent
+        console.log(`🔧 Sending ${tools.length} tools to OpenRouter:`, tools.map(t => t.function?.name || t.name).join(', '));
+        
+        // Validate tool structure before sending - check for OpenAI function calling format
+        const validTools = tools.filter(tool => {
+          if (!tool.type || tool.type !== 'function' || !tool.function || !tool.function.name || !tool.function.description) {
+            console.warn(`⚠️ Invalid tool structure - missing required OpenAI function format:`, {
+              type: tool.type,
+              hasFunction: !!tool.function,
+              functionName: tool.function?.name,
+              functionDescription: tool.function?.description
+            });
+            return false;
+          }
+          return true;
+        });
+        
+        if (validTools.length !== tools.length) {
+          console.warn(`⚠️ Filtered ${tools.length - validTools.length} invalid tools`);
+        }
+        
+        requestData.tools = validTools;
         requestData.tool_choice = tool_choice;
+        
+        console.log(`🔧 Final tool count sent to OpenRouter: ${validTools.length}`);
       }
       
       const response = await axios({

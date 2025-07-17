@@ -15,6 +15,9 @@ import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import requestCacheService from '../services/requestCacheService.js';
 import ubpmService from '../services/ubpmService.js';
+import { getIncrementalMemory, optimizeContextSize } from '../utils/incrementalMemory.js';
+import { trackMemoryUsage, calculateOptimizationSavings } from '../utils/memoryAnalytics.js';
+import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from '../utils/imageCompressionBasic.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -455,10 +458,22 @@ router.post('/adaptive-chat', protect, async (req, res) => {
     // If no message but has attachments, provide default message
     const finalMessage = userMessage || 'Please analyze the attached content.';
     
-    // Get enhanced conversation context with persistent user constants
-    const enhancedContext = await enhancedMemoryService.getUserContext(userId, 12);
+    // COST OPTIMIZATION: Smart context window management based on request type
+    const hasImages = attachments && attachments.some(att => att.type === 'image');
+    const contextType = hasImages ? 'focused' : 'standard'; // Focused mode for images to save tokens
+    
+    // Get enhanced conversation context with incremental memory optimization
+    const enhancedContext = await enhancedMemoryService.getUserContext(userId, hasImages ? 8 : 12);
     const user = enhancedContext.metadata;
-    const recentMemory = enhancedContext.conversation.recentMessages;
+    const fullMemory = enhancedContext.conversation.recentMessages;
+    
+    // COST OPTIMIZATION: Apply incremental memory optimization
+    const incrementalResult = getIncrementalMemory(userId, fullMemory, {
+      enableIncremental: true,
+      maxDeltaSize: hasImages ? 8 : 15 // Smaller delta for image requests
+    });
+    
+    const recentMemory = incrementalResult.memory;
 
     // Extract user data from enhanced context
     const recentEmotions = enhancedContext.recentEmotions;
@@ -592,31 +607,70 @@ ADAPTIVE INSTRUCTIONS:
       // Streaming mode
       let streamResponse;
       try {
-        // Dynamic token allocation based on adaptive style (increased limits)
-        const dynamicTokens = {
-          'concise': 250,     // Increased from 150
-          'balanced': 500,    // Increased from 350
-          'detailed': 900     // Increased from 650
-        }['balanced'] || 500;
-
-        // Context modifier based on conversation depth
+        // COST OPTIMIZATION: Dynamic token allocation with user pattern analysis
+        const userMessages = recentMemory.filter(m => m.role === 'user');
+        const avgMessageLength = userMessages.length > 0 ? 
+          userMessages.reduce((acc, m) => acc + (m.content ? m.content.length : 0), 0) / userMessages.length : 0;
+        const questionRatio = userMessages.length > 0 ? 
+          userMessages.filter(m => m.content && m.content.includes('?')).length / userMessages.length : 0;
+        
+        // Dynamic token allocation based on user patterns
+        const baseTokens = avgMessageLength < 100 ? 300 : avgMessageLength > 200 ? 700 : 500;
+        const questionModifier = questionRatio > 0.3 ? 1.2 : 1.0;
         const contextMultiplier = conversationContext.conversationLength > 10 ? 1.2 : 
                                  conversationContext.conversationLength > 5 ? 1.1 : 1.0;
         
-        // Simple modifier for established conversations
-        const conversationModifier = conversationContext.hasHistory ? 1.1 : 1.0;
+        const finalTokens = Math.min(1200, Math.floor(baseTokens * questionModifier * contextMultiplier));
         
-        const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * conversationModifier));
-        
-        console.log(`🎯 Dynamic tokens: ${finalTokens} (base: ${dynamicTokens}, style: balanced, context: ${contextMultiplier})`);
+        console.log(`🎯 COST OPTIMIZATION: ${finalTokens} tokens (base: ${baseTokens}, patterns: ${Math.round(avgMessageLength)}/${Math.round(questionRatio * 100)}%, context: ${contextMultiplier}, incremental: ${incrementalResult.isIncremental})`);        
+        console.log(`💰 OPTIMIZATION STATS:`, incrementalResult.stats);
 
-        // Get available tools for the chat
-        const availableTools = await toolRegistry.getToolsForOpenAI();
-        console.log(`🛠️ Available tools for chat: ${availableTools.length}`);
-        console.log(`📝 Messages being sent:`, JSON.stringify(messages, null, 2));
-        console.log(`⚙️ Request options:`, { temperature: 0.9, n_predict: finalTokens, toolsCount: availableTools.length });
-
+        // COST OPTIMIZATION: Selective tool loading based on message content
+        let availableTools = [];
         const needsTools = isToolRequiredMessage(userMessage);
+        
+        if (needsTools) {
+          console.log('🔧 SELECTIVE TOOLS: Message requires tools, loading relevant ones');
+          try {
+            const allTools = await toolRegistry.getToolsForOpenAI();
+            
+            // Smart tool filtering based on message content
+            const messageContent = userMessage.toLowerCase();
+            const relevantTools = allTools.filter(tool => {
+              const toolName = tool.function?.name || tool.name || '';
+              
+              // AGGRESSIVE LOADING: Always include essential tools for tool-requiring messages
+              if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations'].includes(toolName)) {
+                return true;
+              }
+              
+              // Content-specific tools with broader matching
+              if (messageContent.includes('weather') && toolName === 'weather_check') return true;
+              if (messageContent.includes('calculate') && toolName === 'calculator') return true;
+              if ((messageContent.includes('search') || messageContent.includes('google') || messageContent.includes('find')) && toolName === 'web_search') return true;
+              if ((messageContent.includes('news') || messageContent.includes('latest')) && toolName === 'news_search') return true;
+              if ((messageContent.includes('music') || messageContent.includes('song')) && toolName === 'music_recommendations') return true;
+              if ((messageContent.includes('reddit') || messageContent.includes('social')) && toolName === 'social_search') return true;
+              if ((messageContent.includes('restaurant') || messageContent.includes('food') || messageContent.includes('eating')) && toolName === 'web_search') return true;
+              if (messageContent.includes('translate') && toolName === 'translation') return true;
+              if (messageContent.includes('time') && toolName === 'timezone_converter') return true;
+              if (messageContent.includes('currency') && toolName === 'currency_converter') return true;
+              if (messageContent.includes('stock') && toolName === 'stock_lookup') return true;
+              if (messageContent.includes('crypto') && toolName === 'crypto_lookup') return true;
+              
+              return false;
+            });
+            
+            availableTools = relevantTools.slice(0, 8); // Limit to 8 tools max for performance
+            console.log(`🔧 SELECTIVE TOOLS: Loaded ${availableTools.length}/${allTools.length} relevant tools`);
+          } catch (error) {
+            console.error('🔧 SELECTIVE TOOLS: Error loading tools:', error);
+            availableTools = [];
+          }
+        } else {
+          console.log('🔧 SELECTIVE TOOLS: Message does not require tools, skipping tool load');
+        }
+
         const useTools = availableTools.length > 0;
         console.log(`🧪 DEBUG: Message needs tools: ${needsTools}, Using tools: ${useTools}, tools count: ${availableTools.length}`);
 
@@ -671,10 +725,10 @@ ADAPTIVE INSTRUCTIONS:
                 const content = choice.delta.content;
                 fullContent += content;
                 
-                // Buffer content to reduce streaming speed - send every 8-12 characters or word boundary
+                // SPEED OPTIMIZATION: Reduced buffer size for faster perceived response
                 chunkBuffer += content;
                 
-                if (chunkBuffer.length >= 10 || content.includes(' ') || content.includes('\n')) {
+                if (chunkBuffer.length >= 6 || content.includes(' ') || content.includes('\n')) {
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
                   chunkBuffer = '';
@@ -741,33 +795,33 @@ ADAPTIVE INSTRUCTIONS:
               }
             }, 2000); // Send keep-alive every 2 seconds
             
-            for (const toolCall of toolCalls) {
+            // 🔄 SEQUENTIAL TOOL EXECUTION - Execute tools one after another for natural flow
+            console.log(`🔄 SEQUENTIAL EXECUTION: Starting ${toolCalls.length} tools in sequence`);
+            
+            // Get user data once for all tools
+            const user = await User.findById(userId);
+            const creditPool = await CreditPool.findOne({ userId: userId });
+            
+            const toolResults = [];
+            const totalStartTime = Date.now();
+            
+            // Execute tools sequentially - each waits for the previous to complete
+            for (let i = 0; i < toolCalls.length; i++) {
+              const toolCall = toolCalls[i];
               const toolName = toolCall.function.name;
               const toolArgs = JSON.parse(toolCall.function.arguments);
-              
-              // Send tool notification
-              const toolNotification = getToolExecutionMessage(toolName, toolArgs);
-              res.write(`data: ${JSON.stringify({ content: `\n\n${toolNotification}\n\n` })}\n\n`);
-              res.flush && res.flush();
-              
-              // Execute tool with timeout protection
-              console.log(`🔧 Tool execution started: ${toolName}`);
-              const user = await User.findById(userId);
-              const creditPool = await CreditPool.findOne({ userId: userId });
-              
-              // Add progress tracking and timeout protection
-              let progressInterval;
-              let toolResult;
               const toolStartTime = Date.now();
               
               try {
-                // Start progress indication
-                progressInterval = setInterval(() => {
-                  console.log(`⚡ Tool execution progress: ${toolName} - ${Math.floor(Math.random() * 50) + 50}%`);
-                }, 500);
+                // Send notification for current tool
+                const toolNotification = getToolExecutionMessage(toolName, toolArgs);
+                res.write(`data: ${JSON.stringify({ content: `\n\n${toolNotification}\n\n` })}\n\n`);
+                res.flush && res.flush();
                 
-                // Execute tool with 15 second timeout
-                toolResult = await Promise.race([
+                console.log(`🔧 SEQUENTIAL [${i + 1}/${toolCalls.length}]: Starting ${toolName}`);
+                
+                // Execute current tool and wait for completion
+                const toolResult = await Promise.race([
                   toolExecutor.executeToolCall({
                     function: { name: toolName, arguments: toolArgs }
                   }, { userId, user, creditPool }),
@@ -776,19 +830,55 @@ ADAPTIVE INSTRUCTIONS:
                   )
                 ]);
                 
-                clearInterval(progressInterval);
                 const executionTime = Date.now() - toolStartTime;
-                console.log(`✅ Tool execution completed: ${toolName} in ${executionTime}ms (${toolCall.id})`);
+                console.log(`✅ SEQUENTIAL [${i + 1}/${toolCalls.length}]: ${toolName} completed in ${executionTime}ms`);
                 
-              } catch (timeoutError) {
-                clearInterval(progressInterval);
-                console.error(`⏰ Tool execution timeout: ${toolName} - ${timeoutError.message}`);
-                toolResult = {
-                  success: false,
-                  error: `Tool execution timed out after 15 seconds`,
-                  result: null
-                };
+                // Send immediate result streaming
+                if (toolResult && toolResult.success && toolResult.result !== undefined) {
+                  let resultText = typeof toolResult.result === 'object' 
+                    ? JSON.stringify(toolResult.result, null, 2) 
+                    : String(toolResult.result);
+                  
+                  const toolResponse = `\n\n🔧 **${toolName}**: ${resultText}`;
+                  res.write(`data: ${JSON.stringify({ content: toolResponse })}\n\n`);
+                  res.flush && res.flush();
+                }
+                
+                toolResults.push({ toolCall, toolResult, executionTime });
+                
+                // Small delay between tools for better UX
+                if (i < toolCalls.length - 1) {
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+              } catch (error) {
+                const executionTime = Date.now() - toolStartTime;
+                console.error(`❌ SEQUENTIAL [${i + 1}/${toolCalls.length}]: ${toolName} failed in ${executionTime}ms:`, error.message);
+                
+                // Send error result streaming
+                const errorResponse = `\n\n❌ **${toolName}**: Tool execution failed: ${error.message}`;
+                res.write(`data: ${JSON.stringify({ content: errorResponse })}\n\n`);
+                res.flush && res.flush();
+                
+                toolResults.push({ 
+                  toolCall, 
+                  toolResult: { success: false, error: error.message }, 
+                  executionTime 
+                });
               }
+            }
+            
+            const totalSequentialTime = Date.now() - totalStartTime;
+            if (typeof keepAliveInterval !== 'undefined') {
+              if (typeof keepAliveInterval !== 'undefined') {
+              clearInterval(keepAliveInterval);
+            }
+            }
+            console.log(`🔄 SEQUENTIAL EXECUTION: All ${toolCalls.length} tools completed in ${totalSequentialTime}ms`);
+            
+            // Process results in order
+            for (const { toolCall, toolResult, executionTime } of toolResults) {
+              const toolName = toolCall.function.name;
               
               // Format result for follow-up with null safety
               let resultText = '';
@@ -832,13 +922,15 @@ ADAPTIVE INSTRUCTIONS:
             ];
             
             // Clear keep-alive interval before follow-up
-            clearInterval(keepAliveInterval);
+            if (typeof keepAliveInterval !== 'undefined') {
+              clearInterval(keepAliveInterval);
+            }
             
-            // Make follow-up request for AI response to tools - OPTIMIZED FOR SPEED
+            // SPEED OPTIMIZATION: Make follow-up request with reduced token limit for faster response
             console.log(`🔄 Making follow-up request with ${toolMessages.length} tool results`);
             const followUpResponse = await llmService.makeStreamingRequest(followUpMessages, {
               temperature: 0.9,
-              n_predict: 400,
+              n_predict: 350, // Reduced from 400 for speed
               tools: [],
               tool_choice: "none"
             });
@@ -892,7 +984,9 @@ ADAPTIVE INSTRUCTIONS:
           } catch (error) {
             console.error('❌ Tool execution error:', error);
             // Clear keep-alive interval on error (variable scoped correctly above)
-            clearInterval(keepAliveInterval);
+            if (typeof keepAliveInterval !== 'undefined') {
+              clearInterval(keepAliveInterval);
+            }
             res.write('data: [DONE]\n\n');
             res.end();
           }
@@ -902,7 +996,7 @@ ADAPTIVE INSTRUCTIONS:
           saveConversationToMemory();
         }
         
-        // Function to save conversation to enhanced memory
+        // Function to save conversation to enhanced memory with optimization tracking
         function saveConversationToMemory() {
           if (fullContent.trim()) {
             enhancedMemoryService.saveConversation(
@@ -913,6 +1007,24 @@ ADAPTIVE INSTRUCTIONS:
             ).then(async () => {
               console.log(`💾 Saved conversation to enhanced memory`);
               userCache.invalidateUser(userId);
+
+              // COST OPTIMIZATION: Track memory usage analytics
+              const baselineTokens = fullMemory.length * 50; // Estimate baseline token usage
+              const actualTokens = recentMemory.length * 50; // Estimate actual token usage
+              const savings = calculateOptimizationSavings(
+                { tokens: baselineTokens, strategy: 'baseline' },
+                { tokens: actualTokens, strategy: incrementalResult.stats.strategy }
+              );
+              
+              trackMemoryUsage(userId, {
+                contextType,
+                incrementalStats: incrementalResult.stats,
+                imageOptimization: hasImages ? { imagesProcessed: attachments.length } : {},
+                tokensSaved: savings.tokensSaved,
+                costSaved: savings.costSaved,
+                memoryUsed: recentMemory.length,
+                strategy: `${incrementalResult.stats.strategy}-${contextType}-adaptive`
+              });
 
               // Add to data processing pipeline
               await dataProcessingPipeline.addEvent(userId, 'chat_message', {
@@ -939,11 +1051,14 @@ ADAPTIVE INSTRUCTIONS:
       });
       
     } else {
-      // 🚀 SUPER HIGH-PERFORMANCE CACHE CHECK - 100x COST SAVINGS!
-      const cacheResult = await requestCacheService.getCachedResponse(userId, finalMessage, systemPrompt);
+      // 🚀 SUPER HIGH-PERFORMANCE CACHE CHECK WITH PREFETCH - 100x COST SAVINGS!
+      const cacheResult = await requestCacheService.getCachedResponseEnhanced(userId, finalMessage, systemPrompt);
       
       if (cacheResult.cacheHit) {
-        console.log(`⚡ CACHE HIT! Saved API call (similarity: ${Math.round(cacheResult.similarity * 100)}%)`);
+        console.log(`⚡ CACHE HIT! Saved API call (${cacheResult.cacheType}, similarity: ${Math.round(cacheResult.similarity * 100)}%)`);
+        
+        // Track user pattern for future prefetching
+        requestCacheService.trackUserPattern(userId, finalMessage);
         
         // Save conversation to memory (background task)
         setImmediate(async () => {
@@ -957,35 +1072,79 @@ ADAPTIVE INSTRUCTIONS:
             tone: 'adaptive',
             suggestedFollowUps: cacheResult.data.suggestedFollowUps || [],
             emotionalSupport: cacheResult.data.emotionalSupport || "",
-            adaptationReason: `Cached response (${cacheResult.cacheType}, ${Math.round(cacheResult.similarity * 100)}% similarity)`
+            adaptationReason: `${cacheResult.cacheType === 'prefetch' ? 'Prefetched' : 'Cached'} response (${cacheResult.cacheType}, ${Math.round(cacheResult.similarity * 100)}% similarity)`
           }
         });
       }
       
-      // Non-streaming mode - reuse dynamic token calculation
-      const dynamicTokens = {
-        'concise': 250,     // Increased from 150
-        'balanced': 500,    // Increased from 350
-        'detailed': 900     // Increased from 650
-      }['balanced'] || 500;
-
+      // COST OPTIMIZATION: Apply same user pattern analysis for non-streaming
+      const userMessages = recentMemory.filter(m => m.role === 'user');
+      const avgMessageLength = userMessages.length > 0 ? 
+        userMessages.reduce((acc, m) => acc + (m.content ? m.content.length : 0), 0) / userMessages.length : 0;
+      const questionRatio = userMessages.length > 0 ? 
+        userMessages.filter(m => m.content && m.content.includes('?')).length / userMessages.length : 0;
+      
+      // Dynamic token allocation based on user patterns
+      const baseTokens = avgMessageLength < 100 ? 300 : avgMessageLength > 200 ? 700 : 500;
+      const questionModifier = questionRatio > 0.3 ? 1.2 : 1.0;
       const contextMultiplier = conversationContext.conversationLength > 10 ? 1.2 : 
                                conversationContext.conversationLength > 5 ? 1.1 : 1.0;
       
-      const conversationModifier = conversationContext.hasHistory ? 1.1 : 1.0;
-      const finalTokens = Math.min(1200, Math.floor(dynamicTokens * contextMultiplier * conversationModifier));
+      const finalTokens = Math.min(1200, Math.floor(baseTokens * questionModifier * contextMultiplier));
       
-      console.log(`🎯 Dynamic tokens (non-streaming): ${finalTokens} (base: ${dynamicTokens}, style: balanced)`);
+      console.log(`🎯 COST OPTIMIZATION (non-streaming): ${finalTokens} tokens (base: ${baseTokens}, patterns: ${Math.round(avgMessageLength)}/${Math.round(questionRatio * 100)}%, context: ${contextMultiplier}, incremental: ${incrementalResult.isIncremental})`);
 
-      // Get available tools for the chat  
-      const availableTools = await toolRegistry.getToolsForOpenAI();
-      console.log(`🛠️ Available tools for chat (non-streaming): ${availableTools.length}`);
+      // COST OPTIMIZATION: Selective tool loading for non-streaming
+      let availableTools = [];
+      const needsTools = isToolRequiredMessage(userMessage);
+      
+      if (needsTools) {
+        console.log('🔧 SELECTIVE TOOLS (non-streaming): Message requires tools, loading relevant ones');
+        try {
+          const allTools = await toolRegistry.getToolsForOpenAI();
+          
+          // Smart tool filtering based on message content
+          const messageContent = userMessage.toLowerCase();
+          const relevantTools = allTools.filter(tool => {
+            const toolName = tool.function?.name || tool.name || '';
+            
+            // AGGRESSIVE LOADING: Always include essential tools for tool-requiring messages
+            if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations'].includes(toolName)) {
+              return true;
+            }
+            
+            // Content-specific tools with broader matching
+            if (messageContent.includes('weather') && toolName === 'weather_check') return true;
+            if (messageContent.includes('calculate') && toolName === 'calculator') return true;
+            if ((messageContent.includes('search') || messageContent.includes('google') || messageContent.includes('find')) && toolName === 'web_search') return true;
+            if ((messageContent.includes('news') || messageContent.includes('latest')) && toolName === 'news_search') return true;
+            if ((messageContent.includes('music') || messageContent.includes('song')) && toolName === 'music_recommendations') return true;
+            if ((messageContent.includes('reddit') || messageContent.includes('social')) && toolName === 'social_search') return true;
+            if ((messageContent.includes('restaurant') || messageContent.includes('food') || messageContent.includes('eating')) && toolName === 'web_search') return true;
+            if (messageContent.includes('translate') && toolName === 'translation') return true;
+            if (messageContent.includes('time') && toolName === 'timezone_converter') return true;
+            if (messageContent.includes('currency') && toolName === 'currency_converter') return true;
+            if (messageContent.includes('stock') && toolName === 'stock_lookup') return true;
+            if (messageContent.includes('crypto') && toolName === 'crypto_lookup') return true;
+            
+            return false;
+          });
+          
+          availableTools = relevantTools.slice(0, 8); // Limit to 8 tools max for performance
+          console.log(`🔧 SELECTIVE TOOLS (non-streaming): Loaded ${availableTools.length}/${allTools.length} relevant tools`);
+        } catch (error) {
+          console.error('🔧 SELECTIVE TOOLS (non-streaming): Error loading tools:', error);
+          availableTools = [];
+        }
+      } else {
+        console.log('🔧 SELECTIVE TOOLS (non-streaming): Message does not require tools, skipping tool load');
+      }
 
       const response = await llmService.makeLLMRequest(messages, {
         temperature: 0.9,
         n_predict: finalTokens,
         tools: availableTools,
-        tool_choice: "auto"
+        tool_choice: availableTools.length > 0 ? "auto" : "none"
       });
 
       console.log(`✅ NON-STREAMING: Adaptive chat response received, length: ${response.content?.length || 0}`);
@@ -996,14 +1155,15 @@ ADAPTIVE INSTRUCTIONS:
       
       // Handle tool calls if present
       if (response.tool_calls && response.tool_calls.length > 0) {
-        console.log(`🛠️ NON-STREAMING: Processing ${response.tool_calls.length} tool calls`);
+        console.log(`🔄 NON-STREAMING SEQUENTIAL: Processing ${response.tool_calls.length} tool calls in sequence`);
         
-        for (const toolCall of response.tool_calls) {
+        for (let i = 0; i < response.tool_calls.length; i++) {
+          const toolCall = response.tool_calls[i];
           try {
             const toolName = toolCall.function.name;
             const toolArgs = JSON.parse(toolCall.function.arguments);
             
-            console.log(`🔧 Executing tool: ${toolName} with args:`, toolArgs);
+            console.log(`🔧 NON-STREAMING SEQUENTIAL [${i + 1}/${response.tool_calls.length}]: Executing ${toolName}`);
             
             // Execute the tool with proper context
             const user = await User.findById(userId);
@@ -1033,7 +1193,7 @@ ADAPTIVE INSTRUCTIONS:
         }
       }
 
-      // Save conversation to enhanced memory
+      // COST OPTIMIZATION: Save conversation to enhanced memory with analytics
       if (finalContent.trim()) {
         try {
           await enhancedMemoryService.saveConversation(
@@ -1044,6 +1204,24 @@ ADAPTIVE INSTRUCTIONS:
           );
           userCache.invalidateUser(userId);
 
+          // Track memory usage analytics
+          const baselineTokens = fullMemory.length * 50; // Estimate baseline token usage
+          const actualTokens = recentMemory.length * 50; // Estimate actual token usage
+          const savings = calculateOptimizationSavings(
+            { tokens: baselineTokens, strategy: 'baseline' },
+            { tokens: actualTokens, strategy: incrementalResult.stats.strategy }
+          );
+          
+          trackMemoryUsage(userId, {
+            contextType,
+            incrementalStats: incrementalResult.stats,
+            imageOptimization: hasImages ? { imagesProcessed: attachments.length } : {},
+            tokensSaved: savings.tokensSaved,
+            costSaved: savings.costSaved,
+            memoryUsed: recentMemory.length,
+            strategy: `${incrementalResult.stats.strategy}-${contextType}-adaptive`
+          });
+
           // 🚀 CACHE THE RESPONSE FOR 100x FUTURE SAVINGS!
           await requestCacheService.cacheResponse(userId, finalMessage, systemPrompt, {
             response: finalContent.trim(),
@@ -1052,10 +1230,43 @@ ADAPTIVE INSTRUCTIONS:
             tone: 'adaptive'
           });
 
+          // 🔮 INTELLIGENT PREFETCHING - Generate likely follow-up responses
+          const generateResponse = async (query) => {
+            try {
+              const response = await llmService.makeLLMRequest([
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: query }
+              ], {
+                temperature: 0.9,
+                n_predict: Math.min(400, finalTokens),
+                tools: [],
+                tool_choice: "none"
+              });
+              
+              return {
+                success: true,
+                data: {
+                  response: response.content,
+                  tone: 'adaptive',
+                  suggestedFollowUps: [],
+                  emotionalSupport: ""
+                }
+              };
+            } catch (error) {
+              return { success: false, error: error.message };
+            }
+          };
+          
+          // Start prefetching in background
+          requestCacheService.prefetchLikelyResponses(userId, finalMessage, systemPrompt, generateResponse);
+          
+          // Track user pattern for future prefetching
+          requestCacheService.trackUserPattern(userId, finalMessage);
+
           // Add to data processing pipeline
           await dataProcessingPipeline.addEvent(userId, 'chat_message', {
             message: userMessage,
-            response: response.content.trim(),
+            response: finalContent.trim(),
             emotion: detectSimpleEmotion(userMessage),
             context: conversationContext,
             timestamp: new Date()
