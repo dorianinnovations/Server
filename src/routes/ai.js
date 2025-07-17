@@ -877,10 +877,8 @@ ADAPTIVE INSTRUCTIONS:
             
           } catch (error) {
             console.error('❌ Tool execution error:', error);
-            // Clear keep-alive interval on error
-            if (typeof keepAliveInterval !== 'undefined') {
-              clearInterval(keepAliveInterval);
-            }
+            // Clear keep-alive interval on error (variable scoped correctly above)
+            clearInterval(keepAliveInterval);
             res.write('data: [DONE]\n\n');
             res.end();
           }
