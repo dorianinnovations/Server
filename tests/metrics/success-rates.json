@@ -1,0 +1,435 @@
+{
+  "sessions": [
+    {
+      "id": "session-1752702963526",
+      "name": "Comprehensive E2E Tests",
+      "startTime": 1752702963526,
+      "endTime": 1752702994088,
+      "metadata": {
+        "environment": "test",
+        "timestamp": "2025-07-16T21:56:03.525Z",
+        "testSuites": 6
+      },
+      "testResults": [
+        {
+          "name": "Core User Journey",
+          "category": "core-functionality",
+          "success": false,
+          "duration": 2415,
+          "timestamp": 1752702965941,
+          "metadata": {
+            "file": "tests/e2e/complete-user-journey.test.js",
+            "critical": true,
+            "exitCode": 1,
+            "error": "FAIL tests/e2e/complete-user-journey.test.js\n  ● Test suite failed to run\n\n    SyntaxError: The requested module '../utils/testSetup.js' does not provide an export named 'cleanupTestEnvironment'\n\n      at Runtime.linkAndEvaluateModule (node_modules/jest-runtime/build/index.js:680:5)\n\nTest Suites: 1 failed, 1 total\nTests:       0 total\nSnapshots:   0 total\nTime:        1.789 s\nRan all test suites matching tests/e2e/complete-user-journey.test.js.\n(node:7231) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/e2e/complete-user-journey.test.js\n\n"
+          }
+        },
+        {
+          "name": "Authentication & Security",
+          "category": "authentication",
+          "success": true,
+          "duration": 3831,
+          "timestamp": 1752702970773,
+          "metadata": {
+            "file": "tests/routes/auth.test.js",
+            "critical": true,
+            "exitCode": 0,
+            "error": "(node:7360) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\nPASS tests/routes/auth.test.js\n  Auth Routes\n    POST /signup\n      ✓ should create a new user with valid data (750 ms)\n      ✓ should return 400 for invalid email (214 ms)\n      ✓ should return 409 for existing email (352 ms)\n    POST /login\n      ✓ should login with valid credentials (517 ms)\n      ✓ should return 401 for invalid credentials (514 ms)\n      ✓ should return 400 for missing email (349 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       6 passed, 6 total\nSnapshots:   0 total\nTime:        3.412 s\nRan all test suites matching tests/routes/auth.test.js.\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/routes/auth.test.js\n\n"
+          }
+        },
+        {
+          "name": "API Integration",
+          "category": "api-integration",
+          "success": true,
+          "duration": 86,
+          "timestamp": 1752702971860,
+          "metadata": {
+            "file": "tests/integration/test_endpoints.js",
+            "critical": true,
+            "exitCode": 0,
+            "error": null,
+            "output": "❌ Server is not running. Please start with: npm start\n"
+          }
+        },
+        {
+          "name": "Tool Execution",
+          "category": "tools",
+          "success": true,
+          "duration": 96,
+          "timestamp": 1752702972957,
+          "metadata": {
+            "file": "tests/integration/test_tools.js",
+            "critical": false,
+            "exitCode": 0,
+            "error": null,
+            "output": "🧪 Starting tool system tests...\n\n✗ Authentication error: \n❌ Cannot continue without authentication\n"
+          }
+        },
+        {
+          "name": "WebSocket Connectivity",
+          "category": "real-time",
+          "success": true,
+          "duration": 18106,
+          "timestamp": 1752702992064,
+          "metadata": {
+            "file": "tests/scripts/testWebSocket.js",
+            "critical": false,
+            "exitCode": 0,
+            "error": null,
+            "output": "🚀 Starting WebSocket test suite...\nMake sure your server is running on http://localhost:5000\n\n🧪 Starting WebSocket tests...\n\n\n🎯 Testing emotional sharing...\n\n🔄 Testing cross-user interactions...\n\n🛡️ Testing support network...\n\n🧹 Cleaning up connections...\n\n✅ WebSocket tests completed!\n"
+          }
+        },
+        {
+          "name": "Performance & Load",
+          "category": "performance",
+          "success": false,
+          "duration": 21,
+          "timestamp": 1752702993087,
+          "metadata": {
+            "file": "tests/scripts/performance-test.js",
+            "critical": false,
+            "exitCode": 1,
+            "error": "node:internal/modules/esm/resolve:275\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/darrel/Desktop/numina-server/tests/src/utils/sanitize.js' imported from /home/darrel/Desktop/numina-server/tests/scripts/performance-test.js\n    at finalizeResolution (node:internal/modules/esm/resolve:275:11)\n    at moduleResolve (node:internal/modules/esm/resolve:860:10)\n    at defaultResolve (node:internal/modules/esm/resolve:984:11)\n    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:704:25)\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)\n    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)\n    at ModuleJob._link (node:internal/modules/esm/module_job:175:49) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file:///home/darrel/Desktop/numina-server/tests/src/utils/sanitize.js'\n}\n\nNode.js v22.17.0\n",
+            "output": ""
+          }
+        }
+      ],
+      "stats": {
+        "total": 6,
+        "passed": 4,
+        "failed": 2,
+        "skipped": 0,
+        "successRate": 66.66666666666666,
+        "totalDuration": 30562,
+        "averageDuration": 4092.5
+      },
+      "categories": {
+        "core-functionality": {
+          "total": 1,
+          "passed": 0,
+          "failed": 1,
+          "successRate": 0,
+          "totalDuration": 2415,
+          "averageDuration": 2415
+        },
+        "authentication": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "successRate": 100,
+          "totalDuration": 3831,
+          "averageDuration": 3831
+        },
+        "api-integration": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "successRate": 100,
+          "totalDuration": 86,
+          "averageDuration": 86
+        },
+        "tools": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "successRate": 100,
+          "totalDuration": 96,
+          "averageDuration": 96
+        },
+        "real-time": {
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "successRate": 100,
+          "totalDuration": 18106,
+          "averageDuration": 18106
+        },
+        "performance": {
+          "total": 1,
+          "passed": 0,
+          "failed": 1,
+          "successRate": 0,
+          "totalDuration": 21,
+          "averageDuration": 21
+        }
+      },
+      "criticalFailures": [
+        {
+          "name": "Core User Journey",
+          "category": "core-functionality",
+          "success": false,
+          "duration": 2415,
+          "timestamp": 1752702965941,
+          "metadata": {
+            "file": "tests/e2e/complete-user-journey.test.js",
+            "critical": true,
+            "exitCode": 1,
+            "error": "FAIL tests/e2e/complete-user-journey.test.js\n  ● Test suite failed to run\n\n    SyntaxError: The requested module '../utils/testSetup.js' does not provide an export named 'cleanupTestEnvironment'\n\n      at Runtime.linkAndEvaluateModule (node_modules/jest-runtime/build/index.js:680:5)\n\nTest Suites: 1 failed, 1 total\nTests:       0 total\nSnapshots:   0 total\nTime:        1.789 s\nRan all test suites matching tests/e2e/complete-user-journey.test.js.\n(node:7231) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/e2e/complete-user-journey.test.js\n\n"
+          }
+        }
+      ],
+      "warnings": [
+        {
+          "type": "slow",
+          "test": "WebSocket Connectivity",
+          "duration": 18106,
+          "threshold": 5000
+        }
+      ]
+    }
+  ],
+  "currentSession": null,
+  "aggregatedStats": {
+    "totalTests": 6,
+    "totalPassed": 4,
+    "totalFailed": 2,
+    "overallSuccessRate": 66.66666666666666,
+    "averageTestDuration": 4092.5,
+    "categoryStats": {
+      "core-functionality": {
+        "total": 1,
+        "passed": 0,
+        "failed": 1,
+        "successRate": 0,
+        "totalDuration": 2415,
+        "sessions": 1
+      },
+      "authentication": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "successRate": 100,
+        "totalDuration": 3831,
+        "sessions": 1
+      },
+      "api-integration": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "successRate": 100,
+        "totalDuration": 86,
+        "sessions": 1
+      },
+      "tools": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "successRate": 100,
+        "totalDuration": 96,
+        "sessions": 1
+      },
+      "real-time": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "successRate": 100,
+        "totalDuration": 18106,
+        "sessions": 1
+      },
+      "performance": {
+        "total": 1,
+        "passed": 0,
+        "failed": 1,
+        "successRate": 0,
+        "totalDuration": 21,
+        "sessions": 1
+      }
+    },
+    "criticalFailures": [
+      {
+        "name": "Core User Journey",
+        "category": "core-functionality",
+        "success": false,
+        "duration": 2415,
+        "timestamp": 1752702965941,
+        "metadata": {
+          "file": "tests/e2e/complete-user-journey.test.js",
+          "critical": true,
+          "exitCode": 1,
+          "error": "FAIL tests/e2e/complete-user-journey.test.js\n  ● Test suite failed to run\n\n    SyntaxError: The requested module '../utils/testSetup.js' does not provide an export named 'cleanupTestEnvironment'\n\n      at Runtime.linkAndEvaluateModule (node_modules/jest-runtime/build/index.js:680:5)\n\nTest Suites: 1 failed, 1 total\nTests:       0 total\nSnapshots:   0 total\nTime:        1.789 s\nRan all test suites matching tests/e2e/complete-user-journey.test.js.\n(node:7231) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+          "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/e2e/complete-user-journey.test.js\n\n"
+        }
+      }
+    ],
+    "performanceMetrics": {
+      "slowestTests": [
+        {
+          "name": "WebSocket Connectivity",
+          "category": "real-time",
+          "success": true,
+          "duration": 18106,
+          "timestamp": 1752702992064,
+          "metadata": {
+            "file": "tests/scripts/testWebSocket.js",
+            "critical": false,
+            "exitCode": 0,
+            "error": null,
+            "output": "🚀 Starting WebSocket test suite...\nMake sure your server is running on http://localhost:5000\n\n🧪 Starting WebSocket tests...\n\n\n🎯 Testing emotional sharing...\n\n🔄 Testing cross-user interactions...\n\n🛡️ Testing support network...\n\n🧹 Cleaning up connections...\n\n✅ WebSocket tests completed!\n"
+          }
+        },
+        {
+          "name": "Authentication & Security",
+          "category": "authentication",
+          "success": true,
+          "duration": 3831,
+          "timestamp": 1752702970773,
+          "metadata": {
+            "file": "tests/routes/auth.test.js",
+            "critical": true,
+            "exitCode": 0,
+            "error": "(node:7360) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\nPASS tests/routes/auth.test.js\n  Auth Routes\n    POST /signup\n      ✓ should create a new user with valid data (750 ms)\n      ✓ should return 400 for invalid email (214 ms)\n      ✓ should return 409 for existing email (352 ms)\n    POST /login\n      ✓ should login with valid credentials (517 ms)\n      ✓ should return 401 for invalid credentials (514 ms)\n      ✓ should return 400 for missing email (349 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       6 passed, 6 total\nSnapshots:   0 total\nTime:        3.412 s\nRan all test suites matching tests/routes/auth.test.js.\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/routes/auth.test.js\n\n"
+          }
+        },
+        {
+          "name": "Core User Journey",
+          "category": "core-functionality",
+          "success": false,
+          "duration": 2415,
+          "timestamp": 1752702965941,
+          "metadata": {
+            "file": "tests/e2e/complete-user-journey.test.js",
+            "critical": true,
+            "exitCode": 1,
+            "error": "FAIL tests/e2e/complete-user-journey.test.js\n  ● Test suite failed to run\n\n    SyntaxError: The requested module '../utils/testSetup.js' does not provide an export named 'cleanupTestEnvironment'\n\n      at Runtime.linkAndEvaluateModule (node_modules/jest-runtime/build/index.js:680:5)\n\nTest Suites: 1 failed, 1 total\nTests:       0 total\nSnapshots:   0 total\nTime:        1.789 s\nRan all test suites matching tests/e2e/complete-user-journey.test.js.\n(node:7231) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/e2e/complete-user-journey.test.js\n\n"
+          }
+        },
+        {
+          "name": "Tool Execution",
+          "category": "tools",
+          "success": true,
+          "duration": 96,
+          "timestamp": 1752702972957,
+          "metadata": {
+            "file": "tests/integration/test_tools.js",
+            "critical": false,
+            "exitCode": 0,
+            "error": null,
+            "output": "🧪 Starting tool system tests...\n\n✗ Authentication error: \n❌ Cannot continue without authentication\n"
+          }
+        },
+        {
+          "name": "API Integration",
+          "category": "api-integration",
+          "success": true,
+          "duration": 86,
+          "timestamp": 1752702971860,
+          "metadata": {
+            "file": "tests/integration/test_endpoints.js",
+            "critical": true,
+            "exitCode": 0,
+            "error": null,
+            "output": "❌ Server is not running. Please start with: npm start\n"
+          }
+        },
+        {
+          "name": "Performance & Load",
+          "category": "performance",
+          "success": false,
+          "duration": 21,
+          "timestamp": 1752702993087,
+          "metadata": {
+            "file": "tests/scripts/performance-test.js",
+            "critical": false,
+            "exitCode": 1,
+            "error": "node:internal/modules/esm/resolve:275\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/darrel/Desktop/numina-server/tests/src/utils/sanitize.js' imported from /home/darrel/Desktop/numina-server/tests/scripts/performance-test.js\n    at finalizeResolution (node:internal/modules/esm/resolve:275:11)\n    at moduleResolve (node:internal/modules/esm/resolve:860:10)\n    at defaultResolve (node:internal/modules/esm/resolve:984:11)\n    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:704:25)\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)\n    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)\n    at ModuleJob._link (node:internal/modules/esm/module_job:175:49) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file:///home/darrel/Desktop/numina-server/tests/src/utils/sanitize.js'\n}\n\nNode.js v22.17.0\n",
+            "output": ""
+          }
+        }
+      ],
+      "fastestTests": [
+        {
+          "name": "Performance & Load",
+          "category": "performance",
+          "success": false,
+          "duration": 21,
+          "timestamp": 1752702993087,
+          "metadata": {
+            "file": "tests/scripts/performance-test.js",
+            "critical": false,
+            "exitCode": 1,
+            "error": "node:internal/modules/esm/resolve:275\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/darrel/Desktop/numina-server/tests/src/utils/sanitize.js' imported from /home/darrel/Desktop/numina-server/tests/scripts/performance-test.js\n    at finalizeResolution (node:internal/modules/esm/resolve:275:11)\n    at moduleResolve (node:internal/modules/esm/resolve:860:10)\n    at defaultResolve (node:internal/modules/esm/resolve:984:11)\n    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:704:25)\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)\n    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)\n    at ModuleJob._link (node:internal/modules/esm/module_job:175:49) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file:///home/darrel/Desktop/numina-server/tests/src/utils/sanitize.js'\n}\n\nNode.js v22.17.0\n",
+            "output": ""
+          }
+        },
+        {
+          "name": "API Integration",
+          "category": "api-integration",
+          "success": true,
+          "duration": 86,
+          "timestamp": 1752702971860,
+          "metadata": {
+            "file": "tests/integration/test_endpoints.js",
+            "critical": true,
+            "exitCode": 0,
+            "error": null,
+            "output": "❌ Server is not running. Please start with: npm start\n"
+          }
+        },
+        {
+          "name": "Tool Execution",
+          "category": "tools",
+          "success": true,
+          "duration": 96,
+          "timestamp": 1752702972957,
+          "metadata": {
+            "file": "tests/integration/test_tools.js",
+            "critical": false,
+            "exitCode": 0,
+            "error": null,
+            "output": "🧪 Starting tool system tests...\n\n✗ Authentication error: \n❌ Cannot continue without authentication\n"
+          }
+        },
+        {
+          "name": "Core User Journey",
+          "category": "core-functionality",
+          "success": false,
+          "duration": 2415,
+          "timestamp": 1752702965941,
+          "metadata": {
+            "file": "tests/e2e/complete-user-journey.test.js",
+            "critical": true,
+            "exitCode": 1,
+            "error": "FAIL tests/e2e/complete-user-journey.test.js\n  ● Test suite failed to run\n\n    SyntaxError: The requested module '../utils/testSetup.js' does not provide an export named 'cleanupTestEnvironment'\n\n      at Runtime.linkAndEvaluateModule (node_modules/jest-runtime/build/index.js:680:5)\n\nTest Suites: 1 failed, 1 total\nTests:       0 total\nSnapshots:   0 total\nTime:        1.789 s\nRan all test suites matching tests/e2e/complete-user-journey.test.js.\n(node:7231) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/e2e/complete-user-journey.test.js\n\n"
+          }
+        },
+        {
+          "name": "Authentication & Security",
+          "category": "authentication",
+          "success": true,
+          "duration": 3831,
+          "timestamp": 1752702970773,
+          "metadata": {
+            "file": "tests/routes/auth.test.js",
+            "critical": true,
+            "exitCode": 0,
+            "error": "(node:7360) ExperimentalWarning: VM Modules is an experimental feature and might change at any time\n(Use `node --trace-warnings ...` to show where the warning was created)\nPASS tests/routes/auth.test.js\n  Auth Routes\n    POST /signup\n      ✓ should create a new user with valid data (750 ms)\n      ✓ should return 400 for invalid email (214 ms)\n      ✓ should return 409 for existing email (352 ms)\n    POST /login\n      ✓ should login with valid credentials (517 ms)\n      ✓ should return 401 for invalid credentials (514 ms)\n      ✓ should return 400 for missing email (349 ms)\n\nTest Suites: 1 passed, 1 total\nTests:       6 passed, 6 total\nSnapshots:   0 total\nTime:        3.412 s\nRan all test suites matching tests/routes/auth.test.js.\n",
+            "output": "\n> test\n> node --experimental-vm-modules node_modules/.bin/jest tests/routes/auth.test.js\n\n"
+          }
+        },
+        {
+          "name": "WebSocket Connectivity",
+          "category": "real-time",
+          "success": true,
+          "duration": 18106,
+          "timestamp": 1752702992064,
+          "metadata": {
+            "file": "tests/scripts/testWebSocket.js",
+            "critical": false,
+            "exitCode": 0,
+            "error": null,
+            "output": "🚀 Starting WebSocket test suite...\nMake sure your server is running on http://localhost:5000\n\n🧪 Starting WebSocket tests...\n\n\n🎯 Testing emotional sharing...\n\n🔄 Testing cross-user interactions...\n\n🛡️ Testing support network...\n\n🧹 Cleaning up connections...\n\n✅ WebSocket tests completed!\n"
+          }
+        }
+      ],
+      "timeoutTests": []
+    }
+  },
+  "lastUpdated": "2025-07-16T21:56:34.089Z",
+  "version": "1.0.0"
+}

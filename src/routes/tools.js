@@ -66,7 +66,9 @@ router.post('/execute', authMiddleware, async (req, res) => {
       },
     };
     
-    const result = await toolExecutor.executeToolCall(toolCall, userContext);
+    // Use mocked tool executor in test environment
+    const executor = req.app.locals.toolExecutor || toolExecutor;
+    const result = await executor.executeToolCall(toolCall, userContext);
     
     res.json({
       success: true,

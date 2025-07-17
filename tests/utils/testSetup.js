@@ -70,3 +70,39 @@ export const expectValidResponse = (response, statusCode = 200) => {
   expect(response.status).toBe(statusCode);
   expect(response.body).toHaveProperty('status');
 };
+
+// Setup and cleanup functions for E2E tests
+export const setupTestEnvironment = async () => {
+  console.log('🔧 Setting up test environment...');
+  
+  // Set test environment variables
+  process.env.NODE_ENV = 'test';
+  process.env.MONGO_URI = 'mongodb://localhost:27017/numina-test';
+  process.env.JWT_SECRET = 'test-jwt-secret';
+  process.env.REDIS_URL = 'redis://localhost:6379/1';
+  
+  // Setup test database if needed
+  try {
+    const dbSetup = await setupTestDatabase();
+    return dbSetup;
+  } catch (error) {
+    console.log('Warning: Could not setup test database:', error.message);
+    return null;
+  }
+};
+
+export const cleanupTestEnvironment = async () => {
+  console.log('🧹 Cleaning up test environment...');
+  
+  // Cleanup database connections
+  try {
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close();
+    }
+  } catch (error) {
+    console.log('Warning: Database cleanup error:', error.message);
+  }
+  
+  // Reset environment
+  delete process.env.NODE_ENV;
+};

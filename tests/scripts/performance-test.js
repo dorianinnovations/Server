@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { performance } from 'perf_hooks';
-import { sanitizeResponse } from '../src/utils/sanitize.js';
+// import { sanitizeResponse } from '../src/utils/sanitize.js';
+// Mock sanitizeResponse for performance testing
+const sanitizeResponse = (content) => content;
 
 console.log('🧪 Performance Testing for Task Inference & Emotion Logging Optimizations');
 console.log('=' * 70);

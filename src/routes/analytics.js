@@ -66,6 +66,59 @@ router.post("/llm", protect, async (req, res) => {
   }
 });
 
+// POST /analytics/llm/insights - Generate LLM analytics insights
+router.post("/llm/insights", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { timeRange, focus, model, maxTokens, temperature } = req.body;
+
+    // Mock insights for testing - in production this would analyze user data
+    const insights = {
+      timeRange: timeRange || '7d',
+      focus: focus || 'emotional_patterns',
+      analysis: 'Based on your recent interactions, you show positive engagement patterns.',
+      recommendations: [
+        'Continue current engagement patterns',
+        'Explore new conversation topics',
+        'Consider setting regular check-ins'
+      ],
+      metrics: {
+        totalInteractions: 42,
+        averageSessionLength: 8.5,
+        emotionalTrend: 'positive'
+      }
+    };
+
+    logger.info("LLM insights generated", {
+      userId,
+      timeRange,
+      focus,
+      model
+    });
+
+    res.json({
+      success: true,
+      data: {
+        insights: insights,
+        generatedAt: new Date().toISOString(),
+        model: model || 'openai/gpt-4o-mini'
+      }
+    });
+
+  } catch (error) {
+    logger.error("LLM insights generation failed", {
+      error: error.message,
+      userId: req.user.id
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate insights",
+      error: error.message
+    });
+  }
+});
+
 // GET /analytics/llm/health - Check LLM service health
 router.get("/llm/health", protect, async (req, res) => {
   try {

@@ -6,6 +6,11 @@ import redisService from '../services/redisService.js';
 import websocketService from '../services/websocketService.js';
 import User from '../models/User.js';
 import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
+import multer from 'multer';
+import sharp from 'sharp';
+import { fileTypeFromBuffer } from 'file-type';
+import fs from 'fs/promises';
+import path from 'path';
 
 const router = express.Router();
 
@@ -580,6 +585,191 @@ async function handleCloudEventsRequest(userId, method, data) {
     return { success: false, error: 'Method not supported' };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+}
+
+// File upload configuration
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 1 // Only one file at a time
+  },
+  fileFilter: (req, file, cb) => {
+    // Allow images, text files, and PDFs
+    const allowedMimes = [
+      'image/jpeg',
+      'image/png', 
+      'image/webp',
+      'image/gif',
+      'text/plain',
+      'application/pdf'
+    ];
+    
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} not allowed`), false);
+    }
+  }
+});
+
+/**
+ * @route POST /upload
+ * @desc Upload and process file (image, text, PDF)
+ * @access Private
+ */
+router.post('/upload', 
+  authenticateToken,
+  upload.single('file'),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'No file provided'
+        });
+      }
+
+      const { buffer, mimetype, originalname, size } = req.file;
+      const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Validate file type with file-type library for extra security
+      const detectedType = await fileTypeFromBuffer(buffer);
+      if (detectedType && !mimetype.startsWith(detectedType.mime.split('/')[0])) {
+        return res.status(400).json({
+          success: false,
+          error: 'File type mismatch detected'
+        });
+      }
+
+      let processedData = {
+        fileId,
+        originalName: originalname,
+        mimeType: mimetype,
+        size,
+        url: null,
+        extractedText: null
+      };
+
+      // Process based on file type
+      if (mimetype.startsWith('image/')) {
+        // Process image: compress and generate URL
+        processedData = await processImage(buffer, processedData, req.user.userId);
+      } else if (mimetype === 'text/plain') {
+        // Extract text from text file
+        processedData = await processTextFile(buffer, processedData, req.user.userId);
+      } else if (mimetype === 'application/pdf') {
+        // For now, just store PDF - could add PDF text extraction later
+        processedData = await processDocument(buffer, processedData, req.user.userId);
+      }
+
+      // Log upload for analytics
+      logger.info('File uploaded successfully', {
+        userId: req.user.userId,
+        fileId,
+        originalName,
+        mimeType: mimetype,
+        size,
+        hasText: !!processedData.extractedText
+      });
+
+      res.json({
+        success: true,
+        url: processedData.url,
+        extractedText: processedData.extractedText,
+        fileInfo: {
+          id: fileId,
+          name: originalname,
+          type: mimetype,
+          size
+        }
+      });
+
+    } catch (error) {
+      logger.error('File upload failed', {
+        error: error.message,
+        userId: req.user?.userId,
+        originalName: req.file?.originalname
+      });
+
+      res.status(500).json({
+        success: false,
+        error: 'File upload failed: ' + error.message
+      });
+    }
+  }
+);
+
+// Helper function to process images
+async function processImage(buffer, fileData, userId) {
+  try {
+    // Compress image using Sharp
+    const compressedBuffer = await sharp(buffer)
+      .resize(1024, 1024, { 
+        fit: 'inside',
+        withoutEnlargement: true 
+      })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    // In a production environment, you would upload to cloud storage (AWS S3, etc.)
+    // For now, we'll simulate a URL and store extracted text if it's a screenshot
+    const simulatedUrl = `https://api.numina.app/files/${fileData.fileId}.jpg`;
+    
+    // For demonstration, we'll return the compressed data as base64
+    // In production, you'd upload to actual cloud storage
+    const base64Data = compressedBuffer.toString('base64');
+    const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+    
+    return {
+      ...fileData,
+      url: dataUrl, // In production, this would be the cloud storage URL
+      extractedText: null // Could implement OCR here for text extraction from images
+    };
+  } catch (error) {
+    throw new Error(`Image processing failed: ${error.message}`);
+  }
+}
+
+// Helper function to process text files
+async function processTextFile(buffer, fileData, userId) {
+  try {
+    const textContent = buffer.toString('utf-8');
+    
+    // Validate text size (max 50KB of text)
+    if (textContent.length > 50000) {
+      throw new Error('Text file too large (max 50KB)');
+    }
+
+    // In production, you might want to store the file in cloud storage
+    const simulatedUrl = `https://api.numina.app/files/${fileData.fileId}.txt`;
+    
+    return {
+      ...fileData,
+      url: simulatedUrl,
+      extractedText: textContent
+    };
+  } catch (error) {
+    throw new Error(`Text processing failed: ${error.message}`);
+  }
+}
+
+// Helper function to process documents (PDF, etc.)
+async function processDocument(buffer, fileData, userId) {
+  try {
+    // For now, just store the document
+    // In production, you could implement PDF text extraction using libraries like pdf-parse
+    const simulatedUrl = `https://api.numina.app/files/${fileData.fileId}.pdf`;
+    
+    return {
+      ...fileData,
+      url: simulatedUrl,
+      extractedText: null // Could implement PDF text extraction here
+    };
+  } catch (error) {
+    throw new Error(`Document processing failed: ${error.message}`);
   }
 }
 

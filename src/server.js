@@ -268,12 +268,75 @@ const initializeServer = async () => {
   }
 };
 
-// Initialize server (production only)
+// Initialize server for both production and testing
 if (process.env.NODE_ENV !== 'test') {
+  // Full initialization for production
   console.log("Launching Numina AI Server...");
   initializeServer().catch(err => {
     console.error('Failed to initialize server:', err);
     process.exit(1);
+  });
+} else {
+  // Minimal initialization for tests
+  console.log("Initializing server for testing...");
+  
+  // Initialize basic middleware and routes for testing
+  const initializeForTests = async () => {
+    try {
+      // Basic middleware setup
+      app.use(express.json({ limit: "1mb" }));
+      
+      // Connect to database if not already connected
+      if (process.env.MONGO_URI && !mongoose.connection.readyState) {
+        await connectDB();
+      }
+      
+      // Register routes for testing
+      app.use("/", authRoutes);
+      app.use("/", userRoutes);
+      app.use("/", healthRoutes);
+      app.use("/", completionRoutes);
+      app.use("/", taskRoutes);
+      app.use("/", docsRoutes);
+      app.use("/emotions", emotionsRoutes);
+      app.use("/emotion-history", emotionHistoryRoutes);
+      app.use("/emotion-metrics", emotionMetricsRoutes);
+      app.use("/analytics", analyticsRoutes);
+      app.use("/ai", aiRoutes);
+      app.use("/personalized-ai", personalizedAIRoutes);
+      app.use("/test-personalization", testPersonalizationRoutes);
+      app.use("/test-gpt4o", testGPT4oRoutes);
+      app.use("/numina-personality", numinaPersonalityRoutes);
+      app.use("/tools", toolsRoutes);
+      app.use("/wallet", walletRoutes);
+      app.use("/subscription", subscriptionRoutes);
+      app.use("/", debugRoutes);
+      app.use("/cloud", cloudRoutes);
+      app.use("/personal-insights", personalInsightsRoutes);
+      app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
+      app.use("/", mobileRoutes);
+      app.use("/", syncRoutes);
+      app.use("/", apiDocsRoutes);
+      
+      // Test endpoint
+      app.get("/test", (req, res) => {
+        res.json({
+          success: true,
+          message: "Numina AI Server Test Mode",
+          timestamp: new Date().toISOString(),
+          version: "1.0.0-test"
+        });
+      });
+      
+      console.log("Test server initialization completed");
+    } catch (error) {
+      console.error('Test server initialization error:', error);
+    }
+  };
+  
+  // Initialize immediately for tests (but don't await - let it run in background)
+  initializeForTests().catch(error => {
+    console.error('Test initialization failed:', error);
   });
 }
 
