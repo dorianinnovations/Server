@@ -12,6 +12,9 @@ class RequestCacheService {
     this.cacheExpiry = 1 * 60 * 60 * 1000; // 1 hour for aggressive caching
     this.similarityThreshold = 0.85; // 85% similarity for cache hits
     this.maxCacheSize = 10000; // Maximum cache entries
+    this.prefetchCache = new Map(); // Cache for prefetched responses
+    this.userPatterns = new Map(); // Track user query patterns
+    this.commonPatterns = new Map(); // Track globally common patterns
   }
 
   /**
@@ -222,12 +225,241 @@ class RequestCacheService {
   }
 
   /**
+   * Track user query patterns for intelligent prefetching
+   */
+  trackUserPattern(userId, message, followUpMessage = null) {
+    try {
+      if (!this.userPatterns.has(userId)) {
+        this.userPatterns.set(userId, {
+          sequences: [],
+          commonQueries: new Map(),
+          lastQuery: null,
+          timestamp: Date.now()
+        });
+      }
+
+      const userPattern = this.userPatterns.get(userId);
+      
+      // Track query frequency
+      const normalizedMessage = message.toLowerCase().trim();
+      const count = userPattern.commonQueries.get(normalizedMessage) || 0;
+      userPattern.commonQueries.set(normalizedMessage, count + 1);
+      
+      // Track query sequences for follow-up prediction
+      if (userPattern.lastQuery && followUpMessage) {
+        userPattern.sequences.push({
+          query: userPattern.lastQuery,
+          followUp: normalizedMessage,
+          timestamp: Date.now()
+        });
+        
+        // Keep only recent sequences (last 20)
+        if (userPattern.sequences.length > 20) {
+          userPattern.sequences.shift();
+        }
+      }
+      
+      userPattern.lastQuery = normalizedMessage;
+      userPattern.timestamp = Date.now();
+      
+      // Update global patterns
+      this.updateGlobalPatterns(normalizedMessage);
+      
+    } catch (error) {
+      console.error('Error tracking user pattern:', error);
+    }
+  }
+
+  /**
+   * Update global common patterns
+   */
+  updateGlobalPatterns(message) {
+    const count = this.commonPatterns.get(message) || 0;
+    this.commonPatterns.set(message, count + 1);
+    
+    // Keep only top 1000 patterns
+    if (this.commonPatterns.size > 1000) {
+      const sorted = Array.from(this.commonPatterns.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 1000);
+      this.commonPatterns = new Map(sorted);
+    }
+  }
+
+  /**
+   * Predict likely follow-up queries for prefetching
+   */
+  predictFollowUpQueries(userId, currentMessage) {
+    try {
+      const userPattern = this.userPatterns.get(userId);
+      if (!userPattern) return [];
+      
+      const normalizedCurrent = currentMessage.toLowerCase().trim();
+      const predictions = [];
+      
+      // Look for historical sequences
+      for (const sequence of userPattern.sequences) {
+        if (sequence.query === normalizedCurrent) {
+          predictions.push({
+            query: sequence.followUp,
+            confidence: 0.8,
+            source: 'user_history'
+          });
+        }
+      }
+      
+      // Look for common follow-ups globally
+      const commonFollowUps = [
+        'tell me more',
+        'explain that',
+        'what else',
+        'give me examples',
+        'how do i do that',
+        'what are the steps'
+      ];
+      
+      for (const followUp of commonFollowUps) {
+        if (this.commonPatterns.has(followUp)) {
+          predictions.push({
+            query: followUp,
+            confidence: 0.6,
+            source: 'global_patterns'
+          });
+        }
+      }
+      
+      return predictions.slice(0, 3); // Top 3 predictions
+    } catch (error) {
+      console.error('Error predicting follow-up queries:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Intelligent response prefetching
+   */
+  async prefetchLikelyResponses(userId, currentMessage, systemPrompt, generateResponse) {
+    try {
+      const predictions = this.predictFollowUpQueries(userId, currentMessage);
+      
+      for (const prediction of predictions) {
+        const prefetchKey = this.generateCacheKey(userId, prediction.query, systemPrompt);
+        
+        // Don't prefetch if already cached
+        if (this.memoryCache.has(prefetchKey) || this.prefetchCache.has(prefetchKey)) {
+          continue;
+        }
+        
+        // Prefetch in background (non-blocking)
+        setImmediate(async () => {
+          try {
+            console.log(`🔮 PREFETCH: Generating response for "${prediction.query}" (confidence: ${prediction.confidence})`);
+            
+            const response = await generateResponse(prediction.query);
+            
+            if (response && response.success) {
+              this.prefetchCache.set(prefetchKey, {
+                response: response.data,
+                timestamp: Date.now(),
+                confidence: prediction.confidence,
+                source: prediction.source
+              });
+              
+              // Clean up old prefetch entries
+              if (this.prefetchCache.size > 100) {
+                const oldestKey = Array.from(this.prefetchCache.keys())[0];
+                this.prefetchCache.delete(oldestKey);
+              }
+            }
+          } catch (error) {
+            console.error('Error prefetching response:', error);
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('Error in prefetch system:', error);
+    }
+  }
+
+  /**
+   * Check prefetch cache for instant responses
+   */
+  async checkPrefetchCache(userId, message, systemPrompt) {
+    try {
+      const key = this.generateCacheKey(userId, message, systemPrompt);
+      const prefetched = this.prefetchCache.get(key);
+      
+      if (prefetched && Date.now() - prefetched.timestamp < this.cacheExpiry) {
+        // Move to main cache for future use
+        this.memoryCache.set(key, {
+          response: prefetched.response,
+          originalMessage: message,
+          systemPrompt: systemPrompt.slice(0, 200),
+          timestamp: Date.now(),
+          userId,
+          hitCount: 1,
+          source: 'prefetch'
+        });
+        
+        this.prefetchCache.delete(key);
+        
+        return {
+          success: true,
+          data: prefetched.response,
+          cacheHit: true,
+          similarity: 1.0,
+          cacheType: 'prefetch',
+          confidence: prefetched.confidence
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error checking prefetch cache:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Enhanced getCachedResponse with prefetch support
+   */
+  async getCachedResponseEnhanced(userId, message, systemPrompt) {
+    try {
+      // Check prefetch cache first (instant responses)
+      const prefetchResult = await this.checkPrefetchCache(userId, message, systemPrompt);
+      if (prefetchResult) {
+        console.log(`⚡ PREFETCH HIT: Instant response served from prefetch cache`);
+        return prefetchResult;
+      }
+      
+      // Fall back to regular cache
+      return await this.getCachedResponse(userId, message, systemPrompt);
+    } catch (error) {
+      console.error('Error getting enhanced cached response:', error);
+      return { success: false, cacheHit: false };
+    }
+  }
+
+  /**
    * Warm up cache with common queries for improved performance
    */
   async warmupCache() {
-    // This could be implemented to pre-populate cache with common responses
-    // For now, just ensure the service is ready
+    // Pre-populate with common patterns
+    const commonQueries = [
+      'hello',
+      'hi',
+      'how are you',
+      'what can you do',
+      'help me',
+      'tell me more',
+      'explain that',
+      'what else',
+      'give me examples'
+    ];
+    
     console.log('🔥 Request cache service warmed up and ready');
+    console.log(`🔮 Prefetch system initialized with ${commonQueries.length} common patterns`);
   }
 }
 

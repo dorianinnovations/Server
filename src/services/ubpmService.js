@@ -13,8 +13,10 @@ class UBPMService {
   constructor() {
     this.analysisThresholds = {
       minInteractions: 5,        // Minimum interactions to generate insights
-      patternConfidence: 0.7,    // Minimum confidence for pattern recognition
+      patternConfidence: 0.6,    // Lowered for more sensitive pattern detection
       updateCooldown: 300000,    // 5 minutes between UBPM updates
+      highConfidenceThreshold: 0.85,  // Threshold for high-confidence predictions
+      predictionAccuracyTarget: 0.92, // Target accuracy for behavioral predictions
     };
     
     this.lastUpdates = new Map();  // Track last update times per user
@@ -143,7 +145,7 @@ class UBPMService {
   }
 
   /**
-   * Analyze communication patterns from conversation data
+   * Analyze communication patterns from conversation data with scary accuracy
    */
   analyzeCommunicationPatterns(memories) {
     const patterns = [];
@@ -151,42 +153,161 @@ class UBPMService {
     
     if (userMessages.length < 2) return patterns;
 
-    // Message length analysis
+    // Enhanced message length analysis with predictive indicators
     const avgLength = userMessages.reduce((sum, m) => sum + m.content.length, 0) / userMessages.length;
     const lengths = userMessages.map(m => m.content.length);
     const lengthVariation = this.calculateVariation(lengths);
+    const lengthTrend = this.calculateTrend(lengths);
 
-    if (avgLength > 200 && lengthVariation < 0.3) {
+    // Detailed communicator pattern with predictive power
+    if (avgLength > 150 && lengthVariation < 0.4) {
+      const consistency = Math.max(0, 1 - lengthVariation);
+      const predictiveIndicators = {
+        likelyToProvideContext: consistency > 0.7,
+        likelyToExplainReasoning: avgLength > 300,
+        prefersThoroughDiscussion: true
+      };
+
       patterns.push({
         type: this.patternTypes.COMMUNICATION,
         pattern: 'detailed_communicator',
-        description: 'Consistently provides detailed, thorough responses',
-        confidence: 0.85,
+        description: 'Consistently provides detailed, thorough responses with context',
+        confidence: Math.min(0.95, 0.7 + consistency * 0.25),
         frequency: userMessages.length,
         contexts: ['chat_interaction'],
         detectedAt: new Date(),
-        evidence: { avgLength, lengthVariation }
+        evidence: { 
+          avgLength, 
+          lengthVariation, 
+          consistency,
+          predictiveIndicators,
+          temporalStability: lengthTrend > -0.1 ? 0.2 : 0
+        }
       });
     }
 
-    // Question asking pattern
+    // Brief communicator pattern
+    if (avgLength < 80 && lengthVariation < 0.3) {
+      const consistency = Math.max(0, 1 - lengthVariation);
+      patterns.push({
+        type: this.patternTypes.COMMUNICATION,
+        pattern: 'brief_communicator',
+        description: 'Prefers concise, direct communication',
+        confidence: Math.min(0.9, 0.65 + consistency * 0.25),
+        frequency: userMessages.length,
+        contexts: ['quick_interaction'],
+        detectedAt: new Date(),
+        evidence: { 
+          avgLength, 
+          lengthVariation, 
+          consistency,
+          predictiveIndicators: {
+            likelyToValueEfficiency: true,
+            likelyToAvoidLongExplanations: true,
+            prefersQuickResponses: true
+          }
+        }
+      });
+    }
+
+    // Enhanced question asking pattern with intent analysis
     const questionCount = userMessages.filter(m => m.content.includes('?')).length;
     const questionRate = questionCount / userMessages.length;
+    const deepQuestions = userMessages.filter(m => 
+      m.content.includes('why') || m.content.includes('how') || m.content.includes('what if')
+    ).length;
 
-    if (questionRate > 0.4) {
+    if (questionRate > 0.3) {
+      const depthScore = deepQuestions / Math.max(1, questionCount);
       patterns.push({
         type: this.patternTypes.COMMUNICATION,
         pattern: 'inquisitive_learner',
-        description: 'Frequently asks questions to gain understanding',
-        confidence: 0.8,
+        description: 'Frequently asks questions to gain deep understanding',
+        confidence: Math.min(0.92, 0.7 + questionRate * 0.5 + depthScore * 0.2),
         frequency: questionCount,
         contexts: ['information_seeking'],
         detectedAt: new Date(),
-        evidence: { questionRate, questionCount }
+        evidence: { 
+          questionRate, 
+          questionCount, 
+          depthScore,
+          predictiveIndicators: {
+            likelyToSeekClarification: questionRate > 0.4,
+            likelyToAskFollowUp: depthScore > 0.5,
+            prefersDetailedExplanations: true
+          }
+        }
+      });
+    }
+
+    // Emotional expression pattern
+    const emotionalWords = ['feel', 'think', 'believe', 'hope', 'worry', 'excited', 'frustrated', 'happy', 'sad'];
+    const emotionalMessages = userMessages.filter(m => 
+      emotionalWords.some(word => m.content.toLowerCase().includes(word))
+    );
+    const emotionalRate = emotionalMessages.length / userMessages.length;
+
+    if (emotionalRate > 0.25) {
+      patterns.push({
+        type: this.patternTypes.COMMUNICATION,
+        pattern: 'emotionally_expressive',
+        description: 'Openly shares emotional state and feelings',
+        confidence: Math.min(0.88, 0.6 + emotionalRate * 0.8),
+        frequency: emotionalMessages.length,
+        contexts: ['emotional_sharing'],
+        detectedAt: new Date(),
+        evidence: { 
+          emotionalRate,
+          predictiveIndicators: {
+            likelyToSeekEmotionalSupport: emotionalRate > 0.4,
+            likelyToSharePersonalDetails: true,
+            prefersEmpathicResponses: true
+          }
+        }
+      });
+    }
+
+    // Command/request pattern
+    const commandWords = ['please', 'can you', 'help me', 'show me', 'tell me', 'explain'];
+    const commandMessages = userMessages.filter(m => 
+      commandWords.some(word => m.content.toLowerCase().includes(word))
+    );
+    const commandRate = commandMessages.length / userMessages.length;
+
+    if (commandRate > 0.4) {
+      patterns.push({
+        type: this.patternTypes.COMMUNICATION,
+        pattern: 'task_oriented',
+        description: 'Primarily uses AI for specific tasks and requests',
+        confidence: Math.min(0.85, 0.65 + commandRate * 0.4),
+        frequency: commandMessages.length,
+        contexts: ['task_completion'],
+        detectedAt: new Date(),
+        evidence: { 
+          commandRate,
+          predictiveIndicators: {
+            likelyToProvideSpecificRequests: true,
+            likelyToExpectActionableResults: true,
+            prefersStructuredResponses: true
+          }
+        }
       });
     }
 
     return patterns;
+  }
+
+  /**
+   * Calculate trend in a series of values (positive = increasing, negative = decreasing)
+   */
+  calculateTrend(values) {
+    if (values.length < 2) return 0;
+    
+    let trend = 0;
+    for (let i = 1; i < values.length; i++) {
+      trend += values[i] - values[i-1];
+    }
+    return trend / (values.length - 1);
   }
 
   /**
@@ -528,10 +649,117 @@ class UBPMService {
     return Math.sqrt(variance) / mean;
   }
 
+  /**
+   * Calculate sophisticated pattern significance for scary accuracy
+   * Factors in confidence, frequency, consistency, predictive power, and pattern relationships
+   */
   calculateInsightSignificance(patterns) {
-    const avgConfidence = patterns.reduce((sum, p) => sum + p.confidence, 0) / patterns.length;
-    const patternDiversity = new Set(patterns.map(p => p.type)).size;
-    return Math.min(1.0, avgConfidence * (patternDiversity / 3));
+    if (!patterns || patterns.length === 0) return 0;
+
+    // Base confidence weighted by pattern strength
+    const confidenceWeights = patterns.map(p => {
+      const baseConfidence = p.confidence;
+      const frequencyBoost = Math.min(0.2, (p.frequency || 1) * 0.02); // More occurrences = higher weight
+      const consistencyBoost = p.evidence?.consistency || 0;
+      const temporalStability = p.evidence?.temporalStability || 0;
+      
+      return baseConfidence + frequencyBoost + consistencyBoost + temporalStability;
+    });
+
+    const avgWeightedConfidence = confidenceWeights.reduce((sum, w) => sum + w, 0) / confidenceWeights.length;
+
+    // Pattern diversity score (different types of patterns = more complete picture)
+    const patternTypes = new Set(patterns.map(p => p.type));
+    const diversityScore = Math.min(1.0, patternTypes.size / 6); // Max 6 pattern types
+
+    // Predictive power score - patterns that enable better predictions
+    const predictivePatterns = patterns.filter(p => 
+      p.pattern.includes('consistent_') || 
+      p.pattern.includes('preferred_') ||
+      p.pattern.includes('likely_') ||
+      p.evidence?.predictiveIndicators
+    );
+    const predictiveScore = predictivePatterns.length / patterns.length;
+
+    // Behavioral consistency score - how well patterns support each other
+    const consistencyScore = this.calculatePatternConsistency(patterns);
+
+    // Temporal stability - patterns that persist over time are more significant
+    const temporalScore = this.calculateTemporalStability(patterns);
+
+    // Composite significance with weighted factors
+    const significance = (
+      avgWeightedConfidence * 0.35 +    // Primary factor: confidence
+      diversityScore * 0.20 +           // Pattern diversity
+      predictiveScore * 0.25 +          // Predictive power
+      consistencyScore * 0.15 +         // Internal consistency
+      temporalScore * 0.05              // Temporal stability
+    );
+
+    // Boost for high-confidence patterns that enable scary accuracy
+    const highConfidenceBoost = patterns.filter(p => p.confidence >= this.analysisThresholds.highConfidenceThreshold).length > 0 ? 0.1 : 0;
+
+    return Math.min(1.0, significance + highConfidenceBoost);
+  }
+
+  /**
+   * Calculate how well patterns support each other (consistency)
+   */
+  calculatePatternConsistency(patterns) {
+    if (patterns.length < 2) return 0.5;
+
+    // Check for complementary patterns
+    const communicationPatterns = patterns.filter(p => p.type === 'communication');
+    const emotionalPatterns = patterns.filter(p => p.type === 'emotional');
+    const temporalPatterns = patterns.filter(p => p.type === 'temporal');
+
+    let consistencyScore = 0;
+
+    // Communication-emotional consistency
+    if (communicationPatterns.length > 0 && emotionalPatterns.length > 0) {
+      consistencyScore += 0.3;
+    }
+
+    // Temporal consistency with other patterns
+    if (temporalPatterns.length > 0 && (communicationPatterns.length > 0 || emotionalPatterns.length > 0)) {
+      consistencyScore += 0.2;
+    }
+
+    // Look for contradictory patterns and penalize
+    const contradictoryPairs = [
+      ['detailed_communicator', 'brief_communicator'],
+      ['emotional_consistent', 'emotional_volatile'],
+      ['consistent_active_hours', 'irregular_schedule']
+    ];
+
+    contradictoryPairs.forEach(pair => {
+      const hasFirst = patterns.some(p => p.pattern === pair[0]);
+      const hasSecond = patterns.some(p => p.pattern === pair[1]);
+      if (hasFirst && hasSecond) {
+        consistencyScore -= 0.2; // Penalize contradictions
+      }
+    });
+
+    return Math.max(0, Math.min(1.0, consistencyScore + 0.5));
+  }
+
+  /**
+   * Calculate temporal stability of patterns
+   */
+  calculateTemporalStability(patterns) {
+    const now = new Date();
+    const patternAges = patterns.map(p => {
+      const age = now - new Date(p.detectedAt);
+      return age / (1000 * 60 * 60 * 24); // Age in days
+    });
+
+    const avgAge = patternAges.reduce((sum, age) => sum + age, 0) / patternAges.length;
+    
+    // Patterns that have been stable for longer are more significant
+    if (avgAge < 1) return 0.3;        // New patterns
+    if (avgAge < 7) return 0.6;        // Week old patterns
+    if (avgAge < 30) return 0.8;       // Month old patterns
+    return 1.0;                        // Established patterns
   }
 
   generateInsightSummary(patterns) {
