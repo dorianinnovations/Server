@@ -668,8 +668,18 @@ router.post("/completion", protect, async (req, res) => {
     
     if (shouldUseTools) {
       console.log('🔧 TOOLS: Message requires tools, loading tool registry');
-      tools = await toolRegistry.getAllTools();
-      console.log(`🔧 TOOLS: Loaded ${tools.length} tools for GPT-4o`);
+      try {
+        const allTools = await toolRegistry.getAllTools();
+        // Limit to essential tools to avoid 400 errors
+        const essentialTools = allTools.filter(tool => 
+          ['web_search', 'weather_check', 'calculator', 'timezone_converter', 'currency_converter'].includes(tool.function?.name)
+        );
+        tools = essentialTools.slice(0, 5); // Limit to 5 tools max
+        console.log(`🔧 TOOLS: Loaded ${tools.length} essential tools for GPT-4o`);
+      } catch (error) {
+        console.error('🔧 TOOLS: Error loading tools:', error);
+        tools = []; // Fallback to no tools
+      }
     } else {
       console.log('🔧 TOOLS: Message does not require tools, skipping tool load');
     }
@@ -687,7 +697,24 @@ router.post("/completion", protect, async (req, res) => {
         });
       } catch (err) {
         console.error("Error in makeStreamingRequest:", err.stack || err);
-        return res.status(502).json({ status: "error", message: "LLM streaming API error: " + err.message });
+        
+        // If error is 400 and we have tools, retry without tools
+        if (err.message.includes('400') && tools.length > 0) {
+          console.log('🔧 TOOLS: 400 error with tools, retrying without tools');
+          try {
+            streamResponse = await llmService.makeStreamingRequest(messages, {
+              stop,
+              n_predict,
+              temperature,
+              tools: [],
+            });
+          } catch (retryErr) {
+            console.error("Error in retry without tools:", retryErr.stack || retryErr);
+            return res.status(502).json({ status: "error", message: "LLM streaming API error: " + retryErr.message });
+          }
+        } else {
+          return res.status(502).json({ status: "error", message: "LLM streaming API error: " + err.message });
+        }
       }
       
       res.setHeader("Content-Type", "text/event-stream");
@@ -781,7 +808,24 @@ router.post("/completion", protect, async (req, res) => {
         });
       } catch (err) {
         console.error("Error in makeLLMRequest:", err.stack || err);
-        return res.status(502).json({ status: "error", message: "LLM API error: " + err.message });
+        
+        // If error is 400 and we have tools, retry without tools
+        if (err.message.includes('400') && tools.length > 0) {
+          console.log('🔧 TOOLS: 400 error with tools, retrying without tools');
+          try {
+            response = await llmService.makeLLMRequest(messages, {
+              stop,
+              n_predict,
+              temperature,
+              tools: [],
+            });
+          } catch (retryErr) {
+            console.error("Error in retry without tools:", retryErr.stack || retryErr);
+            return res.status(502).json({ status: "error", message: "LLM API error: " + retryErr.message });
+          }
+        } else {
+          return res.status(502).json({ status: "error", message: "LLM API error: " + err.message });
+        }
       }
       let sanitizedContent;
       try {
