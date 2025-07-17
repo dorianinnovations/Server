@@ -17,8 +17,8 @@ import logger from "../utils/logger.js";
 
 const router = express.Router();
 
-// UBPM Query Detection
-const detectUBPMQuery = (userPrompt) => {
+// UBPM Query Detection - Enhanced with context awareness
+const detectUBPMQuery = (userPrompt, recentMemory = []) => {
   const prompt = userPrompt.toLowerCase();
   const ubpmKeywords = [
     'ubpm', 'my ubpm', 'whats my ubpm', "what's my ubpm", 
@@ -29,7 +29,28 @@ const detectUBPMQuery = (userPrompt) => {
     'my habits', 'my preferences', 'my tendencies'
   ];
   
-  return ubpmKeywords.some(keyword => prompt.includes(keyword));
+  // Direct UBPM keyword match
+  const directMatch = ubpmKeywords.some(keyword => prompt.includes(keyword));
+  if (directMatch) return true;
+  
+  // Context-aware detection for follow-up questions
+  const followUpKeywords = ['what is it', 'what is that', 'explain it', 'tell me more', 'elaborate', 'what does that mean'];
+  const isFollowUp = followUpKeywords.some(keyword => prompt.includes(keyword));
+  
+  if (isFollowUp) {
+    // Check if recent conversation mentioned UBPM
+    const recentMessages = recentMemory.slice(-6); // Last 6 messages
+    const recentContent = recentMessages.map(m => m.content?.toLowerCase() || '').join(' ');
+    
+    const ubpmMentioned = ubpmKeywords.some(keyword => recentContent.includes(keyword)) ||
+                         recentContent.includes('behavioral') ||
+                         recentContent.includes('pattern') ||
+                         recentContent.includes('personality');
+    
+    if (ubpmMentioned) return true;
+  }
+  
+  return false;
 };
 
 // Get Rich UBPM Data for GPT-4o
@@ -269,7 +290,13 @@ INSTRUCTIONS: Explain UBPM warmly and encourage continued interaction:
 2. Explain how it learns from conversations to personalize responses
 3. Mention they need more interactions to build their profile
 4. Encourage them to keep chatting to unlock these insights
-5. Be encouraging and explain the benefits they'll get`;
+5. Be encouraging and explain the benefits they'll get
+6. If this is a follow-up question (like "what is it"), maintain context about what "it" refers to`;
+  }
+  
+  // Add context hint for follow-up questions
+  if (ubpmData && userPrompt.toLowerCase().includes('what is it')) {
+    systemMessage += `\n\n📝 CONTEXT: User is asking "what is it" - they are referring to UBPM from previous conversation. Maintain this context clearly.`;
   }
 
 
@@ -544,8 +571,8 @@ router.post("/completion", protect, async (req, res) => {
       return res.status(500).json({ status: "error", message: "Error building user context: " + err.message });
     }
 
-    // Check if user is asking about UBPM
-    const isUBPMQuery = detectUBPMQuery(userPrompt);
+    // Check if user is asking about UBPM (with context awareness)
+    const isUBPMQuery = detectUBPMQuery(userPrompt, recentMemory);
     let ubpmData = null;
     
     if (isUBPMQuery) {
