@@ -22,16 +22,14 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await User.deleteMany({});
-  
+
   // Create a test user
   const userData = {
     email: 'test@example.com',
     password: 'password123'
   };
 
-  const signupResponse = await request(app)
-    .post('/signup')
-    .send(userData);
+  const signupResponse = await request(app).post('/signup').send(userData);
 
   authToken = signupResponse.body.token;
   testUser = signupResponse.body.data.user;
@@ -52,9 +50,7 @@ describe('User Profile Routes', () => {
     });
 
     it('should return 401 without token', async () => {
-      const response = await request(app)
-        .get('/profile')
-        .expect(401);
+      const response = await request(app).get('/profile').expect(401);
 
       expect(response.body.message).toBe('You are not logged in! Please log in to get access.');
     });
@@ -70,7 +66,10 @@ describe('User Profile Routes', () => {
 
     it('should return 404 for non-existent user', async () => {
       // Create a token for a non-existent user
-      const fakeToken = jwt.sign({ id: new mongoose.Types.ObjectId() }, process.env.JWT_SECRET || 'test-secret');
+      const fakeToken = jwt.sign(
+        { id: new mongoose.Types.ObjectId() },
+        process.env.JWT_SECRET || 'test-secret'
+      );
 
       const response = await request(app)
         .get('/profile')
@@ -80,4 +79,4 @@ describe('User Profile Routes', () => {
       expect(response.body.message).toBe('User not found.');
     });
   });
-}); 
+});

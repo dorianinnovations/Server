@@ -18,7 +18,7 @@ class ContinuousMonitor {
     this.fullTestInterval = 30; // minutes
     this.baseUrl = process.env.API_BASE_URL || 'http://localhost:5001/api';
     this.scheduledJobs = [];
-    
+
     // Health check endpoints to monitor
     this.healthChecks = [
       { name: 'Server Health', endpoint: '/health', critical: true },
@@ -31,9 +31,9 @@ class ContinuousMonitor {
     // Performance thresholds
     this.thresholds = {
       responseTime: 2000, // 2 seconds
-      successRate: 95,    // 95%
-      uptime: 99.5,       // 99.5%
-      errorRate: 1        // 1% max error rate
+      successRate: 95, // 95%
+      uptime: 99.5, // 99.5%
+      errorRate: 1 // 1% max error rate
     };
   }
 
@@ -41,84 +41,96 @@ class ContinuousMonitor {
     console.log('🔄 Starting Continuous Success Rate Monitoring System');
     console.log(`📊 Health checks every ${this.healthCheckInterval} minutes`);
     console.log(`🧪 Full tests every ${this.fullTestInterval} minutes`);
-    
+
     this.isRunning = true;
-    
+
     // Load existing metrics
     await this.monitor.loadMetrics();
-    
+
     // Schedule health checks
     this.scheduleHealthChecks();
-    
+
     // Schedule full test runs
     this.scheduleFullTests();
-    
+
     // Schedule daily reports
     this.scheduleDailyReports();
-    
+
     // Handle graceful shutdown
     process.on('SIGINT', () => this.shutdown());
     process.on('SIGTERM', () => this.shutdown());
-    
+
     console.log('✅ Continuous monitoring started successfully');
-    
+
     // Run initial health check
     await this.runHealthChecks();
   }
 
   scheduleHealthChecks() {
     const cronExpression = `*/${this.healthCheckInterval} * * * *`;
-    
-    const job = cron.schedule(cronExpression, async () => {
-      if (this.isRunning) {
-        await this.runHealthChecks();
+
+    const job = cron.schedule(
+      cronExpression,
+      async () => {
+        if (this.isRunning) {
+          await this.runHealthChecks();
+        }
+      },
+      {
+        scheduled: false
       }
-    }, {
-      scheduled: false
-    });
-    
+    );
+
     job.start();
     this.scheduledJobs.push(job);
-    
+
     console.log(`⏰ Scheduled health checks: ${cronExpression}`);
   }
 
   scheduleFullTests() {
     const cronExpression = `*/${this.fullTestInterval} * * * *`;
-    
-    const job = cron.schedule(cronExpression, async () => {
-      if (this.isRunning) {
-        await this.runFullTests();
+
+    const job = cron.schedule(
+      cronExpression,
+      async () => {
+        if (this.isRunning) {
+          await this.runFullTests();
+        }
+      },
+      {
+        scheduled: false
       }
-    }, {
-      scheduled: false
-    });
-    
+    );
+
     job.start();
     this.scheduledJobs.push(job);
-    
+
     console.log(`⏰ Scheduled full tests: ${cronExpression}`);
   }
 
   scheduleDailyReports() {
     // Run daily report at 9 AM
-    const job = cron.schedule('0 9 * * *', async () => {
-      if (this.isRunning) {
-        await this.generateDailyReport();
+    const job = cron.schedule(
+      '0 9 * * *',
+      async () => {
+        if (this.isRunning) {
+          await this.generateDailyReport();
+        }
+      },
+      {
+        scheduled: false
       }
-    }, {
-      scheduled: false
-    });
-    
+    );
+
     job.start();
     this.scheduledJobs.push(job);
-    
+
     console.log('⏰ Scheduled daily reports: 9:00 AM');
   }
 
   async runHealthChecks() {
     console.log('\n🔍 Running Health Checks...');
-    
+
     const sessionId = this.monitor.startSession('Health Check', {
       type: 'health_check',
       timestamp: new Date().toISOString(),
@@ -130,24 +142,18 @@ class ContinuousMonitor {
     for (const check of this.healthChecks) {
       const result = await this.performHealthCheck(check);
       results.push(result);
-      
-      this.monitor.recordTest(
-        check.name,
-        'health-check',
-        result.success,
-        result.duration,
-        {
-          endpoint: check.endpoint,
-          critical: check.critical,
-          statusCode: result.statusCode,
-          responseTime: result.duration,
-          error: result.error
-        }
-      );
+
+      this.monitor.recordTest(check.name, 'health-check', result.success, result.duration, {
+        endpoint: check.endpoint,
+        critical: check.critical,
+        statusCode: result.statusCode,
+        responseTime: result.duration,
+        error: result.error
+      });
     }
 
     await this.monitor.endSession();
-    
+
     // Check for critical failures
     const criticalFailures = results.filter(r => !r.success && r.critical);
     if (criticalFailures.length > 0) {
@@ -157,21 +163,23 @@ class ContinuousMonitor {
     // Log summary
     const passed = results.filter(r => r.success).length;
     const total = results.length;
-    console.log(`📊 Health Check Results: ${passed}/${total} passed (${((passed/total)*100).toFixed(1)}%)`);
+    console.log(
+      `📊 Health Check Results: ${passed}/${total} passed (${((passed / total) * 100).toFixed(1)}%)`
+    );
   }
 
   async performHealthCheck(check) {
     const startTime = Date.now();
-    
+
     try {
       const response = await axios.get(`${this.baseUrl}${check.endpoint}`, {
         timeout: 10000,
-        validateStatus: (status) => status < 500 // Accept 4xx as success for some endpoints
+        validateStatus: status => status < 500 // Accept 4xx as success for some endpoints
       });
-      
+
       const duration = Date.now() - startTime;
       const success = response.status >= 200 && response.status < 400;
-      
+
       return {
         name: check.name,
         success,
@@ -182,7 +190,7 @@ class ContinuousMonitor {
       };
     } catch (error) {
       const duration = Date.now() - startTime;
-      
+
       return {
         name: check.name,
         success: false,
@@ -196,20 +204,20 @@ class ContinuousMonitor {
 
   async runFullTests() {
     console.log('\n🧪 Running Full Test Suite...');
-    
-    return new Promise((resolve) => {
+
+    return new Promise(resolve => {
       const child = spawn('node', ['tests/scripts/runE2EWithMetrics.js'], {
         stdio: 'inherit',
         cwd: process.cwd()
       });
 
-      child.on('close', (code) => {
+      child.on('close', code => {
         const success = code === 0;
         console.log(`🧪 Full test suite completed with exit code: ${code}`);
         resolve(success);
       });
 
-      child.on('error', (error) => {
+      child.on('error', error => {
         console.error('❌ Full test suite error:', error);
         resolve(false);
       });
@@ -230,7 +238,7 @@ class ContinuousMonitor {
     // Placeholder for alert system integration
     console.log(`🚨 ALERT: ${title}`);
     console.log('Alert data:', JSON.stringify(data, null, 2));
-    
+
     // Example: Send to webhook, email service, etc.
     // await this.sendWebhookAlert(title, data);
     // await this.sendEmailAlert(title, data);
@@ -238,15 +246,13 @@ class ContinuousMonitor {
 
   async generateDailyReport() {
     console.log('\n📊 Generating Daily Report...');
-    
+
     const metrics = this.monitor.getMetrics();
     const report = this.monitor.generateComprehensiveReport();
-    
+
     // Get 24-hour stats
-    const last24Hours = Date.now() - (24 * 60 * 60 * 1000);
-    const recentSessions = metrics.sessions.filter(session => 
-      session.startTime >= last24Hours
-    );
+    const last24Hours = Date.now() - 24 * 60 * 60 * 1000;
+    const recentSessions = metrics.sessions.filter(session => session.startTime >= last24Hours);
 
     if (recentSessions.length === 0) {
       console.log('📊 No sessions in the last 24 hours');
@@ -254,7 +260,7 @@ class ContinuousMonitor {
     }
 
     const dailyStats = this.calculateDailyStats(recentSessions);
-    
+
     console.log('\n📈 24-HOUR PERFORMANCE SUMMARY');
     console.log('='.repeat(60));
     console.log(`🎯 Overall Success Rate: ${dailyStats.successRate.toFixed(2)}%`);
@@ -264,13 +270,15 @@ class ContinuousMonitor {
     console.log(`🔄 Total Sessions: ${recentSessions.length}`);
     console.log(`⏱️ Average Response Time: ${dailyStats.avgResponseTime.toFixed(2)}ms`);
     console.log(`🚨 Critical Failures: ${dailyStats.criticalFailures}`);
-    
+
     // Performance assessment
     console.log('\n📋 Performance Assessment:');
     const assessments = this.assessPerformance(dailyStats);
     assessments.forEach(assessment => {
       const status = assessment.passed ? '✅' : '❌';
-      console.log(`  ${status} ${assessment.metric}: ${assessment.value} (${assessment.threshold})`);
+      console.log(
+        `  ${status} ${assessment.metric}: ${assessment.value} (${assessment.threshold})`
+      );
     });
 
     // Trends
@@ -284,7 +292,7 @@ class ContinuousMonitor {
     }
 
     console.log('='.repeat(60));
-    
+
     // Save daily report
     await this.saveDailyReport(dailyStats, assessments);
   }
@@ -294,13 +302,17 @@ class ContinuousMonitor {
     const totalPassed = sessions.reduce((sum, session) => sum + session.stats.passed, 0);
     const totalFailed = sessions.reduce((sum, session) => sum + session.stats.failed, 0);
     const successRate = totalTests > 0 ? (totalPassed / totalTests) * 100 : 0;
-    
+
     const allTests = sessions.flatMap(session => session.testResults);
-    const avgResponseTime = allTests.length > 0 ? 
-      allTests.reduce((sum, test) => sum + test.duration, 0) / allTests.length : 0;
-    
-    const criticalFailures = sessions.reduce((sum, session) => 
-      sum + session.criticalFailures.length, 0);
+    const avgResponseTime =
+      allTests.length > 0
+        ? allTests.reduce((sum, test) => sum + test.duration, 0) / allTests.length
+        : 0;
+
+    const criticalFailures = sessions.reduce(
+      (sum, session) => sum + session.criticalFailures.length,
+      0
+    );
 
     return {
       totalTests,
@@ -337,7 +349,7 @@ class ContinuousMonitor {
         metric: 'Error Rate',
         value: `${((stats.failed / stats.totalTests) * 100).toFixed(2)}%`,
         threshold: `≤${this.thresholds.errorRate}%`,
-        passed: ((stats.failed / stats.totalTests) * 100) <= this.thresholds.errorRate
+        passed: (stats.failed / stats.totalTests) * 100 <= this.thresholds.errorRate
       }
     ];
   }
@@ -354,22 +366,36 @@ class ContinuousMonitor {
     };
 
     const olderAvg = {
-      successRate: older.length > 0 ? older.reduce((sum, s) => sum + s.stats.successRate, 0) / older.length : recentAvg.successRate,
-      avgDuration: older.length > 0 ? older.reduce((sum, s) => sum + s.stats.averageDuration, 0) / older.length : recentAvg.avgDuration
+      successRate:
+        older.length > 0
+          ? older.reduce((sum, s) => sum + s.stats.successRate, 0) / older.length
+          : recentAvg.successRate,
+      avgDuration:
+        older.length > 0
+          ? older.reduce((sum, s) => sum + s.stats.averageDuration, 0) / older.length
+          : recentAvg.avgDuration
     };
 
     return {
       'Success Rate': {
         change: Math.abs(recentAvg.successRate - olderAvg.successRate).toFixed(2),
         unit: '%',
-        direction: recentAvg.successRate > olderAvg.successRate ? 'up' : 
-                  recentAvg.successRate < olderAvg.successRate ? 'down' : 'stable'
+        direction:
+          recentAvg.successRate > olderAvg.successRate
+            ? 'up'
+            : recentAvg.successRate < olderAvg.successRate
+              ? 'down'
+              : 'stable'
       },
       'Response Time': {
         change: Math.abs(recentAvg.avgDuration - olderAvg.avgDuration).toFixed(2),
         unit: 'ms',
-        direction: recentAvg.avgDuration < olderAvg.avgDuration ? 'up' : 
-                  recentAvg.avgDuration > olderAvg.avgDuration ? 'down' : 'stable'
+        direction:
+          recentAvg.avgDuration < olderAvg.avgDuration
+            ? 'up'
+            : recentAvg.avgDuration > olderAvg.avgDuration
+              ? 'down'
+              : 'stable'
       }
     };
   }
@@ -381,19 +407,19 @@ class ContinuousMonitor {
 
   async shutdown() {
     console.log('\n🛑 Shutting down Continuous Monitor...');
-    
+
     this.isRunning = false;
-    
+
     // Stop all scheduled jobs
     this.scheduledJobs.forEach(job => {
       if (job) {
         job.stop();
       }
     });
-    
+
     // Generate final report
     console.log(this.monitor.generateComprehensiveReport());
-    
+
     console.log('✅ Continuous Monitor shutdown complete');
     process.exit(0);
   }
@@ -402,7 +428,7 @@ class ContinuousMonitor {
 // CLI execution
 async function main() {
   const monitor = new ContinuousMonitor();
-  
+
   try {
     await monitor.start();
   } catch (error) {

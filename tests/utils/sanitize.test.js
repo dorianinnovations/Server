@@ -14,13 +14,15 @@ describe('sanitizeResponse', () => {
   });
 
   it('should remove both markers', () => {
-    const input = 'Hello TASK_INFERENCE: {"taskType": "test"} EMOTION_LOG: {"emotion": "happy"} world';
+    const input =
+      'Hello TASK_INFERENCE: {"taskType": "test"} EMOTION_LOG: {"emotion": "happy"} world';
     const result = sanitizeResponse(input);
     expect(result).toBe('Hello world');
   });
 
   it('should handle case insensitive markers', () => {
-    const input = 'Hello task_inference: {"taskType": "test"} emotion_log: {"emotion": "happy"} world';
+    const input =
+      'Hello task_inference: {"taskType": "test"} emotion_log: {"emotion": "happy"} world';
     const result = sanitizeResponse(input);
     expect(result).toBe('Hello world');
   });
@@ -39,16 +41,17 @@ describe('sanitizeResponse', () => {
 
   it('should return default message for empty input', () => {
     const result = sanitizeResponse('');
-    expect(result).toBe('I\'m sorry, I wasn\'t able to provide a proper response. Please try again.');
+    expect(result).toBe("I'm sorry, I wasn't able to provide a proper response. Please try again.");
   });
 
   it('should return default message for null input', () => {
     const result = sanitizeResponse(null);
-    expect(result).toBe('I\'m sorry, I wasn\'t able to provide a proper response. Please try again.');
+    expect(result).toBe("I'm sorry, I wasn't able to provide a proper response. Please try again.");
   });
 
   it('should handle complex JSON in markers', () => {
-    const input = 'Hello TASK_INFERENCE: {"taskType": "complex", "parameters": {"nested": {"value": "test"}}} world';
+    const input =
+      'Hello TASK_INFERENCE: {"taskType": "complex", "parameters": {"nested": {"value": "test"}}} world';
     const result = sanitizeResponse(input);
     expect(result).toBe('Hello world');
   });
@@ -58,4 +61,4 @@ describe('sanitizeResponse', () => {
     const result = sanitizeResponse(input);
     expect(result).toBe('Hello world, how are you today?');
   });
-}); 
+});

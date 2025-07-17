@@ -27,37 +27,39 @@ function createTestSocket(user) {
     console.log(`✅ ${user.username} connected`);
   });
 
-  socket.on('connected', (data) => {
+  socket.on('connected', data => {
     console.log(`📱 ${user.username} received connection confirmation:`, data.message);
   });
 
-  socket.on('emotional_share_received', (data) => {
-    console.log(`💝 ${user.username} received emotional share from ${data.fromUser.username}: ${data.emotion} (${data.intensity}/10)`);
+  socket.on('emotional_share_received', data => {
+    console.log(
+      `💝 ${user.username} received emotional share from ${data.fromUser.username}: ${data.emotion} (${data.intensity}/10)`
+    );
     if (data.message) {
       console.log(`   Message: "${data.message}"`);
     }
   });
 
-  socket.on('emotional_share_sent', (data) => {
+  socket.on('emotional_share_sent', data => {
     console.log(`📤 ${user.username} confirmed share sent: ${data.emotion}`);
   });
 
-  socket.on('support_request', (data) => {
+  socket.on('support_request', data => {
     console.log(`🆘 ${user.username} saw support request: intensity ${data.intensity}/10`);
     if (data.context) {
       console.log(`   Context: "${data.context}"`);
     }
   });
 
-  socket.on('support_request_sent', (data) => {
+  socket.on('support_request_sent', data => {
     console.log(`✉️ ${user.username} support request sent: ${data.message}`);
   });
 
-  socket.on('milestone_achieved', (data) => {
+  socket.on('milestone_achieved', data => {
     console.log(`🎉 Community saw ${data.userData.username} achieved: ${data.title}`);
   });
 
-  socket.on('milestone_celebrated', (data) => {
+  socket.on('milestone_celebrated', data => {
     console.log(`🏆 ${user.username} milestone celebration: ${data.message}`);
   });
 
@@ -81,7 +83,7 @@ async function runTests() {
   await new Promise(resolve => setTimeout(resolve, 2000));
 
   console.log('\n🎯 Testing emotional sharing...');
-  
+
   // Test 1: Alice shares emotion with Bob
   setTimeout(() => {
     sockets[0].socket.emit('share_emotional_state', {
@@ -114,11 +116,11 @@ async function runTests() {
   // Test 4: Cross-sharing between all users
   setTimeout(() => {
     console.log('\n🔄 Testing cross-user interactions...');
-    
+
     sockets.forEach((sender, index) => {
       const targetIndex = (index + 1) % sockets.length;
       const emotion = emotions[Math.floor(Math.random() * emotions.length)];
-      
+
       sender.socket.emit('share_emotional_state', {
         targetUserId: testUsers[targetIndex].id,
         emotion: emotion,
@@ -148,7 +150,7 @@ async function runTests() {
   setTimeout(() => {
     console.log('\n🧹 Cleaning up connections...');
     sockets.forEach(({ socket }) => socket.disconnect());
-    
+
     setTimeout(() => {
       console.log('\n✅ WebSocket tests completed!');
       process.exit(0);
@@ -157,12 +159,12 @@ async function runTests() {
 }
 
 // Error handling
-process.on('unhandledRejection', (error) => {
+process.on('unhandledRejection', error => {
   console.error('❌ Unhandled rejection:', error);
   process.exit(1);
 });
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', error => {
   console.error('❌ Uncaught exception:', error);
   process.exit(1);
 });

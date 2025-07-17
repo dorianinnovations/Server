@@ -13,7 +13,7 @@ describe('Complete User Journey E2E Tests', () => {
   let testUserEmail;
   let authToken;
   let userId;
-  
+
   // Test metrics for success rate monitoring
   const testMetrics = {
     totalTests: 0,
@@ -34,11 +34,11 @@ describe('Complete User Journey E2E Tests', () => {
   afterAll(async () => {
     testMetrics.endTime = Date.now();
     await cleanupTestEnvironment();
-    
+
     // Calculate and log success rates
     const successRate = (testMetrics.passedTests / testMetrics.totalTests) * 100;
     const duration = testMetrics.endTime - testMetrics.startTime;
-    
+
     console.log('\n🎯 END-TO-END TEST METRICS:');
     console.log(`📊 Success Rate: ${successRate.toFixed(2)}%`);
     console.log(`✅ Passed: ${testMetrics.passedTests}/${testMetrics.totalTests}`);
@@ -55,7 +55,7 @@ describe('Complete User Journey E2E Tests', () => {
     } else {
       testMetrics.failedTests++;
     }
-    
+
     testMetrics.testResults.push({
       name: testName,
       success,
@@ -72,18 +72,16 @@ describe('Complete User Journey E2E Tests', () => {
       let error = null;
 
       try {
-        const response = await request(app)
-          .post('/signup')
-          .send({
-            email: testUserEmail,
-            password: 'TestPassword123!'
-          });
+        const response = await request(app).post('/signup').send({
+          email: testUserEmail,
+          password: 'TestPassword123!'
+        });
 
         expect(response.status).toBe(201);
         expect(response.body.status).toBe('success');
         expect(response.body.token).toBeDefined();
         expect(response.body.data.user.email).toBe(testUserEmail);
-        
+
         authToken = response.body.token;
         userId = response.body.data.user.id;
         success = true;
@@ -101,12 +99,10 @@ describe('Complete User Journey E2E Tests', () => {
       let error = null;
 
       try {
-        const response = await request(app)
-          .post('/signup')
-          .send({
-            email: testUserEmail,
-            password: 'AnotherPassword123!'
-          });
+        const response = await request(app).post('/signup').send({
+          email: testUserEmail,
+          password: 'AnotherPassword123!'
+        });
 
         expect(response.status).toBe(409);
         expect(response.body.status).toBe('error');
@@ -127,17 +123,15 @@ describe('Complete User Journey E2E Tests', () => {
       let error = null;
 
       try {
-        const response = await request(app)
-          .post('/login')
-          .send({
-            email: testUserEmail,
-            password: 'TestPassword123!'
-          });
+        const response = await request(app).post('/login').send({
+          email: testUserEmail,
+          password: 'TestPassword123!'
+        });
 
         expect(response.status).toBe(200);
         expect(response.body.status).toBe('success');
         expect(response.body.token).toBeDefined();
-        
+
         authToken = response.body.token; // Update token
         success = true;
       } catch (e) {
@@ -154,12 +148,10 @@ describe('Complete User Journey E2E Tests', () => {
       let error = null;
 
       try {
-        const response = await request(app)
-          .post('/login')
-          .send({
-            email: testUserEmail,
-            password: 'WrongPassword123!'
-          });
+        const response = await request(app).post('/login').send({
+          email: testUserEmail,
+          password: 'WrongPassword123!'
+        });
 
         expect(response.status).toBe(401);
         expect(response.body.status).toBe('error');
@@ -282,7 +274,7 @@ describe('Complete User Journey E2E Tests', () => {
             ],
             conversationHistory: [
               { role: 'user', content: 'I feel great today!' },
-              { role: 'assistant', content: 'That\'s wonderful to hear!' }
+              { role: 'assistant', content: "That's wonderful to hear!" }
             ],
             timeContext: new Date().toISOString()
           });
@@ -476,7 +468,9 @@ describe('Complete User Journey E2E Tests', () => {
 
       try {
         const response = await request(app)
-          .get('/mobile/sync?lastSync=2024-01-01T00:00:00.000Z&dataTypes=profile,emotions,conversations')
+          .get(
+            '/mobile/sync?lastSync=2024-01-01T00:00:00.000Z&dataTypes=profile,emotions,conversations'
+          )
           .set('Authorization', `Bearer ${authToken}`);
 
         expect(response.status).toBe(200);
@@ -582,12 +576,12 @@ describe('Complete User Journey E2E Tests', () => {
         );
 
         const responses = await Promise.all(concurrentRequests);
-        
+
         responses.forEach(response => {
           expect(response.status).toBe(200);
           expect(response.text).toBeDefined();
         });
-        
+
         success = true;
       } catch (e) {
         error = e;
@@ -616,12 +610,12 @@ describe('Complete User Journey E2E Tests', () => {
         );
 
         const responses = await Promise.all(batchRequests);
-        
+
         responses.forEach(response => {
           expect(response.status).toBe(201);
           expect(response.body.message).toBe('Emotional entry submitted successfully');
         });
-        
+
         success = true;
       } catch (e) {
         error = e;

@@ -13,7 +13,7 @@ async function authenticate() {
       email: 'test@example.com',
       password: 'testpassword'
     });
-    
+
     if (response.data.token) {
       authToken = response.data.token;
       console.log('✓ Authentication successful');
@@ -32,16 +32,20 @@ async function authenticate() {
 async function testStripeCustomerSetup() {
   try {
     console.log('\n📋 Testing Stripe Customer Setup...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'setup_stripe_customer'
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'setup_stripe_customer'
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Stripe customer setup successful');
       console.log('Customer ID:', response.data.result.result.customerId);
@@ -60,21 +64,28 @@ async function testStripeCustomerSetup() {
 async function testPaymentIntentCreation() {
   try {
     console.log('\n💳 Testing Payment Intent Creation...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'create_payment_intent',
-        amount: 50.00
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'create_payment_intent',
+          amount: 50.0
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Payment intent created successfully');
       console.log('Payment Intent ID:', response.data.result.result.paymentIntentId);
-      console.log('Client Secret:', response.data.result.result.clientSecret ? 'Present' : 'Missing');
+      console.log(
+        'Client Secret:',
+        response.data.result.result.clientSecret ? 'Present' : 'Missing'
+      );
       return response.data.result.result;
     } else {
       console.log('✗ Payment intent creation failed:', response.data.error);
@@ -90,18 +101,22 @@ async function testPaymentIntentCreation() {
 async function testAddFundsStripe() {
   try {
     console.log('\n💰 Testing Add Funds via Stripe...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'add_funds_stripe',
-        amount: 50.00,
-        paymentMethodId: 'pm_test_card_visa'
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'add_funds_stripe',
+          amount: 50.0,
+          paymentMethodId: 'pm_test_card_visa'
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Funds added successfully via Stripe');
       console.log('New Balance:', response.data.result.result.newBalance);
@@ -121,16 +136,20 @@ async function testAddFundsStripe() {
 async function testCheckBalanceAfterFunding() {
   try {
     console.log('\n🏦 Testing Balance Check After Funding...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'check_balance'
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'check_balance'
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Balance check successful');
       console.log('Current Balance:', response.data.result.result.balance);
@@ -151,19 +170,23 @@ async function testCheckBalanceAfterFunding() {
 async function testSpotifyPlaylistWithPayment() {
   try {
     console.log('\n🎵 Testing Spotify Playlist Creation (with payment)...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'spotify_playlist',
-      arguments: {
-        playlistName: 'My Test Playlist',
-        description: 'A test playlist created via Numina',
-        mood: 'happy',
-        isPublic: false
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'spotify_playlist',
+        arguments: {
+          playlistName: 'My Test Playlist',
+          description: 'A test playlist created via Numina',
+          mood: 'happy',
+          isPublic: false
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Spotify playlist creation successful');
       console.log('Result:', response.data.result.result);
@@ -182,20 +205,24 @@ async function testSpotifyPlaylistWithPayment() {
 async function testRestaurantReservationWithPayment() {
   try {
     console.log('\n🍽️ Testing Restaurant Reservation (with payment)...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'reservation_booking',
-      arguments: {
-        restaurantName: 'The Fine Dining',
-        date: '2025-07-20',
-        time: '19:00',
-        partySize: 2,
-        specialRequests: 'Window table preferred'
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'reservation_booking',
+        arguments: {
+          restaurantName: 'The Fine Dining',
+          date: '2025-07-20',
+          time: '19:00',
+          partySize: 2,
+          specialRequests: 'Window table preferred'
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Restaurant reservation successful');
       console.log('Booking ID:', response.data.result.result.bookingId);
@@ -215,23 +242,27 @@ async function testRestaurantReservationWithPayment() {
 async function testItineraryGenerationWithPayment() {
   try {
     console.log('\n🗺️ Testing Itinerary Generation (with payment)...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'itinerary_generator',
-      arguments: {
-        destination: 'New York',
-        duration: 3,
-        budget: 1000,
-        startDate: '2025-08-01',
-        interests: ['culture', 'food'],
-        includeAccommodation: true,
-        includeActivities: true,
-        includeRestaurants: true
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'itinerary_generator',
+        arguments: {
+          destination: 'New York',
+          duration: 3,
+          budget: 1000,
+          startDate: '2025-08-01',
+          interests: ['culture', 'food'],
+          includeAccommodation: true,
+          includeActivities: true,
+          includeRestaurants: true
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Itinerary generation successful');
       console.log('Total Cost:', response.data.result.result.itinerary.totalCost);
@@ -252,18 +283,22 @@ async function testItineraryGenerationWithPayment() {
 async function testInsufficientFunds() {
   try {
     console.log('\n🚫 Testing Insufficient Funds Scenario...');
-    
+
     // Test spending more than available balance
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'check_spending',
-        amount: 1000 // Amount exceeding expected limit
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'check_spending',
+          amount: 1000 // Amount exceeding expected limit
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Spending check completed');
       console.log('Can Spend:', response.data.result.result.canSpend);
@@ -283,16 +318,20 @@ async function testInsufficientFunds() {
 async function testTransactionHistory() {
   try {
     console.log('\n📊 Testing Transaction History...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'get_transactions'
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'get_transactions'
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Transaction history retrieved');
       console.log('Total Transactions:', response.data.result.result.totalCount);
@@ -312,16 +351,20 @@ async function testTransactionHistory() {
 async function testFinalBalanceCheck() {
   try {
     console.log('\n💳 Final Balance Check...');
-    
-    const response = await axios.post(`${API_BASE}/tools/execute`, {
-      toolName: 'credit_management',
-      arguments: {
-        action: 'check_balance'
+
+    const response = await axios.post(
+      `${API_BASE}/tools/execute`,
+      {
+        toolName: 'credit_management',
+        arguments: {
+          action: 'check_balance'
+        }
+      },
+      {
+        headers: { Authorization: `Bearer ${authToken}` }
       }
-    }, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    
+    );
+
     if (response.data.success) {
       console.log('✓ Final balance check successful');
       console.log('Final Balance:', response.data.result.result.balance);
@@ -341,42 +384,42 @@ async function testFinalBalanceCheck() {
 // Run comprehensive test suite
 async function runFullTestSuite() {
   console.log('🧪 Starting Comprehensive Stripe Wallet Test Suite...\n');
-  
+
   // Step 1: Authentication
   const authenticated = await authenticate();
   if (!authenticated) {
     console.log('❌ Cannot continue without authentication');
     return;
   }
-  
+
   // Step 2: Stripe Customer Setup
   const customerId = await testStripeCustomerSetup();
-  
-  // Step 3: Payment Intent Creation  
+
+  // Step 3: Payment Intent Creation
   const paymentIntent = await testPaymentIntentCreation();
-  
+
   // Step 4: Add Funds via Stripe
   const fundingResult = await testAddFundsStripe();
-  
+
   // Step 5: Check Balance After Funding
   const balanceAfterFunding = await testCheckBalanceAfterFunding();
-  
+
   // Step 6: Test Paid Tools
   console.log('\n🔧 Testing Paid Tools...');
   const spotifyResult = await testSpotifyPlaylistWithPayment();
   const reservationResult = await testRestaurantReservationWithPayment();
   const itineraryResult = await testItineraryGenerationWithPayment();
-  
+
   // Step 7: Test Edge Cases
   console.log('\n⚠️ Testing Edge Cases...');
   const insufficientFundsResult = await testInsufficientFunds();
-  
+
   // Step 8: Transaction History
   const transactionHistory = await testTransactionHistory();
-  
+
   // Step 9: Final Balance Check
   const finalBalance = await testFinalBalanceCheck();
-  
+
   // Summary
   console.log('\n📋 Test Summary:');
   console.log('================');
@@ -390,7 +433,7 @@ async function runFullTestSuite() {
   console.log('Insufficient Funds Check:', insufficientFundsResult ? '✓' : '✗');
   console.log('Transaction History:', transactionHistory ? '✓' : '✗');
   console.log('Final Balance Check:', finalBalance ? '✓' : '✗');
-  
+
   console.log('\n🎉 Test suite completed!');
 }
 

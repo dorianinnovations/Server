@@ -54,10 +54,10 @@ class E2ETestRunner {
 
   async runAllTests() {
     console.log('🚀 Starting Comprehensive E2E Test Suite with Success Rate Monitoring\n');
-    
+
     // Load existing metrics
     await this.monitor.loadMetrics();
-    
+
     // Start monitoring session
     const sessionId = this.monitor.startSession('Comprehensive E2E Tests', {
       environment: process.env.NODE_ENV || 'test',
@@ -115,8 +115,8 @@ class E2ETestRunner {
 
   async runTestSuite(suite) {
     const startTime = Date.now();
-    
-    return new Promise((resolve) => {
+
+    return new Promise(resolve => {
       const isJest = suite.file.endsWith('.test.js');
       const command = isJest ? 'npm' : 'node';
       const args = isJest ? ['test', suite.file] : [suite.file];
@@ -130,19 +130,19 @@ class E2ETestRunner {
       let output = '';
       let errorOutput = '';
 
-      child.stdout?.on('data', (data) => {
+      child.stdout?.on('data', data => {
         const text = data.toString();
         output += text;
         process.stdout.write(text);
       });
 
-      child.stderr?.on('data', (data) => {
+      child.stderr?.on('data', data => {
         const text = data.toString();
         errorOutput += text;
         process.stderr.write(text);
       });
 
-      child.on('close', (code) => {
+      child.on('close', code => {
         const duration = Date.now() - startTime;
         const success = code === 0;
 
@@ -156,7 +156,7 @@ class E2ETestRunner {
         });
       });
 
-      child.on('error', (error) => {
+      child.on('error', error => {
         const duration = Date.now() - startTime;
         resolve({
           name: suite.name,
@@ -182,7 +182,7 @@ class E2ETestRunner {
     const categories = {
       'Core User Journey': 'core-functionality',
       'Authentication & Security': 'authentication',
-      'API Integration': 'api-integration', 
+      'API Integration': 'api-integration',
       'Tool Execution': 'tools',
       'WebSocket Connectivity': 'real-time',
       'Performance & Load': 'performance'
@@ -212,8 +212,10 @@ class E2ETestRunner {
     results.forEach((result, index) => {
       const status = result.success ? '✅' : '❌';
       const duration = `${result.duration}ms`;
-      console.log(`  ${index + 1}. ${status} ${result.name.padEnd(30)} | ${duration.padStart(8)} | Exit: ${result.exitCode}`);
-      
+      console.log(
+        `  ${index + 1}. ${status} ${result.name.padEnd(30)} | ${duration.padStart(8)} | Exit: ${result.exitCode}`
+      );
+
       if (!result.success && result.error) {
         console.log(`     Error: ${result.error.substring(0, 100)}...`);
       }
@@ -222,9 +224,21 @@ class E2ETestRunner {
     // Success criteria evaluation
     console.log('\n🎯 Success Criteria Evaluation:');
     const criteria = [
-      { name: 'Overall Success Rate ≥95%', passed: successRate >= 95, value: `${successRate.toFixed(2)}%` },
-      { name: 'No Critical Test Failures', passed: !results.find(r => !r.success && this.isCriticalTest(r.name)), value: 'N/A' },
-      { name: 'Average Test Duration ≤60s', passed: (totalDuration / totalTests) <= 60000, value: `${((totalDuration / totalTests) / 1000).toFixed(2)}s` },
+      {
+        name: 'Overall Success Rate ≥95%',
+        passed: successRate >= 95,
+        value: `${successRate.toFixed(2)}%`
+      },
+      {
+        name: 'No Critical Test Failures',
+        passed: !results.find(r => !r.success && this.isCriticalTest(r.name)),
+        value: 'N/A'
+      },
+      {
+        name: 'Average Test Duration ≤60s',
+        passed: totalDuration / totalTests <= 60000,
+        value: `${(totalDuration / totalTests / 1000).toFixed(2)}s`
+      },
       { name: 'Zero Test Failures', passed: failedTests === 0, value: `${failedTests} failures` }
     ];
 
@@ -239,7 +253,7 @@ class E2ETestRunner {
     if (!overallSuccess) {
       console.log('\n🔧 RECOMMENDATIONS:');
       const failedCritical = results.filter(r => !r.success && this.isCriticalTest(r.name));
-      
+
       if (failedCritical.length > 0) {
         console.log('  🚨 Critical Issues:');
         failedCritical.forEach(test => {
@@ -253,7 +267,7 @@ class E2ETestRunner {
         console.log('     - Review test stability and flakiness');
       }
 
-      if ((totalDuration / totalTests) > 60000) {
+      if (totalDuration / totalTests > 60000) {
         console.log('  ⚡ Performance Issues:');
         console.log('     - Optimize slow tests');
         console.log('     - Review test timeouts');
@@ -263,11 +277,7 @@ class E2ETestRunner {
   }
 
   isCriticalTest(testName) {
-    const criticalTests = [
-      'Core User Journey',
-      'Authentication & Security',
-      'API Integration'
-    ];
+    const criticalTests = ['Core User Journey', 'Authentication & Security', 'API Integration'];
     return criticalTests.includes(testName);
   }
 
@@ -279,7 +289,7 @@ class E2ETestRunner {
 // CLI execution
 async function main() {
   const runner = new E2ETestRunner();
-  
+
   try {
     const success = await runner.runAllTests();
     process.exit(success ? 0 : 1);

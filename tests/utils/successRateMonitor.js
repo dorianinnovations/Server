@@ -63,27 +63,28 @@ class SuccessRateMonitor {
     }
 
     this.currentSession.endTime = Date.now();
-    this.currentSession.stats.totalDuration = this.currentSession.endTime - this.currentSession.startTime;
-    
+    this.currentSession.stats.totalDuration =
+      this.currentSession.endTime - this.currentSession.startTime;
+
     // Calculate session statistics
     this.calculateSessionStats();
-    
+
     // Add to sessions history
     this.metrics.sessions.push(this.currentSession);
-    
+
     // Update aggregated statistics
     this.updateAggregatedStats();
-    
+
     // Save metrics to file
     await this.saveMetrics();
-    
+
     // Generate session report
     const report = this.generateSessionReport();
     console.log(report);
-    
+
     const sessionId = this.currentSession.id;
     this.currentSession = null;
-    
+
     return sessionId;
   }
 
@@ -104,12 +105,12 @@ class SuccessRateMonitor {
 
     this.currentSession.testResults.push(testResult);
     this.currentSession.stats.total++;
-    
+
     if (success) {
       this.currentSession.stats.passed++;
     } else {
       this.currentSession.stats.failed++;
-      
+
       // Check for critical failures
       if (this.isCriticalFailure(testName, category, metadata)) {
         this.currentSession.criticalFailures.push(testResult);
@@ -127,11 +128,11 @@ class SuccessRateMonitor {
         averageDuration: 0
       };
     }
-    
+
     const catStats = this.currentSession.categories[testResult.category];
     catStats.total++;
     catStats.totalDuration += duration;
-    
+
     if (success) {
       catStats.passed++;
     } else {
@@ -139,7 +140,8 @@ class SuccessRateMonitor {
     }
 
     // Update real-time success rate
-    this.currentSession.stats.successRate = (this.currentSession.stats.passed / this.currentSession.stats.total) * 100;
+    this.currentSession.stats.successRate =
+      (this.currentSession.stats.passed / this.currentSession.stats.total) * 100;
     catStats.successRate = (catStats.passed / catStats.total) * 100;
     catStats.averageDuration = catStats.totalDuration / catStats.total;
 
@@ -150,10 +152,11 @@ class SuccessRateMonitor {
   // Calculate session statistics
   calculateSessionStats() {
     const stats = this.currentSession.stats;
-    
+
     if (stats.total > 0) {
       stats.successRate = (stats.passed / stats.total) * 100;
-      stats.averageDuration = this.currentSession.testResults.reduce((sum, test) => sum + test.duration, 0) / stats.total;
+      stats.averageDuration =
+        this.currentSession.testResults.reduce((sum, test) => sum + test.duration, 0) / stats.total;
     }
 
     // Calculate category averages
@@ -168,7 +171,7 @@ class SuccessRateMonitor {
   // Update aggregated statistics across all sessions
   updateAggregatedStats() {
     const agg = this.metrics.aggregatedStats;
-    
+
     // Reset aggregated stats
     agg.totalTests = 0;
     agg.totalPassed = 0;
@@ -186,10 +189,10 @@ class SuccessRateMonitor {
       agg.totalTests += session.stats.total;
       agg.totalPassed += session.stats.passed;
       agg.totalFailed += session.stats.failed;
-      
+
       // Aggregate critical failures
       agg.criticalFailures.push(...session.criticalFailures);
-      
+
       // Aggregate by category
       Object.entries(session.categories).forEach(([category, stats]) => {
         if (!agg.categoryStats[category]) {
@@ -202,7 +205,7 @@ class SuccessRateMonitor {
             sessions: 0
           };
         }
-        
+
         const aggCat = agg.categoryStats[category];
         aggCat.total += stats.total;
         aggCat.passed += stats.passed;
@@ -221,8 +224,9 @@ class SuccessRateMonitor {
     // Calculate final aggregated metrics
     if (agg.totalTests > 0) {
       agg.overallSuccessRate = (agg.totalPassed / agg.totalTests) * 100;
-      agg.averageTestDuration = this.metrics.sessions.reduce((sum, session) => 
-        sum + session.stats.averageDuration, 0) / this.metrics.sessions.length;
+      agg.averageTestDuration =
+        this.metrics.sessions.reduce((sum, session) => sum + session.stats.averageDuration, 0) /
+        this.metrics.sessions.length;
     }
 
     // Calculate category success rates
@@ -242,23 +246,25 @@ class SuccessRateMonitor {
     const criticalCategories = ['authentication', 'core-chat', 'user-registration'];
     const criticalTests = [
       'User Registration',
-      'User Login', 
+      'User Login',
       'Chat Completion',
       'Adaptive Chat',
       'Mobile Data Sync'
     ];
 
-    return criticalCategories.includes(category) || 
-           criticalTests.includes(testName) ||
-           metadata.critical === true;
+    return (
+      criticalCategories.includes(category) ||
+      criticalTests.includes(testName) ||
+      metadata.critical === true
+    );
   }
 
   // Check performance thresholds
   checkPerformanceThresholds(testResult) {
     const thresholds = {
-      slow: 5000,      // 5 seconds
-      timeout: 30000,  // 30 seconds
-      fast: 100        // 100ms
+      slow: 5000, // 5 seconds
+      timeout: 30000, // 30 seconds
+      fast: 100 // 100ms
     };
 
     if (testResult.duration > thresholds.timeout) {
@@ -286,11 +292,11 @@ class SuccessRateMonitor {
 
     const session = this.currentSession;
     const stats = session.stats;
-    
+
     let report = '\n' + '='.repeat(80) + '\n';
     report += `🎯 SUCCESS RATE REPORT: ${session.name}\n`;
     report += '='.repeat(80) + '\n';
-    
+
     // Overall metrics
     report += `📊 Overall Success Rate: ${stats.successRate.toFixed(2)}%\n`;
     report += `✅ Passed: ${stats.passed}/${stats.total}\n`;
@@ -369,14 +375,14 @@ class SuccessRateMonitor {
       // Ensure metrics directory exists
       const metricsDir = path.dirname(this.metricsFile);
       await fs.mkdir(metricsDir, { recursive: true });
-      
+
       // Save metrics with timestamp
       const metricsWithTimestamp = {
         ...this.metrics,
         lastUpdated: new Date().toISOString(),
         version: '1.0.0'
       };
-      
+
       await fs.writeFile(this.metricsFile, JSON.stringify(metricsWithTimestamp, null, 2));
       console.log(`📊 Metrics saved to: ${this.metricsFile}`);
     } catch (error) {
@@ -407,13 +413,13 @@ class SuccessRateMonitor {
   // Generate comprehensive report
   generateComprehensiveReport() {
     const agg = this.metrics.aggregatedStats;
-    
+
     let report = '\n' + '='.repeat(100) + '\n';
     report += '🎯 COMPREHENSIVE SUCCESS RATE ANALYSIS\n';
     report += '='.repeat(100) + '\n';
-    
+
     // Overall statistics
-    report += `📊 OVERALL STATISTICS:\n`;
+    report += '📊 OVERALL STATISTICS:\n';
     report += `   Success Rate: ${agg.overallSuccessRate.toFixed(2)}%\n`;
     report += `   Total Tests: ${agg.totalTests}\n`;
     report += `   Passed: ${agg.totalPassed}\n`;
@@ -423,9 +429,9 @@ class SuccessRateMonitor {
 
     // Category analysis
     if (Object.keys(agg.categoryStats).length > 0) {
-      report += `📋 CATEGORY ANALYSIS:\n`;
+      report += '📋 CATEGORY ANALYSIS:\n';
       Object.entries(agg.categoryStats)
-        .sort(([,a], [,b]) => b.successRate - a.successRate)
+        .sort(([, a], [, b]) => b.successRate - a.successRate)
         .forEach(([category, stats]) => {
           const status = stats.successRate >= 95 ? '🟢' : stats.successRate >= 80 ? '🟡' : '🔴';
           report += `   ${status} ${category.padEnd(20)} | ${stats.successRate.toFixed(1)}% | ${stats.passed}/${stats.total} | ${stats.sessions} sessions\n`;
@@ -435,7 +441,7 @@ class SuccessRateMonitor {
 
     // Performance analysis
     if (agg.performanceMetrics.slowestTests.length > 0) {
-      report += `🐌 SLOWEST TESTS:\n`;
+      report += '🐌 SLOWEST TESTS:\n';
       agg.performanceMetrics.slowestTests.slice(0, 5).forEach((test, i) => {
         report += `   ${i + 1}. ${test.name} (${test.duration}ms)\n`;
       });
@@ -444,15 +450,15 @@ class SuccessRateMonitor {
 
     // Critical failures summary
     if (agg.criticalFailures.length > 0) {
-      report += `🚨 CRITICAL FAILURES SUMMARY:\n`;
+      report += '🚨 CRITICAL FAILURES SUMMARY:\n';
       const failureGroups = {};
       agg.criticalFailures.forEach(failure => {
         const key = `${failure.name}-${failure.category}`;
         failureGroups[key] = (failureGroups[key] || 0) + 1;
       });
-      
+
       Object.entries(failureGroups)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .forEach(([key, count]) => {
           report += `   ❌ ${key}: ${count} occurrences\n`;
         });
@@ -461,17 +467,17 @@ class SuccessRateMonitor {
 
     // Trends
     if (this.metrics.sessions.length >= 2) {
-      report += `📈 TRENDS:\n`;
+      report += '📈 TRENDS:\n';
       const recentSessions = this.metrics.sessions.slice(-5);
       const trendData = recentSessions.map(session => ({
         name: session.name,
         successRate: session.stats.successRate,
         duration: session.stats.averageDuration
       }));
-      
+
       const successRateTrend = this.calculateTrend(trendData.map(d => d.successRate));
       const durationTrend = this.calculateTrend(trendData.map(d => d.duration));
-      
+
       report += `   Success Rate Trend: ${successRateTrend > 0 ? '📈 Improving' : successRateTrend < 0 ? '📉 Declining' : '➡️ Stable'}\n`;
       report += `   Performance Trend: ${durationTrend < 0 ? '📈 Improving' : durationTrend > 0 ? '📉 Declining' : '➡️ Stable'}\n\n`;
     }
@@ -483,7 +489,7 @@ class SuccessRateMonitor {
   // Calculate trend direction
   calculateTrend(values) {
     if (values.length < 2) return 0;
-    
+
     const first = values[0];
     const last = values[values.length - 1];
     return last - first;

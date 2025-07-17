@@ -15,7 +15,7 @@ const testData = {
     ],
     conversationHistory: [
       { role: 'user', content: 'I feel great today!' },
-      { role: 'assistant', content: 'That\'s wonderful to hear!' }
+      { role: 'assistant', content: "That's wonderful to hear!" }
     ],
     timeContext: {
       timeOfDay: 'morning',
@@ -38,7 +38,10 @@ async function createTestUser() {
     console.log('✅ User created and logged in');
     return response.data;
   } catch (error) {
-    if (error.response?.status === 409 || error.response?.data?.message?.includes('already exists')) {
+    if (
+      error.response?.status === 409 ||
+      error.response?.data?.message?.includes('already exists')
+    ) {
       console.log('ℹ️ User already exists, attempting login...');
       return await loginUser();
     }
@@ -62,9 +65,9 @@ async function loginUser() {
 
 async function testAIEndpoints() {
   const headers = { Authorization: `Bearer ${authToken}` };
-  
+
   console.log('\n🧠 Testing AI Endpoints...');
-  
+
   try {
     // Test emotional state analysis
     console.log('📊 Testing /ai/emotional-state...');
@@ -75,7 +78,7 @@ async function testAIEndpoints() {
     );
     console.log('✅ Emotional state analysis successful');
     console.log('📈 Result:', JSON.stringify(emotionalStateResponse.data.data, null, 2));
-    
+
     // Test personality recommendations
     console.log('\n🎭 Testing /ai/personality-recommendations...');
     const personalityResponse = await axios.post(
@@ -89,7 +92,7 @@ async function testAIEndpoints() {
     );
     console.log('✅ Personality recommendations successful');
     console.log('🎯 Result:', JSON.stringify(personalityResponse.data.data, null, 2));
-    
+
     // Test adaptive chat
     console.log('\n💬 Testing /ai/adaptive-chat...');
     const chatResponse = await axios.post(
@@ -104,30 +107,26 @@ async function testAIEndpoints() {
     );
     console.log('✅ Adaptive chat successful');
     console.log('🗨️ Result:', JSON.stringify(chatResponse.data.data, null, 2));
-    
   } catch (error) {
     console.error('❌ AI endpoint test failed:', error.response?.data?.error || error.message);
     return false;
   }
-  
+
   return true;
 }
 
 async function testCloudEndpoints() {
   const headers = { Authorization: `Bearer ${authToken}` };
-  
+
   console.log('\n☁️ Testing Cloud Endpoints...');
-  
+
   try {
     // Test events retrieval
     console.log('📅 Testing GET /cloud/events...');
-    const getEventsResponse = await axios.get(
-      `${BASE_URL}/cloud/events?limit=5`,
-      { headers }
-    );
+    const getEventsResponse = await axios.get(`${BASE_URL}/cloud/events?limit=5`, { headers });
     console.log('✅ Get events successful');
     console.log('📋 Found', getEventsResponse.data.data.events.length, 'events');
-    
+
     // Test enhanced events with emotional matching
     console.log('\n🎯 Testing POST /cloud/events (enhanced)...');
     const enhancedEventsResponse = await axios.post(
@@ -140,7 +139,7 @@ async function testCloudEndpoints() {
     );
     console.log('✅ Enhanced events successful');
     console.log('🔍 Found', enhancedEventsResponse.data.data.length, 'matched events');
-    
+
     // Test user compatibility
     console.log('\n👥 Testing /cloud/compatibility/users...');
     const compatibilityResponse = await axios.post(
@@ -153,20 +152,19 @@ async function testCloudEndpoints() {
     );
     console.log('✅ User compatibility analysis successful');
     console.log('🤝 Found', compatibilityResponse.data.data.length, 'compatible users');
-    
   } catch (error) {
     console.error('❌ Cloud endpoint test failed:', error.response?.data?.error || error.message);
     return false;
   }
-  
+
   return true;
 }
 
 async function testUserEndpoints() {
   const headers = { Authorization: `Bearer ${authToken}` };
-  
+
   console.log('\n👤 Testing User Endpoints...');
-  
+
   try {
     // Test emotional profile update
     console.log('🧠 Testing PUT /emotional-profile...');
@@ -177,42 +175,45 @@ async function testUserEndpoints() {
     );
     console.log('✅ Emotional profile update successful');
     console.log('📝 Result:', profileResponse.data.message);
-    
   } catch (error) {
     console.error('❌ User endpoint test failed:', error.response?.data?.error || error.message);
     return false;
   }
-  
+
   return true;
 }
 
 async function runAllTests() {
   try {
     console.log('🚀 Starting Backend Integration Tests\n');
-    
+
     // Setup
     await createTestUser();
-    
+
     // Test all endpoints
     const aiSuccess = await testAIEndpoints();
     const cloudSuccess = await testCloudEndpoints();
     const userSuccess = await testUserEndpoints();
-    
+
     // Summary
     console.log('\n📊 Test Summary:');
     console.log('🧠 AI Endpoints:', aiSuccess ? '✅ PASS' : '❌ FAIL');
     console.log('☁️ Cloud Endpoints:', cloudSuccess ? '✅ PASS' : '❌ FAIL');
     console.log('👤 User Endpoints:', userSuccess ? '✅ PASS' : '❌ FAIL');
-    
+
     const allSuccess = aiSuccess && cloudSuccess && userSuccess;
-    console.log('\n🎯 Overall Result:', allSuccess ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED');
-    
+    console.log(
+      '\n🎯 Overall Result:',
+      allSuccess ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED'
+    );
+
     if (allSuccess) {
-      console.log('\n🎉 Backend integration is ready! All AI-powered features are working correctly.');
+      console.log(
+        '\n🎉 Backend integration is ready! All AI-powered features are working correctly.'
+      );
     } else {
       console.log('\n⚠️ Some endpoints need attention. Check the error messages above.');
     }
-    
   } catch (error) {
     console.error('❌ Test setup failed:', error.message);
     process.exit(1);

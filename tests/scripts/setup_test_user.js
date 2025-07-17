@@ -18,13 +18,13 @@ const setupTestUser = async () => {
 
     // Find or create credit pool
     let creditPool = await CreditPool.findOne({ userId: user._id });
-    
+
     if (!creditPool) {
       creditPool = new CreditPool({
         userId: user._id,
         balance: 0,
         isActive: true,
-        isVerified: true, // Set to true for testing
+        isVerified: true // Set to true for testing
       });
       await creditPool.save();
       console.log('✓ Created credit pool for test user');
@@ -41,7 +41,6 @@ const setupTestUser = async () => {
     console.log('  - Credit Pool Balance:', creditPool.balance);
     console.log('  - Is Active:', creditPool.isActive);
     console.log('  - Is Verified:', creditPool.isVerified);
-
   } catch (error) {
     console.error('❌ Error setting up test user:', error);
   } finally {

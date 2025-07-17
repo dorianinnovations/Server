@@ -14,10 +14,10 @@ global.console = {
   debug: () => {},
   info: () => {},
   warn: () => {},
-  error: () => {},
+  error: () => {}
 };
 
 // Use the Jest global if available, otherwise fallback
 if (typeof jest !== 'undefined') {
   jest.setTimeout(30000);
-} 
+}

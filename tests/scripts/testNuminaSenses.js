@@ -18,7 +18,7 @@ async function getAuthToken() {
       password: 'testpass123'
     })
   });
-  
+
   const data = await response.json();
   return data.token;
 }
@@ -40,13 +40,13 @@ async function testNuminaSenses() {
       console.log('✅ Connected to WebSocket server');
     });
 
-    socket.on('connected', (data) => {
+    socket.on('connected', data => {
       console.log(`📱 Connection confirmed: ${data.message}`);
     });
 
     // 🎯 Listen for Numina Senses updates
-    socket.on('numina_senses_updated', (data) => {
-      console.log(`\n🎭 NUMINA SENSES UPDATE:`);
+    socket.on('numina_senses_updated', data => {
+      console.log('\n🎭 NUMINA SENSES UPDATE:');
       console.log(`   Emotion: ${data.emotion}`);
       console.log(`   Intensity: ${data.intensity}`);
       console.log(`   Confidence: ${Math.round(data.confidence * 100)}%`);
@@ -66,20 +66,20 @@ async function testNuminaSenses() {
 
     const testMessages = [
       {
-        message: "I am feeling really excited about this new project!",
-        expectedEmotion: "excited"
+        message: 'I am feeling really excited about this new project!',
+        expectedEmotion: 'excited'
       },
       {
-        message: "I'm feeling quite stressed and overwhelmed with everything going on",
-        expectedEmotion: "anxious"
+        message: 'I\'m feeling quite stressed and overwhelmed with everything going on',
+        expectedEmotion: 'anxious'
       },
       {
-        message: "Today was amazing! I feel so happy and grateful",
-        expectedEmotion: "happy"
+        message: 'Today was amazing! I feel so happy and grateful',
+        expectedEmotion: 'happy'
       },
       {
-        message: "I need some help, I'm feeling lost and confused",
-        expectedEmotion: "sad/anxious"
+        message: 'I need some help, I\'m feeling lost and confused',
+        expectedEmotion: 'sad/anxious'
       }
     ];
 
@@ -92,7 +92,7 @@ async function testNuminaSenses() {
         const response = await fetch(`${BASE_URL}/ai/adaptive-chat`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -102,7 +102,7 @@ async function testNuminaSenses() {
         });
 
         if (response.ok) {
-          console.log(`   ✅ Chat sent successfully`);
+          console.log('   ✅ Chat sent successfully');
         } else {
           console.log(`   ❌ Chat failed: ${response.status}`);
         }
@@ -120,7 +120,6 @@ async function testNuminaSenses() {
 
     socket.disconnect();
     console.log('✅ Test completed!');
-
   } catch (error) {
     console.error('❌ Test failed:', error.message);
   }

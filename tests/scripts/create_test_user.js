@@ -11,12 +11,15 @@ async function createTestUser() {
       email: 'test@example.com',
       password: 'testpassword'
     });
-    
+
     console.log('✓ Test user created successfully');
     console.log('User ID:', response.data.user?._id);
     return response.data;
   } catch (error) {
-    if (error.response?.status === 400 && error.response?.data?.message?.includes('User already exists')) {
+    if (
+      error.response?.status === 400 &&
+      error.response?.data?.message?.includes('User already exists')
+    ) {
       console.log('✓ Test user already exists');
       return { message: 'User already exists' };
     }

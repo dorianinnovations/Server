@@ -25,7 +25,7 @@ socket.on('connect', () => {
   console.log('✅ WebSocket connected');
 });
 
-socket.on('numina_senses_updated', (data) => {
+socket.on('numina_senses_updated', data => {
   console.log('\n🎭 EMOTION UPDATE RECEIVED:');
   console.log(`   Emotion: ${data.emotion}`);
   console.log(`   Intensity: ${data.intensity}`);

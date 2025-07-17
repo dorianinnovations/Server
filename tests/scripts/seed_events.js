@@ -145,10 +145,10 @@ async function seedEvents() {
   try {
     await mongoose.connect(MONGO_URI);
     console.log('✅ Connected to MongoDB');
-    
+
     // Find a test user to be the organizer (or create one)
     let testUser = await User.findOne({ email: 'test@example.com' });
-    
+
     if (!testUser) {
       console.log('🔍 Creating test user for event organization...');
       testUser = new User({
@@ -157,32 +157,33 @@ async function seedEvents() {
       });
       await testUser.save();
     }
-    
+
     // Clear existing events
     await Event.deleteMany({});
     console.log('🗑️ Cleared existing events');
-    
+
     // Create events with the test user as organizer
     const eventsWithOrganizer = sampleEvents.map(event => ({
       ...event,
       organizer: testUser._id
     }));
-    
+
     const createdEvents = await Event.insertMany(eventsWithOrganizer);
     console.log(`🎉 Created ${createdEvents.length} sample events`);
-    
+
     // Display created events
     console.log('\n📅 Sample Events Created:');
     createdEvents.forEach((event, index) => {
       console.log(`${index + 1}. ${event.title} (${event.category})`);
       console.log(`   📅 ${event.dateTime.start.toDateString()}`);
-      console.log(`   📍 ${event.location.virtual ? 'Virtual' : event.location.city + ', ' + event.location.state}`);
+      console.log(
+        `   📍 ${event.location.virtual ? 'Virtual' : event.location.city + ', ' + event.location.state}`
+      );
       console.log(`   🎯 Mood: ${event.emotionalContext.targetMood}`);
       console.log('');
     });
-    
+
     console.log('✅ Event seeding complete!');
-    
   } catch (error) {
     console.error('❌ Error seeding events:', error);
   } finally {

@@ -1,7 +1,12 @@
 import request from 'supertest';
 import express from 'express';
 import { rateLimiters, createRateLimiter } from '../../src/middleware/rateLimiter.js';
-import { requireAdmin, validateApiKey, validateContent, sanitizeRequest } from '../../src/middleware/security.js';
+import {
+  requireAdmin,
+  validateApiKey,
+  validateContent,
+  sanitizeRequest
+} from '../../src/middleware/security.js';
 import { protect } from '../../src/middleware/auth.js';
 
 // Mock environment variables
@@ -10,7 +15,7 @@ process.env.ADMIN_EMAILS = 'admin@test.com,admin2@test.com';
 process.env.API_KEYS = 'test-api-key-1,test-api-key-2';
 
 // Create test app
-const createTestApp = (middleware) => {
+const createTestApp = middleware => {
   const app = express();
   app.use(express.json());
   app.use(middleware);
@@ -26,7 +31,7 @@ describe('Rate Limiting Middleware', () => {
     const testRateLimiter = createRateLimiter({
       windowMs: 60 * 1000, // 1 minute
       max: 5, // 5 requests per minute
-      message: "Too many collective data requests. Please try again later."
+      message: 'Too many collective data requests. Please try again later.'
     });
     app = createTestApp(testRateLimiter);
   });
@@ -43,15 +48,13 @@ describe('Rate Limiting Middleware', () => {
     const promises = [];
     for (let i = 0; i < 10; i++) {
       promises.push(
-        request(app)
-          .get('/test')
-          .set('X-Forwarded-For', '192.168.1.1') // Simulate same IP
+        request(app).get('/test').set('X-Forwarded-For', '192.168.1.1') // Simulate same IP
       );
     }
-    
+
     const responses = await Promise.all(promises);
     const blockedResponses = responses.filter(r => r.status === 429);
-    
+
     expect(blockedResponses.length).toBeGreaterThan(0);
     expect(blockedResponses[0].body.success).toBe(false);
     expect(blockedResponses[0].body.message).toContain('Too many');
@@ -63,7 +66,7 @@ describe('Rate Limiting Middleware', () => {
       max: 5,
       message: 'Custom rate limit exceeded'
     });
-    
+
     expect(typeof customLimiter).toBe('function');
   });
 });
@@ -82,20 +85,16 @@ describe('Admin Protection Middleware', () => {
   test('should allow admin user by ID', async () => {
     // Mock JWT token for admin user
     const adminToken = 'valid-admin-token'; // In real test, you'd create a proper JWT
-    
-    const response = await request(app)
-      .get('/admin')
-      .set('Authorization', `Bearer ${adminToken}`);
-    
+
+    const response = await request(app).get('/admin').set('Authorization', `Bearer ${adminToken}`);
+
     // This test would need proper JWT mocking implementation
     expect(response.status).toBe(401); // Will fail without proper JWT setup
   });
 
   test('should block non-admin user', async () => {
-    const response = await request(app)
-      .get('/admin')
-      .set('Authorization', 'Bearer invalid-token');
-    
+    const response = await request(app).get('/admin').set('Authorization', 'Bearer invalid-token');
+
     expect(response.status).toBe(401);
   });
 });
@@ -111,20 +110,16 @@ describe('API Key Validation Middleware', () => {
   });
 
   test('should allow valid API key', async () => {
-    const response = await request(app)
-      .get('/api')
-      .set('X-API-Key', 'test-api-key-1');
-    
+    const response = await request(app).get('/api').set('X-API-Key', 'test-api-key-1');
+
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.apiKey).toBe('test-api-key-1');
   });
 
   test('should block invalid API key', async () => {
-    const response = await request(app)
-      .get('/api')
-      .set('X-API-Key', 'invalid-key');
-    
+    const response = await request(app).get('/api').set('X-API-Key', 'invalid-key');
+
     expect(response.status).toBe(401);
     expect(response.body.success).toBe(false);
     expect(response.body.message).toBe('Invalid API key');
@@ -132,7 +127,7 @@ describe('API Key Validation Middleware', () => {
 
   test('should block missing API key', async () => {
     const response = await request(app).get('/api');
-    
+
     expect(response.status).toBe(401);
     expect(response.body.success).toBe(false);
     expect(response.body.message).toBe('API key required');
@@ -154,7 +149,7 @@ describe('Content Validation Middleware', () => {
       .post('/content')
       .set('Content-Type', 'application/json')
       .send({ test: 'data' });
-    
+
     expect(response.status).toBe(200);
   });
 
@@ -163,20 +158,20 @@ describe('Content Validation Middleware', () => {
       .post('/content')
       .set('Content-Type', 'text/plain')
       .send('test data');
-    
+
     expect(response.status).toBe(400);
     expect(response.body.message).toBe('Content-Type must be application/json');
   });
 
   test('should block oversized content', async () => {
     const largeData = 'x'.repeat(11 * 1024 * 1024); // 11MB
-    
+
     const response = await request(app)
       .post('/content')
       .set('Content-Type', 'application/json')
       .set('Content-Length', largeData.length.toString())
       .send({ data: largeData });
-    
+
     expect(response.status).toBe(400);
     // The message might be undefined if Express blocks it first
     if (response.body.message) {
@@ -192,10 +187,12 @@ describe('Request Sanitization Middleware', () => {
     app = express();
     app.use(express.json());
     app.use(sanitizeRequest);
-    app.post('/sanitize', (req, res) => res.json({ 
-      query: req.query, 
-      body: req.body 
-    }));
+    app.post('/sanitize', (req, res) =>
+      res.json({
+        query: req.query,
+        body: req.body
+      })
+    );
   });
 
   test('should sanitize query parameters', async () => {
@@ -203,7 +200,7 @@ describe('Request Sanitization Middleware', () => {
       .post('/sanitize?test=<script>alert("xss")</script>')
       .set('Content-Type', 'application/json')
       .send({});
-    
+
     expect(response.status).toBe(200);
     expect(response.body.query.test).toBe('scriptalert("xss")/script');
   });
@@ -212,11 +209,11 @@ describe('Request Sanitization Middleware', () => {
     const response = await request(app)
       .post('/sanitize')
       .set('Content-Type', 'application/json')
-      .send({ 
+      .send({
         test: '<script>alert("xss")</script>',
         safe: 'normal text'
       });
-    
+
     expect(response.status).toBe(200);
     expect(response.body.body.test).toBe('scriptalert("xss")/script');
     expect(response.body.body.safe).toBe('normal text');
@@ -237,9 +234,9 @@ describe('Rate Limiter Configuration', () => {
     // Test that collective data rate limiter is more restrictive than general
     const generalApp = createTestApp(rateLimiters.general);
     const collectiveApp = createTestApp(rateLimiters.collectiveData);
-    
+
     // Both should be functions
     expect(typeof rateLimiters.general).toBe('function');
     expect(typeof rateLimiters.collectiveData).toBe('function');
   });
-}); 
+});

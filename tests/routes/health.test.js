@@ -10,13 +10,13 @@ beforeAll(async () => {
   // Set test environment
   process.env.NODE_ENV = 'test';
   process.env.OPENROUTER_API_KEY = 'test-key';
-  
+
   mongoServer = await MongoMemoryServer.create({ binary: { version: '7.0.3' } });
   const mongoUri = mongoServer.getUri();
   process.env.MONGO_URI = mongoUri;
-  
+
   await mongoose.connect(mongoUri);
-  
+
   // Create test app
   app = await createTestApp();
 });
@@ -29,8 +29,7 @@ afterAll(async () => {
 describe('Health Check Routes', () => {
   describe('GET /health', () => {
     it('should return health status', async () => {
-      const response = await request(app)
-        .get('/health');
+      const response = await request(app).get('/health');
 
       // Accept either 200 (all healthy) or 503 (degraded but functional)
       expect([200, 503]).toContain(response.status);
@@ -42,8 +41,7 @@ describe('Health Check Routes', () => {
     });
 
     it('should include all required health fields', async () => {
-      const response = await request(app)
-        .get('/health');
+      const response = await request(app).get('/health');
 
       // Accept either 200 or 503 status
       expect([200, 503]).toContain(response.status);
@@ -60,9 +58,7 @@ describe('Health Check Routes', () => {
       const originalEnv = process.env.OPENROUTER_API_KEY;
       process.env.OPENROUTER_API_KEY = 'invalid-key-that-will-fail';
 
-      const response = await request(app)
-        .get('/health')
-        .expect(503);
+      const response = await request(app).get('/health').expect(503);
 
       expect(response.body.status).toBe('degraded');
       expect(response.body.health.server).toBe('healthy');
@@ -72,4 +68,4 @@ describe('Health Check Routes', () => {
       process.env.OPENROUTER_API_KEY = originalEnv;
     });
   });
-}); 
+});
