@@ -36,6 +36,9 @@ function isToolRequiredMessage(message) {
     // Tool usage (CRITICAL - was missing!)
     /use.*tool|search.*tool|run.*tool|execute.*tool|tool/,
     
+    // UBPM Analysis (CRITICAL - for press demos!)
+    /ubpm|behavioral.*pattern|behavior.*pattern|analyze.*me|my.*pattern|what.*learned.*about.*me|run.*ubpm|ubpm.*analysis|behavioral.*analysis|show.*my.*ubpm|my.*ubpm/,
+    
     // Recommendations and suggestions (CRITICAL - for "recommend" queries)
     /recommend|suggest|good.*places|best.*places|spots.*you.*recommend|any.*suggestions/,
     
@@ -283,6 +286,14 @@ function formatToolResultForUser(toolName, result) {
       case 'password_generator':
         if (parsedResult.password) {
           return `🔒 **Secure password generated** (${parsedResult.strength || 'strong'})`;
+        }
+        break;
+        
+      case 'ubpm_analysis':
+        if (parsedResult.success && parsedResult.ubpmAnalysisResults) {
+          return `🧠 **UBPM Analysis Complete**\n\n${parsedResult.ubpmAnalysisResults}`;
+        } else if (parsedResult.behavioralInsights) {
+          return `🧠 **UBPM Analysis**: ${parsedResult.behavioralInsights.join(' • ')}`;
         }
         break;
         
@@ -809,7 +820,7 @@ ADAPTIVE INSTRUCTIONS:
               const toolName = tool.function?.name || tool.name || '';
               
               // AGGRESSIVE LOADING: Always include essential tools for tool-requiring messages
-              if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations'].includes(toolName)) {
+              if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations', 'ubpm_analysis'].includes(toolName)) {
                 return true;
               }
               
@@ -1291,7 +1302,7 @@ ADAPTIVE INSTRUCTIONS:
             const toolName = tool.function?.name || tool.name || '';
             
             // AGGRESSIVE LOADING: Always include essential tools for tool-requiring messages
-            if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations'].includes(toolName)) {
+            if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations', 'ubpm_analysis'].includes(toolName)) {
               return true;
             }
             
