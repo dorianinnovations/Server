@@ -10,6 +10,7 @@ const shortTermMemorySchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now, expires: "24h" }, 
   content: { type: String, required: true },
   role: { type: String, enum: ["user", "assistant"], required: true },
+  attachments: { type: Array, required: false }, // Store image attachments for GPT-4o vision memory
 });
 
 // Performance indexes

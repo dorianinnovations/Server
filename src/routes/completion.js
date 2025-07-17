@@ -7,6 +7,9 @@ import { sanitizeResponse } from "../utils/sanitize.js";
 import { createUserCache } from "../utils/cache.js";
 import { createLLMService } from "../services/llmService.js";
 import { getRecentMemory } from "../utils/memory.js";
+import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from "../utils/imageCompressionBasic.js";
+import { getIncrementalMemory, optimizeContextSize } from "../utils/incrementalMemory.js";
+import { trackMemoryUsage, calculateOptimizationSavings } from "../utils/memoryAnalytics.js";
 
 const router = express.Router();
 
@@ -109,8 +112,8 @@ const buildUserContext = async (userId, userCache) => {
   };
 };
 
-// Common function to build messages for OpenRouter
-const buildMessages = (userProfile, formattedEmotionalLog, recentMemory, userPrompt) => {
+// Common function to build messages for OpenRouter with GPT-4o vision support
+const buildMessages = (userProfile, formattedEmotionalLog, recentMemory, userPrompt, attachments = []) => {
   const messages = [];
   
   // Build conversation history
@@ -146,24 +149,102 @@ TASK_INFERENCE: {"taskType": "plan_day", "parameters": {"priority": "focus"}}`;
 
   messages.push({ role: "system", content: systemMessage });
   
-  // Add conversation history as individual messages
+  // Add conversation history with intelligent deduplication
   if (recentMemory.length > 0) {
-    for (const mem of recentMemory) {
-      messages.push({ 
-        role: mem.role === "user" ? "user" : "assistant", 
-        content: mem.content 
-      });
+    // Deduplicate images in conversation history to save tokens
+    const deduplicatedMemory = deduplicateImagesInMemory(recentMemory);
+    
+    for (const mem of deduplicatedMemory) {
+      // Check if this memory entry has image attachments (GPT-4o vision)
+      const imageAttachments = mem.attachments?.filter(att => 
+        att.type === 'image' && att.url && att.url.startsWith('data:image') && !att.isDuplicate
+      ) || [];
+      
+      if (imageAttachments.length > 0 && mem.role === "user") {
+        // Create multi-modal message for historical images
+        const content = [
+          { type: 'text', text: mem.content }
+        ];
+        
+        // Add historical images (limit to 2 for performance in history)
+        imageAttachments.slice(0, 2).forEach(image => {
+          content.push({
+            type: 'image_url',
+            image_url: { 
+              url: image.url,
+              detail: 'auto'
+            }
+          });
+        });
+        
+        messages.push({
+          role: "user",
+          content: content
+        });
+        
+        console.log(`🖼️ GPT-4o VISION: Including ${imageAttachments.length} deduplicated historical images`);
+      } else {
+        // Text-only message (standard) or message with duplicate images
+        let displayContent = mem.content;
+        
+        // Add note about duplicate images if present
+        const duplicateCount = mem.attachments?.filter(att => att.isDuplicate).length || 0;
+        if (duplicateCount > 0) {
+          displayContent += ` [Referred to ${duplicateCount} previous image(s)]`;
+        }
+        
+        messages.push({ 
+          role: mem.role === "user" ? "user" : "assistant", 
+          content: displayContent 
+        });
+      }
     }
   }
   
-  // Add current user message
-  messages.push({ role: "user", content: userPrompt });
+  // Add current user message with intelligent image optimization
+  const imageAttachments = attachments.filter(att => 
+    att.type === 'image' && att.url && att.url.startsWith('data:image')
+  );
+  
+  if (imageAttachments.length > 0) {
+    // Use intelligent image selection for optimal API usage
+    const optimizedImages = selectOptimalImagesForAPI(imageAttachments, userPrompt, {
+      maxImages: 4,
+      useFullResolution: false // Will auto-detect based on user prompt
+    });
+    
+    const usage = calculateMemoryUsage(optimizedImages, recentMemory.length);
+    
+    console.log(`🖼️ GPT-4o VISION: Processing ${optimizedImages.length} optimized images`);
+    console.log(`🖼️ GPT-4o VISION: Message: "${userPrompt}"`);
+    console.log(`💰 COST OPTIMIZATION: ${usage.totalSize} bytes, ~${usage.estimatedTokens} tokens, ~$${usage.estimatedCost}`);
+    
+    // Create multi-modal message with optimized images
+    const content = [
+      { type: 'text', text: userPrompt || 'Please analyze these images.' }
+    ];
+    
+    optimizedImages.forEach(image => {
+      content.push({
+        type: 'image_url',
+        image_url: { 
+          url: image.url,
+          detail: 'auto'
+        }
+      });
+    });
+    
+    messages.push({ role: "user", content: content });
+  } else {
+    // Text-only message
+    messages.push({ role: "user", content: userPrompt });
+  }
   
   return messages;
 };
 
-// Common function to process response and save to database
-const processResponseAndSave = async (fullContent, userPrompt, userId, userCache) => {
+// Common function to process response and save to database with attachments
+const processResponseAndSave = async (fullContent, userPrompt, userId, userCache, attachments = []) => {
   let inferredTask = null;
   let inferredEmotion = null;
 
@@ -185,9 +266,28 @@ const processResponseAndSave = async (fullContent, userPrompt, userId, userCache
   // Database operations
   const dbOperations = [];
 
+  // Process and optimize image attachments for efficient storage
+  let processedAttachments = [];
+  if (attachments && attachments.length > 0) {
+    try {
+      processedAttachments = await processAttachmentsForStorage(attachments);
+      console.log(`💾 MEMORY STORAGE: Processed ${processedAttachments.length} attachments for efficient storage`);
+    } catch (error) {
+      console.error('❌ Attachment processing failed, storing originals:', error);
+      processedAttachments = attachments.filter(att => 
+        att.type === 'image' && att.url && att.url.startsWith('data:image')
+      );
+    }
+  }
+
   dbOperations.push(
     ShortTermMemory.insertMany([
-      { userId, content: userPrompt, role: "user" },
+      { 
+        userId, 
+        content: userPrompt, 
+        role: "user",
+        attachments: processedAttachments.length > 0 ? processedAttachments : undefined
+      },
       {
         userId,
         content: sanitizedContent,
@@ -236,14 +336,31 @@ const processResponseAndSave = async (fullContent, userPrompt, userId, userCache
 
 // ...existing code...
 router.post("/completion", protect, async (req, res) => {
+  const startTime = Date.now();
   const userId = req.user.id;
   const userPrompt = req.body.prompt;
   const stream = req.body.stream === true;
   const temperature = req.body.temperature || 0.9;
+  const attachments = req.body.attachments || [];
   const userCache = createUserCache(userId);
   
-  // Get user's conversation history for dynamic response sizing
-  const recentMemory = await getRecentMemory(userId, userCache);
+  // Smart context window management based on request type
+  const hasImages = attachments && attachments.some(att => att.type === 'image');
+  const contextType = hasImages ? 'focused' : 'standard'; // Focused mode for images to save tokens
+  
+  const fullMemory = await getRecentMemory(userId, userCache, 24 * 60, {
+    contextType,
+    includeImages: hasImages,
+    maxMessages: hasImages ? 20 : 50 // Reduce context for image requests
+  });
+
+  // Apply incremental memory optimization
+  const incrementalResult = getIncrementalMemory(userId, fullMemory, {
+    enableIncremental: true,
+    maxDeltaSize: hasImages ? 8 : 15 // Smaller delta for image requests
+  });
+
+  const recentMemory = incrementalResult.memory;
   const userMessages = recentMemory.filter(m => m.role === 'user');
   
   // Analyze user communication patterns
@@ -260,7 +377,14 @@ router.post("/completion", protect, async (req, res) => {
   
   const n_predict = req.body.n_predict || Math.min(1000, Math.floor(baseTokens * questionModifier * contextModifier));
   
-  console.log(`🎯 Completion dynamic tokens: ${n_predict} (base: ${baseTokens}, avg msg: ${Math.round(avgMessageLength)}, questions: ${Math.round(questionRatio * 100)}%)`);
+  // Log optimization metrics
+  console.log(`🎯 COMPLETION OPTIMIZATION:`, {
+    tokens: n_predict,
+    contextType,
+    incremental: incrementalResult.isIncremental,
+    contextStats: incrementalResult.stats,
+    userPatterns: { avgLength: Math.round(avgMessageLength), questionRatio: Math.round(questionRatio * 100) }
+  });
   const stop = req.body.stop || [
     "Human:", "\nHuman:", "\nhuman:", "human:",
     "User:", "\nUser:", "\nuser:", "user:",
@@ -294,12 +418,13 @@ router.post("/completion", protect, async (req, res) => {
       return res.status(500).json({ status: "error", message: "Error building user context: " + err.message });
     }
 
-    // Build messages for OpenRouter
+    // Build messages for OpenRouter with GPT-4o vision support
     const messages = buildMessages(
       context.userProfile,
       context.formattedEmotionalLog,
       context.recentMemory,
-      userPrompt
+      userPrompt,
+      attachments
     );
 
     const llmService = createLLMService();
@@ -377,7 +502,7 @@ router.post("/completion", protect, async (req, res) => {
         
         if (fullContent.trim()) {
           // Process the complete response for metadata extraction
-          processResponseAndSave(fullContent, userPrompt, userId, userCache)
+          processResponseAndSave(fullContent, userPrompt, userId, userCache, attachments)
             .then(() => {
               console.log(`✅ STREAMING: Saved response data for user ${userId}`);
             })
@@ -417,7 +542,8 @@ router.post("/completion", protect, async (req, res) => {
           response.content,
           userPrompt,
           userId,
-          userCache
+          userCache,
+          attachments
         );
       } catch (err) {
         console.error("Error in processResponseAndSave:", err.stack || err);
@@ -425,6 +551,27 @@ router.post("/completion", protect, async (req, res) => {
       }
       res.json({ content: sanitizedContent });
     }
+
+    // Track analytics for optimization insights
+    const responseTime = Date.now() - startTime;
+    const baselineTokens = fullMemory.length * 50; // Estimate baseline token usage
+    const actualTokens = recentMemory.length * 50; // Estimate actual token usage
+    const savings = calculateOptimizationSavings(
+      { tokens: baselineTokens, strategy: 'baseline' },
+      { tokens: actualTokens, strategy: incrementalResult.stats.strategy }
+    );
+
+    trackMemoryUsage(userId, {
+      contextType,
+      incrementalStats: incrementalResult.stats,
+      imageOptimization: hasImages ? { imagesProcessed: attachments.length } : {},
+      responseTime,
+      tokensSaved: savings.tokensSaved,
+      costSaved: savings.costSaved,
+      memoryUsed: recentMemory.length,
+      strategy: `${incrementalResult.stats.strategy}-${contextType}`
+    });
+
   } catch (err) {
     // Log request context for debugging
     console.error("Error in /completion endpoint:", err.stack || err, {
