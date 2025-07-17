@@ -39,7 +39,12 @@ class AdvancedAnalytics {
       ]);
 
       if (!user) {
-        throw new Error('User not found');
+        logger.warn(`User not found for analytics: ${userId}`);
+        return {
+          success: false,
+          error: 'User not found',
+          analytics: this.getDefaultAnalytics()
+        };
       }
 
       const analytics = {

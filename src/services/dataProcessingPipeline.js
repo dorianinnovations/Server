@@ -294,6 +294,13 @@ class DataProcessingPipeline {
    */
   async updateUserAnalytics(userId) {
     try {
+      // Check if user exists before processing analytics
+      const userExists = await User.findById(userId).select('_id');
+      if (!userExists) {
+        logger.warn(`Skipping analytics for non-existent user: ${userId}`);
+        return;
+      }
+      
       const analytics = await advancedAnalytics.generateComprehensiveAnalytics(userId);
       
       if (analytics.success) {

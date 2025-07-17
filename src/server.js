@@ -128,7 +128,7 @@ const initializeServer = async () => {
   // Configure security and middleware stack
   app.use(enhancedPerformanceMiddleware);
   app.use(corsSecurity);
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "10mb" }));
   app.use(validateContent);
   app.use(sanitizeRequest);
   app.use(securityHeaders);
@@ -285,7 +285,7 @@ if (process.env.NODE_ENV !== 'test') {
   const initializeForTests = async () => {
     try {
       // Basic middleware setup
-      app.use(express.json({ limit: "1mb" }));
+      app.use(express.json({ limit: "10mb" }));
       
       // Connect to database if not already connected
       if (process.env.MONGO_URI && !mongoose.connection.readyState) {
