@@ -198,6 +198,10 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
   "https://numinaai.netlify.app",
   "http://localhost:5173",
   "http://localhost:5000",
+  "http://localhost:8081",
+  "http://localhost:8082",
+  "http://localhost:3000",
+  "http://localhost:19006",
   "https://server-a7od.onrender.com"
 ];
 
