@@ -2,17 +2,22 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 import { createLLMService } from '../services/llmService.js';
 import User from '../models/User.js';
+import ShortTermMemory from '../models/ShortTermMemory.js';
 import CreditPool from '../models/CreditPool.js';
 import { createUserCache } from '../utils/cache.js';
+import websocketService from '../services/websocketService.js';
+import personalizationEngine from '../services/personalizationEngine.js';
+import connectionEngine from '../services/connectionEngine.js';
+import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
 import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import requestCacheService from '../services/requestCacheService.js';
 import ubpmService from '../services/ubpmService.js';
-import { getIncrementalMemory } from '../utils/incrementalMemory.js';
+import { getIncrementalMemory, optimizeContextSize } from '../utils/incrementalMemory.js';
 import { trackMemoryUsage, calculateOptimizationSavings } from '../utils/memoryAnalytics.js';
-import { log } from '../utils/logger.js';
+import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from '../utils/imageCompressionBasic.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -21,9 +26,7 @@ const llmService = createLLMService();
 async function handleDirectDataQuery(userId, message) {
   const lowerMessage = message.toLowerCase();
   
-  // Import necessary models and services
-  const ShortTermMemory = (await import('../models/ShortTermMemory.js')).default;
-  const UserBehaviorProfile = (await import('../models/UserBehaviorProfile.js')).default;
+  // Import memory analytics utility
   const { getUserMemoryAnalytics } = await import('../utils/memoryAnalytics.js');
   
   try {
@@ -58,7 +61,7 @@ async function handleDirectDataQuery(userId, message) {
     
     // Emotional analysis over time periods
     if (/emotions.*last.*two.*days|whats.*my.*emotions.*doing|emotional.*trend/.test(lowerMessage)) {
-      const EmotionalAnalyticsSession = (await import('../models/EmotionalAnalyticsSession.js')).default;
+      const { default: EmotionalAnalyticsSession } = await import('../models/EmotionalAnalyticsSession.js');
       const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
       
       const emotionalSessions = await EmotionalAnalyticsSession.find({
@@ -210,7 +213,6 @@ async function handleDirectDataQuery(userId, message) {
 // Real-time behavioral data population
 async function populateRealBehavioralData(userId, userMessage, recentMemory) {
   try {
-    const UserBehaviorProfile = (await import('../models/UserBehaviorProfile.js')).default;
     
     // Analyze message patterns for personality traits
     const personalityTraits = analyzePersonalityFromMessage(userMessage);
@@ -257,7 +259,7 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory) {
 // Real-time emotional data population
 async function populateEmotionalData(userId, userMessage, recentMemory, recentEmotions) {
   try {
-    const EmotionalAnalyticsSession = (await import('../models/EmotionalAnalyticsSession.js')).default;
+    const { default: EmotionalAnalyticsSession } = await import('../models/EmotionalAnalyticsSession.js');
     
     // Detect emotion from message content
     const detectedEmotion = detectEmotionAdvanced(userMessage);
@@ -1104,6 +1106,12 @@ BEHAVIORAL ANALYSIS:
 • Spot learning preferences from how they frame questions and process information
 • Map communication style from response length preferences and formality levels
 
+IMAGE HANDLING:
+• When someone shares an image without text, they want you to see and analyze it
+• Provide detailed visual analysis and insights about what you observe
+• Connect image content to their personality and interests naturally
+• Ask thoughtful follow-up questions about what they've shared
+
 INSIGHT DELIVERY:
 • Never announce what you're doing - just demonstrate uncanny accuracy
 • Reference specific patterns you've observed without explaining how you know
@@ -1233,8 +1241,14 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         console.log(`🖼️ GPT-4o VISION: Message text: "${finalMessage}"`);
         console.log(`🖼️ GPT-4o VISION: Total attachment data size:`, 
           imageAttachments.reduce((sum, img) => sum + (img.url?.length || 0), 0), 'characters');
+        // Enhanced content for image-only messages
         const content = [
-          { type: 'text', text: finalMessage }
+          { 
+            type: 'text', 
+            text: hasImageWithoutText ? 
+              `The user has shared an image without any text. Please analyze the image and provide insights about what you see, connecting it to their personality and interests.` :
+              finalMessage
+          }
         ];
         
         // Add up to 4 images (GPT-4o Vision limitation)
@@ -1690,11 +1704,29 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         // Function to save conversation to enhanced memory with optimization tracking
         function saveConversationToMemory() {
           if (fullContent.trim()) {
+            // Preserve original user message and attachment info for chat display
+            const messageToSave = hasImageWithoutText ? 
+              `📷 Image shared` : // Use minimal text for display purposes
+              userMessage;
+            
+            const attachmentInfo = attachments && attachments.length > 0 ? {
+              attachments: attachments.map(att => ({
+                type: att.type,
+                hasImage: att.type === 'image',
+                filename: att.filename || 'image',
+                size: att.url ? att.url.length : 0
+              }))
+            } : {};
+            
             enhancedMemoryService.saveConversation(
               userId, 
-              userMessage, 
+              messageToSave, 
               fullContent.trim(),
-              { emotion: detectSimpleEmotion(userMessage), context: conversationContext }
+              { 
+                emotion: detectSimpleEmotion(userMessage || ''), 
+                context: conversationContext,
+                ...attachmentInfo
+              }
             ).then(async () => {
               console.log(`💾 Saved conversation to enhanced memory`);
               userCache.invalidateUser(userId);
@@ -1883,11 +1915,29 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
       // COST OPTIMIZATION: Save conversation to enhanced memory with analytics
       if (finalContent.trim()) {
         try {
+          // Enhanced conversation saving with image attachment info
+          const messageToSave = hasImageWithoutText ? 
+            `📷 Image shared` : // Use minimal text for display purposes
+            userMessage;
+          
+          const attachmentInfo = attachments && attachments.length > 0 ? {
+            attachments: attachments.map(att => ({
+              type: att.type,
+              hasImage: att.type === 'image',
+              filename: att.filename || 'image',
+              size: att.url ? att.url.length : 0
+            }))
+          } : {};
+          
           await enhancedMemoryService.saveConversation(
             userId, 
-            userMessage, 
+            messageToSave, 
             finalContent.trim(),
-            { emotion: detectSimpleEmotion(userMessage), context: conversationContext }
+            { 
+              emotion: detectSimpleEmotion(userMessage || ''), 
+              context: conversationContext,
+              ...attachmentInfo
+            }
           );
           userCache.invalidateUser(userId);
 

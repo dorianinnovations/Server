@@ -80,4 +80,32 @@ router.get("/health", async (req, res) => {
   }
 });
 
+// WebSocket specific health check
+router.get("/websocket", async (req, res) => {
+  try {
+    const wsStats = websocketService.getServerStats();
+    const wsHealth = {
+      status: websocketService.io ? "active" : "inactive",
+      connected_users: wsStats.connectedUsers,
+      total_rooms: wsStats.totalRooms,
+      uptime: wsStats.serverUptime,
+      server_ready: !!websocketService.io,
+      socket_io_version: websocketService.io ? "5.x" : "unknown"
+    };
+
+    res.json({
+      success: true,
+      websocket: wsHealth,
+      test_endpoint: `wss://${req.get('host')}`,
+      instructions: "Use this URL to test WebSocket connection"
+    });
+  } catch (error) {
+    log.error("WebSocket health check error", error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 export default router; 

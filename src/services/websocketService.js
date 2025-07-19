@@ -26,7 +26,13 @@ class WebSocketService {
       },
       transports: ['websocket', 'polling'],
       pingTimeout: 60000,
-      pingInterval: 25000
+      pingInterval: 25000,
+      // Render.com specific configuration
+      allowEIO3: true,
+      allowRequest: (req, callback) => {
+        // Allow all origins in production for Render.com
+        callback(null, true);
+      }
     });
 
     // Authentication middleware
