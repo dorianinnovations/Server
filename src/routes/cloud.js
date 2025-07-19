@@ -3,6 +3,7 @@ import { protect } from '../middleware/auth.js';
 import { createLLMService } from '../services/llmService.js';
 import Event from '../models/Event.js';
 import User from '../models/User.js';
+import { log } from '../utils/logger.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -42,7 +43,7 @@ User Emotional State: ${JSON.stringify(userEmotionalState)}`;
 
     return JSON.parse(response.content);
   } catch (error) {
-    console.error('Compatibility analysis error:', error);
+    log.error('Compatibility analysis error', error);
     return {
       compatibilityScore: 75,
       moodBoostPrediction: 6,
@@ -105,7 +106,7 @@ router.get('/events', protect, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get events error:', error);
+    log.error('Get events error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch events'
@@ -113,7 +114,8 @@ router.get('/events', protect, async (req, res) => {
   }
 });
 
-router.post('/events', protect, async (req, res) => {
+// AI-enhanced event matching (keep existing functionality but rename route)
+router.post('/events/match', protect, async (req, res) => {
   try {
     const { emotionalState, preferences = {}, filters = {} } = req.body;
     
@@ -154,10 +156,85 @@ router.post('/events', protect, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Enhanced events fetch error:', error);
+    log.error('Enhanced events fetch error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch enhanced events'
+    });
+  }
+});
+
+// Create new event endpoint (what mobile app expects)
+router.post('/events', protect, async (req, res) => {
+  try {
+    const { title, description, type, date, time, location, maxParticipants, duration } = req.body;
+    const userId = req.user.id;
+
+    // Validate required fields
+    if (!title || !description || !type || !date || !time) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: title, description, type, date, time'
+      });
+    }
+
+    // Create date object
+    const eventDateTime = new Date(`${date} ${time}`);
+    if (eventDateTime < new Date()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Event date must be in the future'
+      });
+    }
+
+    // Create event
+    const event = new Event({
+      title,
+      description,
+      category: type,
+      organizer: userId,
+      dateTime: {
+        start: eventDateTime,
+        end: duration ? new Date(eventDateTime.getTime() + (parseInt(duration) * 60 * 60 * 1000)) : new Date(eventDateTime.getTime() + (2 * 60 * 60 * 1000)) // Default 2 hours
+      },
+      location: location ? { address: location, city: location } : { address: 'Virtual', city: 'Virtual' },
+      maxParticipants: maxParticipants || 50,
+      status: 'published',
+      isPublic: true,
+      participants: [],
+      emotionalContext: {
+        targetMood: 'positive',
+        moodBoostPotential: 7
+      }
+    });
+
+    await event.save();
+    await event.populate('organizer', 'email profile');
+
+    log.success('Event created', { eventId: event._id, title, organizer: userId });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id: event._id,
+        title: event.title,
+        description: event.description,
+        type: event.category,
+        date: event.dateTime.start.toLocaleDateString(),
+        time: event.dateTime.start.toLocaleTimeString(),
+        location: event.location.address,
+        maxParticipants: event.maxParticipants,
+        currentParticipants: event.participants.length,
+        hostId: event.organizer._id,
+        hostName: event.organizer.profile?.name || event.organizer.email
+      }
+    });
+
+  } catch (error) {
+    log.error('Create event error', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to create event'
     });
   }
 });
@@ -186,7 +263,7 @@ router.post('/events/:id/compatibility', protect, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Event compatibility error:', error);
+    log.error('Event compatibility error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to analyze event compatibility'
@@ -259,7 +336,7 @@ Context: ${JSON.stringify(compatibilityContext)}`;
           compatibility
         };
       } catch (error) {
-        console.error(`Compatibility analysis error for user ${user._id}:`, error);
+        log.error('Compatibility analysis error for user', error, { userId: user._id });
         return {
           userId: user._id,
           userEmail: user.email,
@@ -291,7 +368,7 @@ Context: ${JSON.stringify(compatibilityContext)}`;
     });
 
   } catch (error) {
-    console.error('User compatibility error:', error);
+    log.error('User compatibility error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to analyze user compatibility'
@@ -347,7 +424,7 @@ router.post('/events/:id/join', protect, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Join event error:', error);
+    log.error('Join event error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to join event'
@@ -392,7 +469,7 @@ router.post('/events/:id/leave', protect, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Leave event error:', error);
+    log.error('Leave event error', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to leave event'

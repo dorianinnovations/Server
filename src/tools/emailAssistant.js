@@ -1,4 +1,4 @@
-export default async function emailAssistant(args, userContext) {
+export default async function emailAssistant(args, _userContext) {
   try {
     const { action, subject, recipient, tone = 'professional', content } = args;
     
@@ -27,7 +27,7 @@ export default async function emailAssistant(args, userContext) {
   }
 }
 
-function draftEmail(subject, recipient, tone, content) {
+function draftEmail(subject, recipient, tone, _content) {
   const templates = {
     formal: {
       greeting: 'Dear [Recipient]',

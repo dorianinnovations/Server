@@ -95,6 +95,7 @@ router.post('/test-gpt4o-stream', protect, async (req, res) => {
 
     let buffer = '';
     let fullContent = '';
+    let chunkBuffer = ''; // Buffer for natural streaming pace
     let startTime = Date.now();
     
     // Send initial test message
@@ -114,6 +115,11 @@ router.post('/test-gpt4o-stream', protect, async (req, res) => {
           const data = line.substring(6).trim();
           
           if (data === '[DONE]') {
+            // Send any remaining buffered content before ending
+            if (chunkBuffer) {
+              res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\\n\\n`);
+            }
+            
             const responseTime = Date.now() - startTime;
             res.write(`data: ${JSON.stringify({ 
               content: "\\n\\n[Test Complete]",
@@ -134,7 +140,16 @@ router.post('/test-gpt4o-stream', protect, async (req, res) => {
             if (parsed.choices?.[0]?.delta?.content) {
               const content = parsed.choices[0].delta.content;
               fullContent += content;
-              res.write(`data: ${JSON.stringify({ content })}\\n\\n`);
+              
+              // NATURAL READING PACE: Buffer content like main AI endpoint
+              chunkBuffer += content;
+              
+              if (chunkBuffer.length >= 15 || 
+                  (chunkBuffer.length >= 8 && (content.includes(' ') || content.includes('\n'))) ||
+                  content.includes('.') || content.includes('!') || content.includes('?')) {
+                res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\\n\\n`);
+                chunkBuffer = '';
+              }
             }
           } catch (e) {
             console.error('Error parsing GPT-4o streaming data:', e);

@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/environment.js";
-import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG } from "../config/constants.js";
+import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
 
 console.log("🔐 Initializing authentication middleware...");
 
@@ -32,7 +32,18 @@ export const protect = (req, res, next) => {
   try {
     // Verify token with JWT secret
     const decoded = jwt.verify(token, env.JWT_SECRET);
-    req.user = decoded; // Attach user data to request object
+    
+    // Handle both userId and id fields for backward compatibility
+    const userId = decoded.userId || decoded.id;
+    if (!userId) {
+      throw new Error('No user ID found in token');
+    }
+    
+    req.user = { 
+      id: userId,
+      userId: userId,
+      ...decoded 
+    };
     next();
   } catch (error) {
     // Log the error for debugging but return generic message

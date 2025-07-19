@@ -214,7 +214,7 @@ router.get('/api/docs', async (req, res) => {
               includeMatching: 'boolean (default: false)'
             }
           },
-          '/cloud/events': {
+          '/cloud/events (POST)': {
             method: 'POST',
             description: 'Create new cloud event',
             auth: true,

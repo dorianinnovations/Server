@@ -166,7 +166,7 @@ async function addTracksToPlaylist(token, playlistId, tracks) {
   }
 }
 
-async function getRecommendedTracks(token, mood, genre, user) {
+async function getRecommendedTracks(token, mood, genre, _user) {
   try {
     const seedGenres = genre ? [genre] : ['pop'];
     const targetFeatures = getMoodFeatures(mood);

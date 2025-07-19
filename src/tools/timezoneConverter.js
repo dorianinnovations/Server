@@ -1,4 +1,4 @@
-export default async function timezoneConverter(args, userContext) {
+export default async function timezoneConverter(args, _userContext) {
   try {
     const { time, fromTimezone, toTimezone, date } = args;
     

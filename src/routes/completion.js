@@ -3,7 +3,6 @@ import { protect } from "../middleware/auth.js";
 import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
-import { sanitizeResponse } from "../utils/sanitize.js";
 import { createUserCache } from "../utils/cache.js";
 import { createLLMService } from "../services/llmService.js";
 import { getRecentMemory } from "../utils/memory.js";
@@ -753,7 +752,10 @@ router.post("/completion", protect, async (req, res) => {
                 // Buffer content to reduce streaming speed - send every 5 characters or word boundary
                 chunkBuffer += content;
                 
-                if (chunkBuffer.length >= 5 || content.includes(' ') || content.includes('\n')) {
+                // NATURAL READING PACE: Match main AI endpoint buffer size
+                if (chunkBuffer.length >= 15 || 
+                    (chunkBuffer.length >= 8 && (content.includes(' ') || content.includes('\n'))) ||
+                    content.includes('.') || content.includes('!') || content.includes('?')) {
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
                   chunkBuffer = '';

@@ -57,7 +57,7 @@ function logWorkout(workoutType, duration, intensity, userContext) {
   };
 }
 
-function getWorkoutRecommendation(goal, userContext) {
+function getWorkoutRecommendation(goal, _userContext) {
   const recommendations = {
     'weight loss': {
       workouts: ['cardio', 'HIIT', 'running', 'cycling'],

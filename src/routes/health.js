@@ -1,6 +1,8 @@
 import express from "express";
 import mongoose from "mongoose";
 import { createLLMService } from "../services/llmService.js";
+import websocketService from "../services/websocketService.js";
+import { log } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -31,7 +33,7 @@ router.get("/health", async (req, res) => {
         response_status: llmHealthCheck.responseStatus,
       };
     } catch (error) {
-      console.error("Health check OpenRouter test failed:", error.message);
+      log.error("Health check OpenRouter test failed", error);
       llmHealth = {
         status: "unreachable",
         service: "OpenRouter (GPT-4o)",
@@ -39,15 +41,26 @@ router.get("/health", async (req, res) => {
       };
     }
 
+    // Check WebSocket health
+    const wsStats = websocketService.getServerStats();
+    const wsHealth = {
+      status: websocketService.io ? "active" : "inactive",
+      connected_users: wsStats.connectedUsers,
+      total_rooms: wsStats.totalRooms,
+      uptime: wsStats.serverUptime
+    };
+
     const healthStatus = {
       server: "healthy",
       database: dbHealth,
       llm_api: llmHealth.status,
       llm_service: llmHealth.service,
       llm_response_status: llmHealth.response_status,
+      websocket: wsHealth.status,
+      websocket_stats: wsHealth
     };
 
-    const overallStatus = (dbHealth === "connected" && llmHealth.status === "accessible") 
+    const overallStatus = (dbHealth === "connected" && llmHealth.status === "accessible" && wsHealth.status === "active") 
       ? "success" 
       : "degraded";
 
@@ -58,7 +71,7 @@ router.get("/health", async (req, res) => {
       health: healthStatus 
     });
   } catch (err) {
-    console.error("Health check error:", err);
+    log.error("Health check error", err);
     res.status(500).json({ 
       status: "error", 
       message: "Health check failed",

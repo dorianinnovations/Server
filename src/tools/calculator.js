@@ -1,4 +1,4 @@
-export default async function calculator(args, userContext) {
+export default async function calculator(args, _userContext) {
   try {
     const { expression, type = 'basic' } = args;
     
@@ -17,7 +17,7 @@ export default async function calculator(args, userContext) {
     try {
       // Safe evaluation using Function constructor (limited scope)
       result = Function('"use strict"; return (' + sanitizedExpression + ')')();
-    } catch (evalError) {
+    } catch (_evalError) {
       throw new Error('Invalid mathematical expression');
     }
 

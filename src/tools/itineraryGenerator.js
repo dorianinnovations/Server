@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 export default async function itineraryGenerator(args, userContext) {
   const { 
     destination, 

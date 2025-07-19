@@ -60,6 +60,9 @@ export const createLLMService = () => {
         max_tokens: n_predict,
         temperature: temperature,
         ...(stop && { stop: stop }),
+        ...(options.top_p && { top_p: options.top_p }),
+        ...(options.frequency_penalty && { frequency_penalty: options.frequency_penalty }),
+        ...(options.presence_penalty && { presence_penalty: options.presence_penalty }),
       };
 
       // Add tool calling parameters if tools are provided
@@ -165,14 +168,31 @@ export const createLLMService = () => {
         stream: true,
       };
 
+      const requestSizeKB = Math.round(JSON.stringify(requestData).length / 1024);
       console.log(`🌊 OpenRouter streaming request:`, {
         model: requestData.model,
         messagesCount: requestData.messages.length,
         max_tokens: requestData.max_tokens,
         temperature: requestData.temperature,
         toolsCount: requestData.tools?.length || 0,
-        hasTools: !!requestData.tools
+        hasTools: !!requestData.tools,
+        requestSizeKB: requestSizeKB
       });
+
+      // Check if request is too large (OpenRouter limit is around 200KB)
+      if (requestSizeKB > 200) {
+        console.warn(`⚠️ Large request detected: ${requestSizeKB}KB - truncating messages`);
+        
+        // Keep system message and last 5 messages to stay under limit
+        const systemMessages = requestData.messages.filter(m => m.role === 'system');
+        const otherMessages = requestData.messages.filter(m => m.role !== 'system');
+        const recentMessages = otherMessages.slice(-5);
+        
+        requestData.messages = [...systemMessages, ...recentMessages];
+        
+        const newSizeKB = Math.round(JSON.stringify(requestData).length / 1024);
+        console.log(`📉 Truncated request: ${requestSizeKB}KB → ${newSizeKB}KB`);
+      }
 
       const response = await axios({
         method: "POST",
@@ -190,13 +210,32 @@ export const createLLMService = () => {
 
       return response;
     } catch (error) {
+      // Log the actual error response body for debugging
+      let errorDetails = '';
+      if (error.response?.data) {
+        try {
+          if (typeof error.response.data === 'string') {
+            errorDetails = error.response.data;
+          } else if (error.response.data.read) {
+            // Handle streaming response
+            const chunks = [];
+            for await (const chunk of error.response.data) {
+              chunks.push(chunk);
+            }
+            errorDetails = Buffer.concat(chunks).toString();
+          }
+        } catch (parseError) {
+          errorDetails = 'Could not parse error response';
+        }
+      }
+      
       console.error("OpenRouter Streaming API Error:", {
         name: error.name,
         message: error.message,
-        stack: error.stack,
         status: error.response?.status,
         statusText: error.response?.statusText,
-        data: error.response?.data,
+        errorDetails: errorDetails,
+        requestSize: JSON.stringify(requestData).length
       });
       if (error.response?.status === 401) {
         throw new Error("Invalid OpenRouter API key. Please check your OPENROUTER_API_KEY environment variable.");

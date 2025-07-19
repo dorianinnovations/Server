@@ -1,35 +1,34 @@
-import winston from "winston";
-import { format } from "winston";
+import winston, { format } from "winston";
 
-console.log("📝 Initializing logging system...");
+const isDevelopment = process.env.NODE_ENV === 'development';
 
-// Custom format for structured logging
+// Enhanced custom format for better readability
 const logFormat = format.combine(
   format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
   format.errors({ stack: true }),
-  format.json(),
-  format.printf(({ timestamp, level, message, ...meta }) => {
-    return JSON.stringify({
-      timestamp,
-      level,
-      message,
-      ...meta,
-    });
+  format.json()
+);
+
+// Console format with emojis for development
+const consoleFormat = format.combine(
+  format.colorize(),
+  format.timestamp({ format: "HH:mm:ss" }),
+  format.printf(({ timestamp, level, message, service, userId, ...meta }) => {
+    const serviceTag = service ? `[${service}]` : '';
+    const userTag = userId ? `{${userId}}` : '';
+    const metaStr = Object.keys(meta).length > 0 ? JSON.stringify(meta) : '';
+    return `${timestamp} ${level}${serviceTag}${userTag}: ${message} ${metaStr}`.trim();
   })
 );
 
-console.log("✓Log format configured");
-
-// Create logger instance
+// Create logger instance with environment-aware configuration
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
+  level: process.env.LOG_LEVEL || (isDevelopment ? "debug" : "info"),
   format: logFormat,
   transports: [
     new winston.transports.Console({
-      format: format.combine(
-        format.colorize(),
-        format.simple()
-      ),
+      format: consoleFormat,
+      silent: process.env.NODE_ENV === 'test'
     }),
     new winston.transports.File({
       filename: "logs/error.log",
@@ -41,66 +40,102 @@ const logger = winston.createLogger({
   ],
 });
 
-console.log("✓Winston logger instance created");
+// Structured logging helpers with emojis for categorization
+export const log = {
+  // System operations
+  system: (message, meta = {}) => logger.info(`🖥️  ${message}`, { service: 'SYSTEM', ...meta }),
+  database: (message, meta = {}) => logger.info(`🗄️  ${message}`, { service: 'DB', ...meta }),
+  auth: (message, meta = {}) => logger.info(`🔐 ${message}`, { service: 'AUTH', ...meta }),
+  api: (message, meta = {}) => logger.info(`📡 ${message}`, { service: 'API', ...meta }),
+  
+  // AI and tools
+  ai: (message, meta = {}) => logger.info(`🤖 ${message}`, { service: 'AI', ...meta }),
+  tool: (message, meta = {}) => logger.info(`🔧 ${message}`, { service: 'TOOL', ...meta }),
+  
+  // Performance and monitoring
+  perf: (message, meta = {}) => logger.info(`⚡ ${message}`, { service: 'PERF', ...meta }),
+  cache: (message, meta = {}) => logger.info(`💾 ${message}`, { service: 'CACHE', ...meta }),
+  
+  // Development only logs
+  debug: (message, meta = {}) => {
+    if (isDevelopment) {
+      logger.debug(`🔍 ${message}`, { service: 'DEBUG', ...meta });
+    }
+  },
+  
+  // Success operations
+  success: (message, meta = {}) => logger.info(`✅ ${message}`, { service: 'SUCCESS', ...meta }),
+  
+  // Warnings and errors
+  warn: (message, meta = {}) => logger.warn(`⚠️  ${message}`, { service: 'WARN', ...meta }),
+  error: (message, error, meta = {}) => {
+    const errorMeta = error ? { 
+      error: error.message, 
+      stack: error.stack,
+      ...meta 
+    } : meta;
+    logger.error(`❌ ${message}`, { service: 'ERROR', ...errorMeta });
+  }
+};
 
-// Performance tracking
-export const trackPerformance = (operation, startTime) => {
+if (isDevelopment) {
+  log.system("Logging system initialized");
+}
+
+// Performance tracking with structured logging
+export const trackPerformance = (operation, startTime, meta = {}) => {
   const duration = Date.now() - startTime;
-  logger.info("Performance tracked", {
-    operation,
-    duration,
-    timestamp: new Date().toISOString(),
-  });
+  log.perf(`${operation} completed`, { duration, ...meta });
   return duration;
 };
 
-console.log("✓Performance tracking function configured");
-
-// Request logging middleware
+// Request logging middleware with better structure
 export const requestLogger = (req, res, next) => {
   const startTime = Date.now();
   
-  // Log request
-  logger.info("Request received", {
-    method: req.method,
-    url: req.url,
-    ip: req.ip,
-    userAgent: req.get("User-Agent"),
-    userId: req.user?.id || "anonymous",
-  });
-
-  // Log response
-  res.on("finish", () => {
-    const duration = Date.now() - startTime;
-    logger.info("Request completed", {
+  // Only log non-health check requests to reduce noise
+  if (!req.url.includes('/health')) {
+    log.api("Request received", {
       method: req.method,
       url: req.url,
-      statusCode: res.statusCode,
-      duration,
-      userId: req.user?.id || "anonymous",
+      ip: req.ip,
+      userAgent: req.get("User-Agent"),
+      userId: req.user?.id
     });
+  }
+
+  res.on("finish", () => {
+    const duration = Date.now() - startTime;
+    
+    // Only log slow requests or errors in production
+    const shouldLog = isDevelopment || duration > 1000 || res.statusCode >= 400;
+    
+    if (shouldLog && !req.url.includes('/health')) {
+      const level = res.statusCode >= 400 ? 'warn' : 'info';
+      const message = res.statusCode >= 400 ? 'Request failed' : 'Request completed';
+      
+      log.api(message, {
+        method: req.method,
+        url: req.url,
+        statusCode: res.statusCode,
+        duration,
+        userId: req.user?.id
+      });
+    }
   });
 
   next();
 };
 
-console.log("✓Request logging middleware configured");
-
-// Error logging middleware
+// Enhanced error logging middleware
 export const errorLogger = (err, req, res, next) => {
-  logger.error("Error occurred", {
-    error: err.message,
-    stack: err.stack,
+  log.error("Request error", err, {
     method: req.method,
     url: req.url,
     ip: req.ip,
-    userId: req.user?.id || "anonymous",
+    userId: req.user?.id
   });
   next(err);
 };
-
-console.log("✓Error logging middleware configured");
-
-console.log("✓Logging system initialization completed");
 
 export default logger; 

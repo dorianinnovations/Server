@@ -611,7 +611,7 @@ class ConnectionEngine {
     return totalUniqueInterests > 0 ? sharedInterests.length / totalUniqueInterests : 0;
   }
 
-  generateSoulResonanceExplanation(score, components) {
+  generateSoulResonanceExplanation(score, _components) {
     if (score > 0.8) {
       return "Profound soul connection detected. Your fundamental natures resonate at the deepest level, suggesting a rare and meaningful bond.";
     } else if (score > 0.6) {
@@ -641,7 +641,7 @@ class ConnectionEngine {
     return stage1 === stage2 ? 1 : 0.6;
   }
 
-  calculateGoalAlignment(profile1, profile2) {
+  calculateGoalAlignment(_profile1, _profile2) {
     // Implementation for goal alignment calculation
     return 0.7; // Placeholder
   }
@@ -659,13 +659,13 @@ class ConnectionEngine {
   // Continue with other calculation methods...
   // (Additional methods would be implemented similarly)
 
-  async checkExistingConnection(userId1, userId2) {
+  async checkExistingConnection(_userId1, _userId2) {
     // Implementation to check if connection already exists
     // This would query a Connection model if it existed
     return false; // Placeholder
   }
 
-  async calculateDetailedCompatibility(userId1, userId2) {
+  async calculateDetailedCompatibility(_userId1, _userId2) {
     // Implementation for detailed compatibility calculation
     return 0.75; // Placeholder
   }
@@ -693,7 +693,7 @@ class ConnectionEngine {
     return interests1.filter(i => interests2.includes(i));
   }
 
-  findComplementaryTraits(profile1, profile2) {
+  findComplementaryTraits(_profile1, _profile2) {
     // Implementation for finding complementary personality traits
     return ['analytical-creative', 'structured-spontaneous']; // Placeholder
   }

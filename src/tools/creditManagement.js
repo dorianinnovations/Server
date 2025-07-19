@@ -275,7 +275,7 @@ async function disableAutoRecharge(creditPool) {
   };
 }
 
-async function processPayment(amount, paymentMethodId) {
+async function processPayment(amount, _paymentMethodId) {
   await new Promise(resolve => setTimeout(resolve, 1000));
   
   const success = Math.random() > 0.1;
@@ -460,7 +460,7 @@ async function removePaymentMethod(creditPool, paymentMethodId) {
   }
 }
 
-async function addFundsStripe(creditPool, amount, paymentMethodId, user) {
+async function addFundsStripe(creditPool, amount, paymentMethodId, _user) {
       // Simulate successful payment for testing without Stripe dependency
   const result = await stripeService.simulatePaymentSuccess('pi_test_' + Date.now());
 

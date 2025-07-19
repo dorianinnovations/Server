@@ -1,4 +1,4 @@
-export default async function translation(args, userContext) {
+export default async function translation(args, _userContext) {
   try {
     const { text, fromLanguage, toLanguage, includePhonetic = false } = args;
     
@@ -26,7 +26,7 @@ export default async function translation(args, userContext) {
   }
 }
 
-async function getGoogleTranslation(text, fromLanguage, toLanguage, includePhonetic) {
+async function getGoogleTranslation(text, fromLanguage, toLanguage, _includePhonetic) {
   const axios = (await import('axios')).default;
   const baseUrl = 'https://translation.googleapis.com/language/translate/v2';
   
@@ -59,7 +59,7 @@ async function getGoogleTranslation(text, fromLanguage, toLanguage, includePhone
       },
       message: `Translated from ${translation.detectedSourceLanguage || fromLanguage} to ${toLanguage}`
     };
-  } catch (error) {
+  } catch (_error) {
     throw new Error('Failed to translate using Google Translate API');
   }
 }

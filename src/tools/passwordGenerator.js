@@ -1,4 +1,4 @@
-export default async function passwordGenerator(args, userContext) {
+export default async function passwordGenerator(args, _userContext) {
   try {
     const { 
       action = 'generate', 

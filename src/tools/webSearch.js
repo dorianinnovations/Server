@@ -1,9 +1,10 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { URL } from 'url';
 
 dotenv.config();
 
-export default async function webSearch(args, userContext) {
+export default async function webSearch(args, _userContext) {
   const { 
     query, 
     searchType = 'general',

@@ -1,6 +1,6 @@
 import { createLLMService } from '../services/llmService.js';
 
-export default async function codeGenerator(args, userContext) {
+export default async function codeGenerator(args, _userContext) {
   try {
     const { language, description, framework, complexity = 'simple' } = args;
     

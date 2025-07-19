@@ -1,4 +1,4 @@
-export default async function weatherCheck(args, userContext) {
+export default async function weatherCheck(args, _userContext) {
   try {
     const { location, days = 1, units = 'metric' } = args;
     
@@ -57,12 +57,12 @@ async function getOpenWeatherData(location, days, units) {
       },
       message: `Current weather in ${data.name}: ${Math.round(data.main.temp)}°${units === 'metric' ? 'C' : 'F'}, ${data.weather[0].description}`
     };
-  } catch (error) {
+  } catch (_error) {
     throw new Error('Failed to fetch weather from OpenWeatherMap API');
   }
 }
 
-async function getWeatherFromWebSearch(location, days, units) {
+async function getWeatherFromWebSearch(location, _days, _units) {
   // Import the web search tool
   const webSearch = (await import('./webSearch.js')).default;
   

@@ -1,4 +1,4 @@
-export default async function textGenerator(args, userContext) {
+export default async function textGenerator(args, _userContext) {
   try {
     const { type, topic, tone = 'professional', length = 'medium', targetAudience } = args;
     

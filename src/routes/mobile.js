@@ -514,7 +514,7 @@ async function handleEmotionsRequest(userId, method, data) {
   }
 }
 
-async function handleAnalyticsRequest(userId, method, data) {
+async function handleAnalyticsRequest(userId, method, _data) {
   try {
     if (method === 'POST') {
       const cacheKey = `analytics:${userId}`;
@@ -541,7 +541,7 @@ async function handleAnalyticsRequest(userId, method, data) {
   }
 }
 
-async function handleChatHistoryRequest(userId, method, data) {
+async function handleChatHistoryRequest(userId, _method, _data) {
   try {
     const cacheKey = `chat:${userId}`;
     const cachedHistory = await redisService.get(cacheKey);
@@ -703,7 +703,7 @@ router.post('/upload',
 );
 
 // Helper function to process images
-async function processImage(buffer, fileData, userId) {
+async function processImage(buffer, fileData, _userId) {
   try {
     // Compress image using Sharp
     const compressedBuffer = await sharp(buffer)
@@ -734,7 +734,7 @@ async function processImage(buffer, fileData, userId) {
 }
 
 // Helper function to process text files
-async function processTextFile(buffer, fileData, userId) {
+async function processTextFile(buffer, fileData, _userId) {
   try {
     const textContent = buffer.toString('utf-8');
     
@@ -757,7 +757,7 @@ async function processTextFile(buffer, fileData, userId) {
 }
 
 // Helper function to process documents (PDF, etc.)
-async function processDocument(buffer, fileData, userId) {
+async function processDocument(buffer, fileData, _userId) {
   try {
     // For now, just store the document
     // In production, you could implement PDF text extraction using libraries like pdf-parse

@@ -1,4 +1,4 @@
-export default async function qrGenerator(args, userContext) {
+export default async function qrGenerator(args, _userContext) {
   try {
     const { content, type = 'text', size = 'medium' } = args;
     

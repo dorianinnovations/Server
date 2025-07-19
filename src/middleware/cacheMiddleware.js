@@ -248,8 +248,8 @@ export function redisRateLimit(options = {}) {
     windowMs = 15 * 60 * 1000, // 15 minutes
     max = 100, // limit each IP to 100 requests per windowMs
     keyGenerator = (req) => req.ip,
-    skipSuccessfulRequests = false,
-    skipFailedRequests = false
+    _skipSuccessfulRequests = false,
+    _skipFailedRequests = false
   } = options;
 
   return async (req, res, next) => {

@@ -58,18 +58,34 @@ class ToolExecutor {
   }
 
   isToolAvailable(tool, userContext) {
-    if (!tool.enabled) return false;
+    console.log(`🔍 TOOL AVAILABILITY CHECK: ${tool.name}`, {
+      enabled: tool.enabled,
+      requiresAuth: tool.requiresAuth,
+      userId: userContext.userId,
+      requiresPayment: tool.requiresPayment,
+      hasCreditPool: !!userContext.creditPool
+    });
     
-    if (tool.requiresAuth && !userContext.userId) return false;
+    if (!tool.enabled) {
+      console.log(`❌ Tool ${tool.name} is disabled`);
+      return false;
+    }
     
-    // Temporarily allow all tools regardless of subscription status
-    // TODO: Re-enable subscription gating after subscription system is fixed
+    if (tool.requiresAuth && !userContext.userId) {
+      console.log(`❌ Tool ${tool.name} requires auth but no userId`);
+      return false;
+    }
+    
+    // TEMPORARILY DISABLED: Allow all tools for testing performance and UBPM analysis
+    // Subscription gating completely disabled for premium speed testing
     // if (tool.name !== 'credit_management' && userContext.user && !userContext.user.hasActiveNuminaTrace()) {
     //   return false;
     // }
     
-    if (tool.requiresPayment && !userContext.creditPool) return false;
+    // TEMPORARILY DISABLED: Payment requirements for testing
+    // if (tool.requiresPayment && !userContext.creditPool) return false;
     
+    console.log(`✅ Tool ${tool.name} is available`);
     return true;
   }
 
@@ -93,18 +109,20 @@ class ToolExecutor {
     const taskId = await this.createTask(name, args, userContext.userId);
     
     try {
-      if (tool.requiresPayment) {
-        const creditPool = userContext.creditPool || await CreditPool.findOne({ userId: userContext.userId });
-        if (!creditPool || !creditPool.canSpend(tool.costPerExecution)) {
-          throw new Error('Insufficient credits or spending limit exceeded');
-        }
-      }
+      // TEMPORARILY DISABLED: Payment requirements for testing
+      // if (tool.requiresPayment) {
+      //   const creditPool = userContext.creditPool || await CreditPool.findOne({ userId: userContext.userId });
+      //   if (!creditPool || !creditPool.canSpend(tool.costPerExecution)) {
+      //     throw new Error('Insufficient credits or spending limit exceeded');
+      //   }
+      // }
 
       const result = await this.runToolImplementation(tool, args, userContext);
       
-      if (tool.requiresPayment && result.success) {
-        await this.deductCredits(userContext.userId, tool.costPerExecution, tool.name, taskId);
-      }
+      // TEMPORARILY DISABLED: Credit deduction for testing
+      // if (tool.requiresPayment && result.success) {
+      //   await this.deductCredits(userContext.userId, tool.costPerExecution, tool.name, taskId);
+      // }
 
       await this.updateTask(taskId, 'completed', result);
       // await this.updateToolMetrics(tool.name, true); // Temporarily disabled for optimization

@@ -368,6 +368,7 @@ async function handleStreamingResponse(res, messages, userId, userMessage, behav
 
     let buffer = '';
     let fullContent = '';
+    let chunkBuffer = ''; // Buffer for natural streaming pace
     
     streamResponse.data.on('data', (chunk) => {
       buffer += chunk.toString();
@@ -379,6 +380,10 @@ async function handleStreamingResponse(res, messages, userId, userMessage, behav
           const data = line.substring(6).trim();
           
           if (data === '[DONE]') {
+            // Send any remaining buffered content before ending
+            if (chunkBuffer) {
+              res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\\n\\n`);
+            }
             res.write('data: [DONE]\\n\\n');
             res.end();
             return;
@@ -389,7 +394,16 @@ async function handleStreamingResponse(res, messages, userId, userMessage, behav
             if (parsed.choices?.[0]?.delta?.content) {
               const content = parsed.choices[0].delta.content;
               fullContent += content;
-              res.write(`data: ${JSON.stringify({ content })}\\n\\n`);
+              
+              // NATURAL READING PACE: Buffer content like main AI endpoint
+              chunkBuffer += content;
+              
+              if (chunkBuffer.length >= 15 || 
+                  (chunkBuffer.length >= 8 && (content.includes(' ') || content.includes('\n'))) ||
+                  content.includes('.') || content.includes('!') || content.includes('?')) {
+                res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\\n\\n`);
+                chunkBuffer = '';
+              }
             }
           } catch (e) {
             logger.error('Error parsing streaming data:', e);

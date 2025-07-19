@@ -5,7 +5,6 @@ import { createLLMService } from "../services/llmService.js";
 import { createUserCache } from "../utils/cache.js";
 import { getRecentMemory } from "../utils/memory.js";
 import User from "../models/User.js";
-import ShortTermMemory from "../models/ShortTermMemory.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
 import logger from "../utils/logger.js";
 
@@ -387,7 +386,7 @@ Return a JSON structure with cascading recommendations and reasoning tree.`;
     }
     
     return aiResponse;
-  } catch (parseError) {
+  } catch {
     console.warn("Failed to parse AI response as JSON, creating fallback structure");
     
     // Fallback structure if JSON parsing fails
@@ -573,7 +572,7 @@ function analyzeInteractionPatterns(recentMemory) {
   return patterns;
 }
 
-function identifyGrowthAreas(user, behaviorProfile) {
+function identifyGrowthAreas(_user, _behaviorProfile) {
   return {
     primary: 'self-awareness',
     secondary: 'goal-setting',
@@ -618,7 +617,7 @@ function calculateConfidenceScore(userContext) {
   return Math.min(0.95, confidence);
 }
 
-function extractPrimaryFactors(userContext) {
+function extractPrimaryFactors(_userContext) {
   return [
     'Emotional pattern analysis',
     'Behavioral interaction history',
@@ -700,7 +699,7 @@ Return a JSON structure with cascading recommendations and reasoning tree.`;
     }
     
     return aiResponse;
-  } catch (parseError) {
+  } catch {
     console.warn("Failed to parse AI response as JSON, creating fallback structure");
     
     if (onChunk) {

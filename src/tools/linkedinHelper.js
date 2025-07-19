@@ -1,4 +1,4 @@
-export default async function linkedinHelper(args, userContext) {
+export default async function linkedinHelper(args, _userContext) {
   try {
     const { type, topic, industry, tone = 'professional' } = args;
     

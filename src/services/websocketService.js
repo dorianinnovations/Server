@@ -1,6 +1,6 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import logger from '../utils/logger.js';
+import { log } from '../utils/logger.js';
 import User from '../models/User.js';
 
 /**
@@ -54,7 +54,7 @@ class WebSocketService {
         
         next();
       } catch (error) {
-        logger.error('WebSocket authentication error:', error);
+        log.error('WebSocket authentication error', error);
         next(new Error('Authentication failed'));
       }
     });
@@ -64,7 +64,7 @@ class WebSocketService {
       this.handleConnection(socket);
     });
 
-    logger.info('WebSocket service initialized successfully');
+    log.success('WebSocket service initialized successfully');
   }
 
   /**
@@ -72,7 +72,7 @@ class WebSocketService {
    */
   handleConnection(socket) {
     const userId = socket.userId;
-    logger.info(`User connected: ${userId}`);
+    log.system(`User connected: ${userId}`);
 
     // Store user connection
     this.connectedUsers.set(userId, {
@@ -132,7 +132,7 @@ class WebSocketService {
       }
       this.userRooms.get(userId).add(roomId);
 
-      logger.info(`User ${userId} joined room ${roomId}`);
+      log.debug(`User ${userId} joined room ${roomId}`);
       
       // Notify others in room
       socket.to(roomId).emit('user_joined', {
@@ -176,7 +176,7 @@ class WebSocketService {
       // Broadcast to room
       this.io.to(roomId).emit('new_message', messageData);
       
-      logger.info(`Message sent in room ${roomId} by user ${userId}`);
+      log.debug(`Message sent in room ${roomId} by user ${userId}`);
     });
 
     // Handle typing indicators
@@ -222,7 +222,7 @@ class WebSocketService {
       };
 
       socket.emit('room_created', roomData);
-      logger.info(`Room created: ${roomId} by user ${userId}`);
+      log.debug(`Room created: ${roomId} by user ${userId}`);
     });
 
     // Get room info
@@ -327,7 +327,7 @@ class WebSocketService {
         });
       }
 
-      logger.info(`Emotion update from user ${userId}: ${emotion} (${intensity})`);
+      log.debug(`Emotion update from user ${userId}: ${emotion} (${intensity})`);
     });
 
     // Live emotional sharing with trusted contacts
@@ -348,7 +348,7 @@ class WebSocketService {
       // Send to specific user
       if (targetUserId) {
         socket.to(`user:${targetUserId}`).emit('emotional_share_received', shareData);
-        logger.info(`Emotional state shared from ${userId} to ${targetUserId}: ${emotion}`);
+        log.debug(`Emotional state shared from ${userId} to ${targetUserId}: ${emotion}`);
       }
 
       // Confirm sharing to sender
@@ -380,7 +380,7 @@ class WebSocketService {
         timestamp: new Date()
       });
 
-      logger.info(`Support request from user ${userId} (anonymous: ${anonymous})`);
+      log.system(`Support request from user ${userId} (anonymous: ${anonymous})`);
     });
 
     // Real-time growth milestone celebrations
@@ -407,7 +407,7 @@ class WebSocketService {
         message: shareWithCommunity ? 'Milestone shared with community!' : 'Milestone celebrated privately!'
       });
 
-      logger.info(`Milestone celebrated by user ${userId}: ${title}`);
+      log.debug(`Milestone celebrated by user ${userId}: ${title}`);
     });
   }
 
@@ -416,7 +416,7 @@ class WebSocketService {
    */
   handleDisconnection(socket) {
     const userId = socket.userId;
-    logger.info(`User disconnected: ${userId}`);
+    log.system(`User disconnected: ${userId}`);
 
     // Remove from connected users
     this.connectedUsers.delete(userId);

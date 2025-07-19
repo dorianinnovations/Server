@@ -1,14 +1,13 @@
 import mongoose from "mongoose";
 import { env } from "./environment.js";
 import { DB_CONFIG } from "./constants.js";
-
-console.log("🗄️ Initializing database connection...");
+import { log } from "../utils/logger.js";
 
 // Optimized Database Connection with enhanced pool settings
 const connectDB = async () => {
   try {
-    console.log("🔗 Attempting MongoDB connection...");
-    console.log("📊 Using optimized connection pool settings");
+    log.database("Attempting MongoDB connection");
+    log.debug("Using optimized connection pool settings");
     
     await mongoose.connect(env.MONGO_URI, {
       // Use centralized connection pool settings
@@ -24,30 +23,30 @@ const connectDB = async () => {
       retryWrites: true, // Enable write retries
     });
     
-    console.log("✓MongoDB connected with optimized pool settings");
+    log.success("MongoDB connected with optimized pool settings");
     
     // Log connection pool events for monitoring
     mongoose.connection.on('connected', () => {
-      console.log('✓MongoDB connection established');
+      log.database('MongoDB connection established');
     });
     
     mongoose.connection.on('error', (err) => {
-      console.error('✗MongoDB connection error:', err);
+      log.error('MongoDB connection error', err);
     });
     
     mongoose.connection.on('disconnected', () => {
-      console.log('⚠️MongoDB disconnected');
+      log.warn('MongoDB disconnected');
     });
     
     // Monitor connection pool
     mongoose.connection.on('fullsetup', () => {
-      console.log('✓MongoDB replica set connected');
+      log.database('MongoDB replica set connected');
     });
     
-    console.log("✓Database connection monitoring configured");
+    log.success("Database connection monitoring configured");
     
   } catch (err) {
-    console.error("✗ MongoDB connection error:", err);
+    log.error("MongoDB connection error", err);
     if (env.NODE_ENV !== 'test') {
       process.exit(1); // Only exit in non-test environments
     } else {
@@ -79,9 +78,9 @@ export const checkDBHealth = () => {
 export const gracefulShutdown = async () => {
   try {
     await mongoose.connection.close();
-    console.log('✓MongoDB connection closed gracefully');
+    log.database('MongoDB connection closed gracefully');
   } catch (err) {
-    console.error('✗Error closing MongoDB connection:', err);
+    log.error('Error closing MongoDB connection', err);
   }
 };
 

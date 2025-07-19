@@ -264,7 +264,7 @@ Make it personal, empathetic, and authentic. Numina should react to patterns, sh
       } else {
         throw new Error('No JSON found in response');
       }
-    } catch (parseError) {
+    } catch {
       logger.warn('Failed to parse AI response, using fallback');
       parsedResponse = generateFallbackNuminaState(userContext);
     }
@@ -321,7 +321,7 @@ Be authentic, caring, and responsive to the user's emotional state.`;
       } else {
         throw new Error('No JSON found in response');
       }
-    } catch (parseError) {
+    } catch {
       parsedResponse = {
         emotion: 'understanding',
         intensity: 6,
@@ -496,7 +496,7 @@ function getTimeOfDay() {
   return 'night';
 }
 
-function generateFallbackNuminaState(userContext) {
+function generateFallbackNuminaState(_userContext) {
   const emotions = ['curious', 'thoughtful', 'empathetic', 'calm', 'attentive'];
   const thoughts = [
     'I\'m sensing your presence and energy',
