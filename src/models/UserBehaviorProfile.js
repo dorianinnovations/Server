@@ -180,6 +180,16 @@ const userBehaviorProfileSchema = new mongoose.Schema({
     analyticsLevel: { type: String, enum: ['basic', 'standard', 'comprehensive'], default: 'standard' }
   },
   
+  // Unified Intelligence Engine Data
+  intelligenceData: {
+    lastAnalysis: { type: Date },
+    micro: { type: mongoose.Schema.Types.Mixed },
+    medium: { type: mongoose.Schema.Types.Mixed }, 
+    macro: { type: mongoose.Schema.Types.Mixed },
+    synthesis: { type: mongoose.Schema.Types.Mixed },
+    performance: { type: mongoose.Schema.Types.Mixed }
+  },
+  
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -344,6 +354,6 @@ userBehaviorProfileSchema.set('toObject', { virtuals: true });
 
 const UserBehaviorProfile = mongoose.model("UserBehaviorProfile", userBehaviorProfileSchema);
 
-console.log("✓ UserBehaviorProfile schema and model defined.");
+// Model ready
 
 export default UserBehaviorProfile;

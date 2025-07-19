@@ -169,6 +169,7 @@ router.delete("/delete/:userId?", protect, async (req, res) => {
     });
 
     res.json({
+      success: true,
       status: MESSAGES.SUCCESS,
       message: "Account and all associated data have been permanently deleted",
       deletedItems: deletedCounts
@@ -177,6 +178,7 @@ router.delete("/delete/:userId?", protect, async (req, res) => {
   } catch (error) {
     logger.error("Account deletion error:", error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
       status: MESSAGES.ERROR,
       message: "Failed to delete account. Please try again or contact support."
     });

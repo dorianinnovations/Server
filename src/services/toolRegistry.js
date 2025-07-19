@@ -931,7 +931,7 @@ class ToolRegistry {
       await toolExecutor.loadTools();
       
       this.initialized = true;
-      console.log('Tool registry initialized successfully');
+      console.log('🔧 TOOL REGISTRY: Ready');
     } catch (error) {
       console.error('Error initializing tool registry:', error);
       throw error;
@@ -960,7 +960,7 @@ class ToolRegistry {
             'meta.lastUpdated': new Date()
           }
         );
-        console.log(`Updated tool: ${toolConfig.name}`);
+        // Tool updated silently
       } else {
         const tool = new Tool(toolConfig);
         await tool.save();

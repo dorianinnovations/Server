@@ -149,6 +149,6 @@ emotionalAnalyticsSessionSchema.set('toObject', { virtuals: true });
 
 const EmotionalAnalyticsSession = mongoose.model("EmotionalAnalyticsSession", emotionalAnalyticsSessionSchema);
 
-console.log("✓EmotionalAnalyticsSession schema and model defined.");
+// Model ready
 
 export default EmotionalAnalyticsSession; 

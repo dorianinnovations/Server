@@ -255,6 +255,6 @@ userConstantsSchema.methods.getContextSummary = function() {
 
 const UserConstants = mongoose.model("UserConstants", userConstantsSchema);
 
-console.log("✓ UserConstants schema and model defined.");
+// Model ready
 
 export default UserConstants;

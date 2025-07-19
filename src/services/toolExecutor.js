@@ -32,7 +32,7 @@ class ToolExecutor {
         this.toolCache.set(tool.name, tool);
       }
       
-      console.log(`Loaded ${tools.length} tools into cache`);
+      console.log(`🔧 TOOLS: ${tools.length} loaded`);
     } catch (error) {
       console.error('Error loading tools:', error);
     }

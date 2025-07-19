@@ -12,6 +12,7 @@ import UserConstants from '../models/UserConstants.js';
 import CreditPool from '../models/CreditPool.js';
 import CollectiveSnapshot from '../models/CollectiveSnapshot.js';
 import CollectiveDataConsent from '../models/CollectiveDataConsent.js';
+import requestCacheService from '../services/requestCacheService.js';
 
 const router = express.Router();
 
@@ -279,6 +280,27 @@ router.get('/debug/db-overview', async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to get database overview',
+      details: error.message
+    });
+  }
+});
+
+// Clear cache endpoint for testing
+router.post('/debug/clear-cache', async (req, res) => {
+  try {
+    const userId = req.user?.id; // Get from auth middleware if available
+    
+    if (userId) {
+      await requestCacheService.clearUserCache(userId);
+      res.json({ success: true, message: `Cache cleared for user ${userId}` });
+    } else {
+      // Clear all memory cache (dangerous in production)
+      requestCacheService.memoryCache.clear();
+      res.json({ success: true, message: 'All cache cleared' });
+    }
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to clear cache',
       details: error.message
     });
   }

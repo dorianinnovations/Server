@@ -274,6 +274,6 @@ collectiveSnapshotSchema.set('toObject', { virtuals: true });
 
 const CollectiveSnapshot = mongoose.model("CollectiveSnapshot", collectiveSnapshotSchema);
 
-console.log("✓CollectiveSnapshot schema and model defined.");
+// Model ready
 
 export default CollectiveSnapshot; 

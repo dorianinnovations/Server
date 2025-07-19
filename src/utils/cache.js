@@ -209,7 +209,7 @@ export const setupMemoryMonitoring = () => {
   console.log("✓Memory monitoring configured");
 };
 
-console.log("✓Cache system initialization completed");
+// Component ready
 
 // Export the global cache instance
 export default globalCache;

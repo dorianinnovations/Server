@@ -22,6 +22,6 @@ const ShortTermMemory = mongoose.model(
   "ShortTermMemory",
   shortTermMemorySchema
 );
-console.log("✓ShortTermMemory schema and model defined.");
+// Model ready
 
 export default ShortTermMemory; 

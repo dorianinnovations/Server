@@ -84,7 +84,7 @@ export const performanceMiddleware = (req, res, next) => {
   next();
 };
 
-console.log("✓Performance middleware ready");
+// Middleware ready
 
 export const completionPerformanceMiddleware = (req, res, next) => {
   const start = Date.now();
@@ -125,7 +125,7 @@ export const completionPerformanceMiddleware = (req, res, next) => {
   next();
 };
 
-console.log("✓Completion performance middleware ready");
+// Middleware ready
 
 // Helper function to track database operations
 export const trackDatabaseOperation = async (operation, operationFn, req = null) => {

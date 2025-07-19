@@ -862,7 +862,7 @@ router.post("/completion", protect, async (req, res) => {
       tokensSaved: savings.tokensSaved,
       costSaved: savings.costSaved,
       memoryUsed: recentMemory.length,
-      strategy: `${incrementalResult.stats.strategy}-${contextType}`
+      strategy: `${incrementalResult.stats?.strategy || 'fallback'}-${contextType}`
     });
 
   } catch (err) {

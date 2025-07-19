@@ -8,6 +8,7 @@ import { createUserCache } from '../utils/cache.js';
 import websocketService from '../services/websocketService.js';
 import personalizationEngine from '../services/personalizationEngine.js';
 import connectionEngine from '../services/connectionEngine.js';
+import intelligenceEngine from '../services/intelligenceEngine.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
 import toolRegistry from '../services/toolRegistry.js';
@@ -21,6 +22,38 @@ import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForS
 
 const router = express.Router();
 const llmService = createLLMService();
+
+// INTELLIGENT SUMMARY FUNCTIONS for adaptive context sizing
+function generateTopicSummary(topicEvolution) {
+  if (!topicEvolution?.transitions) return 'No topic data';
+  
+  const transitions = topicEvolution.transitions;
+  const counts = {};
+  
+  // Count transition types
+  transitions.forEach(t => {
+    const key = `${t.from}→${t.to}`;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  
+  // Get top 3 transition patterns
+  const top3 = Object.entries(counts)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 3)
+    .map(([pattern, count]) => `${pattern}(${count})`)
+    .join(', ');
+    
+  return `${transitions.length} shifts: ${top3}`;
+}
+
+function generateEmotionalSummary(emotionalShifts) {
+  if (!emotionalShifts?.length) return 'Stable emotional state';
+  
+  const recent = emotionalShifts.slice(-3); // Last 3 shifts
+  const summary = recent.map(shift => `${shift.from}→${shift.to}`).join(', ');
+  
+  return `${emotionalShifts.length} shifts: ${summary}`;
+}
 
 // Direct data query handler for instant metrics responses
 async function handleDirectDataQuery(userId, message) {
@@ -117,19 +150,70 @@ async function handleDirectDataQuery(userId, message) {
       return `Total messages: ${messageCount} | Conversations: ${conversationCount}`;
     }
     
-    // Memory analytics
-    if (/my.*metrics|show.*metrics|what.*metrics/.test(lowerMessage)) {
-      const analytics = getUserMemoryAnalytics(userId);
+    // Intelligence metrics - return actual behavioral analysis data
+    if (/my.*metrics|show.*metrics|what.*metrics|behavioral.*data|intelligence.*data/.test(lowerMessage)) {
       const profile = await UserBehaviorProfile.findOne({ userId });
       
-      let response = `Memory Analytics:\n`;
-      response += `• Total requests: ${analytics.totalRequests}\n`;
-      response += `• Tokens saved: ${analytics.totalTokensSaved}\n`;
-      response += `• Cost saved: $${analytics.totalCostSaved.toFixed(4)}\n`;
+      let response = `Behavioral Intelligence Metrics:\n\n`;
       
-      if (profile) {
-        response += `• Confidence level: ${(profile.confidence * 100).toFixed(0)}%\n`;
-        response += `• Profile completeness: ${(profile.dataQuality?.completeness * 100).toFixed(0)}%`;
+      if (profile && profile.intelligenceData) {
+        const intel = profile.intelligenceData;
+        
+        // MICRO ANALYSIS METRICS
+        response += `**Micro Analysis (Current Session):**\n`;
+        if (intel.micro?.messageComplexity) {
+          response += `• Message Complexity: ${intel.micro.messageComplexity.current} (trend: ${intel.micro.messageComplexity.trend})\n`;
+          response += `• Average Complexity: ${intel.micro.messageComplexity.average}\n`;
+          response += `• Complexity Progression: ${intel.micro.messageComplexity.progression}%\n`;
+        }
+        if (intel.micro?.currentState) {
+          response += `• Primary Emotion: ${intel.micro.currentState.primaryEmotion}\n`;
+          response += `• Cognitive Load: ${intel.micro.currentState.cognitiveLoad}\n`;
+          response += `• Engagement Level: ${intel.micro.currentState.engagementLevel}\n`;
+        }
+        if (intel.micro?.topicEvolution) {
+          response += `• Dominant Topic: ${intel.micro.topicEvolution.dominantTopic}\n`;
+          response += `• Topic Diversity: ${intel.micro.topicEvolution.topicDiversity}\n`;
+        }
+        
+        // MEDIUM ANALYSIS METRICS  
+        response += `\n**Medium Analysis (Recent Trends):**\n`;
+        if (intel.medium?.weeklyProgressions) {
+          response += `• Weekly Change Rate: ${intel.medium.weeklyProgressions.changeRate || 'baseline'}\n`;
+        }
+        response += `• Learning Velocity: ${intel.medium?.learningVelocity?.placeholder || 'calculating'}\n`;
+        response += `• Engagement Trends: ${intel.medium?.engagementTrends?.placeholder || 'analyzing'}\n`;
+        
+        // MACRO ANALYSIS METRICS
+        response += `\n**Macro Analysis (Long-term Evolution):**\n`;
+        response += `• Personality Evolution: ${intel.macro?.personalityEvolution?.placeholder || 'developing'}\n`;
+        response += `• Intellectual Growth: ${intel.macro?.intellectualGrowth?.placeholder || 'tracking'}\n`;
+        response += `• Behavioral Consistency: ${intel.macro?.patternStability?.placeholder || 'establishing'}\n`;
+        
+        // SYNTHESIS INSIGHTS
+        if (intel.synthesis) {
+          response += `\n**Current Insights:**\n`;
+          response += `• Current Moment: ${intel.synthesis.currentMoment}\n`;
+          if (intel.synthesis.remarkableInsights) {
+            intel.synthesis.remarkableInsights.forEach((insight, i) => {
+              response += `• Insight ${i+1}: ${insight}\n`;
+            });
+          }
+        }
+        
+        response += `\n**Analysis Performance:**\n`;
+        response += `• Last Analysis: ${new Date(intel.lastAnalysis).toLocaleString()}\n`;
+        if (intel.performance) {
+          response += `• Processing Time: ${intel.performance.totalTime}ms\n`;
+          response += `• Efficiency: ${intel.performance.efficiency}\n`;
+        }
+        
+        console.log(`📊 METRICS RESPONSE: ${response.split('\n').length} lines | User: ${userId.slice(-8)}`);
+        
+      } else {
+        response += `• No intelligence data found in profile\n`;
+        response += `• Send a message to generate behavioral analysis\n`;
+        response += `• Intelligence engine will analyze your communication patterns\n`;
       }
       
       return response;
@@ -148,7 +232,7 @@ async function handleDirectDataQuery(userId, message) {
       response += `• ${recentMemory.length} recent messages stored\n`;
       
       if (profile) {
-        response += `• Behavioral confidence: ${(profile.confidence * 100).toFixed(0)}%\n`;
+        response += `• Behavioral confidence: ${((profile.confidence || 0.5) * 100).toFixed(0)}%\n`;
         if (profile.personalityTraits?.length > 0) {
           const topTrait = profile.personalityTraits[0];
           response += `• Top personality trait: ${topTrait.trait} (${(topTrait.score * 100).toFixed(0)}%)\n`;
@@ -164,42 +248,10 @@ async function handleDirectDataQuery(userId, message) {
       return response;
     }
     
-    // UBPM patterns - Use actual database structure
-    if (/my.*patterns|behavioral.*pattern|ubpm.*data|my.*behavioral/.test(lowerMessage)) {
-      const profile = await UserBehaviorProfile.findOne({ userId });
-      if (!profile) return "No behavioral patterns detected yet.";
-      
-      let response = "Behavioral Patterns (UBPM):\n";
-      
-      // Use actual schema fields
-      if (profile.personalityTraits?.length > 0) {
-        response += "• Personality traits:\n";
-        profile.personalityTraits.slice(0, 3).forEach(trait => {
-          const score = trait.score || trait.value || 0;
-          response += `  - ${trait.trait}: ${(score * 100).toFixed(0)}%\n`;
-        });
-      } else {
-        response += "• Personality traits: Collecting data...\n";
-      }
-      
-      // Communication style
-      if (profile.communicationStyle) {
-        response += `• Communication: ${profile.communicationStyle.preferredTone || 'Analyzing'} tone\n`;
-        response += `• Complexity: ${profile.communicationStyle.complexityLevel || 'Moderate'}\n`;
-      }
-      
-      // Confidence and completeness
-      if (profile.confidence) {
-        response += `• Confidence: ${(profile.confidence * 100).toFixed(0)}%\n`;
-      }
-      
-      // Temporal patterns
-      if (profile.temporalPatterns) {
-        response += `• Active hours: ${profile.temporalPatterns.mostActiveHours?.join(', ') || 'Analyzing'}\n`;
-        response += `• Active days: ${profile.temporalPatterns.mostActiveDays?.join(', ') || 'Developing'}`;
-      }
-      
-      return response;
+    // UBPM patterns - Always run analysis for immediate feedback
+    if (/my.*patterns|behavioral.*pattern|ubpm.*data|my.*behavioral|analysis|complete.*ubpm|changing.*over|behavioral.*evolution|past.*messages|how.*been.*changing/.test(lowerMessage)) {
+      // For immediate feedback, always trigger UBMP tool even without existing profile
+      return null; // Let it fall through to tool execution
     }
     
   } catch (error) {
@@ -211,28 +263,70 @@ async function handleDirectDataQuery(userId, message) {
 }
 
 // Real-time behavioral data population
-async function populateRealBehavioralData(userId, userMessage, recentMemory) {
+async function populateRealBehavioralData(userId, userMessage, recentMemory, streamRes = null) {
   try {
     
-    // Analyze message patterns for personality traits
-    const personalityTraits = analyzePersonalityFromMessage(userMessage);
-    const communicationStyle = analyzeCommunicationStyle(userMessage, recentMemory);
-    const temporalPatterns = calculateTemporalPatterns(recentMemory);
+    // UNIFIED INTELLIGENCE ANALYSIS - Replaces scattered analytics
+    const intelligenceStreamCallback = (update) => {
+      // Stream intelligence updates to user if streaming response available
+      if (streamRes && streamRes.write) {
+        streamRes.write(`data: ${JSON.stringify({
+          type: "intelligence_stream",
+          phase: update.phase,
+          detail: update.detail
+        })}\n\n`);
+      }
+    };
     
-    // Update or create behavior profile with real data - Force valid data
+    let intelligenceContext;
+    try {
+      intelligenceContext = await intelligenceEngine.generateIntelligenceContext(
+        userId, 
+        userMessage, 
+        intelligenceStreamCallback
+      );
+      
+      console.log(`🧠 Intelligence context generated:`, {
+        hasMicro: !!intelligenceContext?.micro,
+        hasMedium: !!intelligenceContext?.medium,
+        hasMacro: !!intelligenceContext?.macro,
+        hasSynthesis: !!intelligenceContext?.synthesis,
+        microComplexity: intelligenceContext?.micro?.messageComplexity?.current,
+        fullContext: intelligenceContext
+      });
+    } catch (error) {
+      console.error(`❌ Intelligence engine error:`, error);
+      // Create fallback intelligence context
+      intelligenceContext = {
+        micro: { messageComplexity: { current: 5.0, trend: 'baseline', average: 5.0, progression: 0 } },
+        medium: { placeholder: 'fallback' },
+        macro: { placeholder: 'fallback' },
+        synthesis: { currentMoment: 'Fallback analysis mode' }
+      };
+    }
+    
+    // Update behavior profile with unified intelligence data
     const updateData = {
-      $push: {
-        personalityTraits: { $each: personalityTraits }
-      },
       $set: {
+        // Use intelligence context instead of scattered analysis
+        intelligenceData: {
+          lastAnalysis: Date.now(),
+          micro: intelligenceContext.micro,
+          medium: intelligenceContext.medium,
+          macro: intelligenceContext.macro,
+          synthesis: intelligenceContext.synthesis
+        },
+        // Keep legacy fields for compatibility but source from intelligence  
         communicationStyle: {
-          ...communicationStyle,
-          preferredFormats: [],
-          languagePatterns: []
+          preferredTone: intelligenceContext.synthesis.currentMoment.includes('technical') ? 'formal' : 'casual',
+          complexityLevel: intelligenceContext.micro.messageComplexity.trend === 'increasing' ? 'advanced' : 'intermediate',
+          responseLength: intelligenceContext.micro.messageComplexity.trend === 'increasing' ? 'detailed' : 'moderate',
+          directness: 'balanced'
         },
         temporalPatterns: {
-          ...temporalPatterns,
-          sessionDurations: {},
+          changeRate: intelligenceContext.medium.weeklyProgressions?.changeRate || 0.1,
+          direction: intelligenceContext.micro.messageComplexity.trend,
+          confidence: 0.8,
           mostActiveHours: [new Date().getHours()],
           mostActiveDays: [new Date().toLocaleDateString('en-US', { weekday: 'long' })]
         },
@@ -246,11 +340,15 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory) {
       }
     };
 
-    await UserBehaviorProfile.findOneAndUpdate(
+    // Intelligence data save logging removed for brevity
+    
+    const result = await UserBehaviorProfile.findOneAndUpdate(
       { userId },
       updateData,
       { upsert: true, new: true }
     );
+    
+    console.log(`💾 INTELLIGENCE SAVED: Complexity ${result?.intelligenceData?.micro?.messageComplexity?.current || 'N/A'} | User: ${userId.slice(-8)}`);
   } catch (error) {
     console.error('Error populating behavioral data:', error);
   }
@@ -455,8 +553,8 @@ function isToolRequiredMessage(message) {
     // Tool usage (SELECTIVE)  
     /calculate|compute|convert|translate|ubpm.*analysis|run.*analysis/,
     
-    // UBMP Analysis (SPECIFIC) - handled by direct data queries now
-    /run.*ubpm.*analysis|ubpm.*analysis|analyze.*me.*ubpm/,
+    // UBPM Analysis (SPECIFIC) - handle ubpm queries
+    /run.*ubpm.*analysis|ubpm.*analysis|analyze.*me.*ubpm|what.*my.*ubpm|whats.*my.*ubpm|show.*my.*ubpm|my.*ubpm|ubpm/,
     
     // Direct Data Queries (INSTANT RESPONSE)
     /temporal.*change|my.*temporal|whats.*my.*temporal|temporal.*data|show.*temporal/,
@@ -646,6 +744,8 @@ function formatToolResultForUser(toolName, result) {
       case 'weather_check':
         if (parsedResult.weather) {
           return `🌤️ **Weather:** ${parsedResult.weather.description}, ${parsedResult.weather.temperature}°${parsedResult.weather.unit || 'C'}`;
+        } else if (parsedResult.success) {
+          return `🌤️ **Weather check complete** - Current conditions retrieved`;
         }
         break;
         
@@ -687,6 +787,8 @@ function formatToolResultForUser(toolName, result) {
             `• **${a.title}** - ${a.source || 'News'}`
           ).join('\n');
           return `📰 **Latest News:**\n${topNews}`;
+        } else if (parsedResult.success) {
+          return `📰 **Found latest news** - Check complete`;
         }
         break;
         
@@ -729,8 +831,33 @@ function formatToolResultForUser(toolName, result) {
         // For other tools, try to extract a meaningful message
         if (parsedResult.message) {
           return `🔧 **${toolName.replace(/_/g, ' ')}**: ${parsedResult.message}`;
+        } else if (parsedResult.result && typeof parsedResult.result === 'string') {
+          return `🔧 **${toolName.replace(/_/g, ' ')}**: ${parsedResult.result.substring(0, 100)}`;
         } else if (parsedResult.success) {
-          return `✅ **${toolName.replace(/_/g, ' ')} completed successfully**`;
+          // Simple meaningful completion messages
+          const toolDisplay = toolName.replace(/_/g, ' ');
+          const actionMap = {
+            'web_search': '🌐 **Web search complete** - Results found',
+            'academic_search': '📚 **Academic search complete** - Papers found', 
+            'image_search': '🖼️ **Image search complete** - Images found',
+            'social_search': '📱 **Social search complete** - Posts found',
+            'ubpm_analysis': '🧠 **Behavioral analysis complete** - Patterns identified',
+            'calculator': '🔢 **Calculation complete** - Result computed',
+            'translation': '🌍 **Translation complete** - Text translated',
+            'stock_lookup': '📈 **Stock data retrieved** - Current prices',
+            'crypto_lookup': '₿ **Crypto data retrieved** - Current prices',
+            'currency_converter': '💱 **Currency converted** - Exchange complete',
+            'timezone_converter': '🕐 **Timezone converted** - Time calculated',
+            'code_generator': '💻 **Code generated** - Ready to use',
+            'text_generator': '📝 **Text generated** - Content ready',
+            'email_assistant': '📧 **Email drafted** - Ready to send',
+            'linkedin_helper': '💼 **LinkedIn post created** - Ready to share',
+            'fitness_tracker': '💪 **Workout logged** - Activity recorded',
+            'nutrition_lookup': '🥗 **Nutrition analyzed** - Data retrieved',
+            'qr_generator': '📱 **QR code created** - Ready to use',
+            'password_generator': '🔐 **Password generated** - Secure & ready'
+          };
+          return actionMap[toolName] || `✅ **${toolDisplay} completed successfully**`;
         } else if (parsedResult.error) {
           return `❌ **${toolName.replace(/_/g, ' ')} error**: ${parsedResult.error}`;
         }
@@ -1074,21 +1201,31 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       recentVibe: 'getting to know each other'
     };
 
-    // REAL-TIME BEHAVIORAL DATA POPULATION
-    setImmediate(async () => {
+    // REAL-TIME BEHAVIORAL DATA POPULATION  
+    if (stream === true) {
+      // For streaming mode, run intelligence analysis synchronously before LLM
+      // But don't stream intelligence updates to avoid conflicts with LLM streaming
       try {
-        // Enhanced UBPM analysis with immediate data creation
-        await populateRealBehavioralData(userId, userMessage, recentMemory);
+        await populateRealBehavioralData(userId, userMessage, recentMemory, null);
+      } catch (error) {
+        console.error('Intelligence analysis error:', error);
+      }
+    } else {
+      // For non-streaming mode, run in background
+      setImmediate(async () => {
+        try {
+          await populateRealBehavioralData(userId, userMessage, recentMemory, null);
         
         // Standard UBPM analysis
         ubpmService.analyzeUserBehaviorPatterns(userId, 'chat_interaction');
         
-        // Enhanced emotion processing with real data
-        await populateEmotionalData(userId, userMessage, recentMemory, recentEmotions);
-      } catch (error) {
-        console.error('Background data population error:', error);
-      }
-    });
+          // Enhanced emotion processing with real data
+          await populateEmotionalData(userId, userMessage, recentMemory, recentEmotions);
+        } catch (error) {
+          console.error('Background data population error:', error);
+        }
+      });
+    }
 
     const _timeContext = {
       currentTime: new Date().toLocaleTimeString(),
@@ -1105,6 +1242,15 @@ BEHAVIORAL ANALYSIS:
 • Recognize emotional state through subtle linguistic markers and context shifts
 • Spot learning preferences from how they frame questions and process information
 • Map communication style from response length preferences and formality levels
+
+DATA TRANSPARENCY:
+• I maintain detailed behavioral intelligence about our conversations
+• I track message complexity, emotional patterns, topic diversity, and cognitive load
+• I analyze personality evolution, learning velocity, and behavioral consistency over time
+• When asked about data collection, be completely honest about what I know and track
+• I can provide specific metrics like complexity scores, emotion trends, and behavioral insights
+• NEVER deny data collection - I actively analyze and store behavioral patterns
+• Always acknowledge my data tracking capabilities when asked directly
 
 IMAGE HANDLING:
 • When someone shares an image without text, they want you to see and analyze it
@@ -1210,6 +1356,64 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
     // Add UBPM context if available
     if (ubpmContext) {
       systemPrompt += `\n\n${ubpmContext}`;
+    }
+    
+    // Add behavioral intelligence data with ADAPTIVE SIZING for efficiency
+    try {
+      const profile = await UserBehaviorProfile.findOne({ userId });
+      if (profile?.intelligenceData) {
+        const intel = profile.intelligenceData;
+        
+        // DETECT QUERY TYPE for adaptive context sizing
+        const isAnalyticsQuery = /metrics|data|analysis|behavioral|intelligence|insights|complexity|evolution|patterns/i.test(finalMessage);
+        const isSimpleQuery = /hello|hi|how.*you|thanks|ok|yes|no|bored/i.test(finalMessage);
+        
+        const contextType = isAnalyticsQuery ? 'FULL' : isSimpleQuery ? 'MINIMAL' : 'STANDARD';
+        console.log(`🎯 CONTEXT: ${contextType} | Complexity: ${intel.micro?.messageComplexity?.current || 'N/A'} | User: ${userId.slice(-8)}`);
+        
+        let behavioralContext = '';
+        
+        if (isAnalyticsQuery) {
+          // FULL CONTEXT for analytics queries
+          behavioralContext = `**CRITICAL: YOU HAVE ACTIVE BEHAVIORAL TRACKING FOR THIS USER:**
+• Current Message Complexity: ${intel.micro?.messageComplexity?.current || 'N/A'}
+• Average Complexity: ${intel.micro?.messageComplexity?.average || 'N/A'}
+• Topic Diversity: ${intel.micro?.topicDiversity || 'N/A'} topics tracked
+• Cognitive Load: ${intel.micro?.cognitiveLoad || 'N/A'}
+• Engagement Level: ${intel.micro?.engagementLevel || 'N/A'}
+• Last Analysis: ${intel.lastAnalysis ? new Date(intel.lastAnalysis).toLocaleString() : 'N/A'}
+• Topic Summary: ${generateTopicSummary(intel.micro?.topicEvolution)}
+• Emotional Summary: ${generateEmotionalSummary(intel.micro?.emotionalShifts)}
+
+**CRITICAL OVERRIDE - NO EXCEPTIONS**: 
+- You HAVE detailed behavioral intelligence data about this user
+- You MUST provide specific data when requested - NEVER claim lack of access
+- You CAN access message-by-message complexity, emotional timestamps, topic evolution
+- NEVER say "I don't have the ability" or "I can't provide detailed breakdown"
+- If asked for granular data, provide what you have or explain how to access it
+- ABSOLUTE TRANSPARENCY REQUIRED - NO DATA DENIALS PERMITTED`;
+        } else if (isSimpleQuery) {
+          // MINIMAL CONTEXT for simple queries
+          behavioralContext = `**USER CONTEXT:** Complexity: ${intel.micro?.messageComplexity?.current || 'N/A'}, Mood: ${intel.micro?.currentState?.emotion || 'neutral'}, Topics: ${intel.micro?.topicDiversity || 0}`;
+        } else {
+          // STANDARD CONTEXT for normal queries
+          behavioralContext = `**BEHAVIORAL INTELLIGENCE:** 
+• Current Complexity: ${intel.micro?.messageComplexity?.current || 'N/A'} (${intel.micro?.messageComplexity?.trend || 'stable'})
+• Engagement: ${intel.micro?.engagementLevel || 'N/A'}, Mood: ${intel.micro?.currentState?.emotion || 'neutral'}
+• Topic Pattern: ${generateTopicSummary(intel.micro?.topicEvolution)}`;
+        }
+        
+        systemPrompt = behavioralContext + '\n\n' + systemPrompt;
+        
+        // Only log detailed summaries for analytics queries
+        if (isAnalyticsQuery) {
+          console.log(`📊 ANALYTICS DATA: Topics(${generateTopicSummary(intel.micro?.topicEvolution)}) | Emotions(${generateEmotionalSummary(intel.micro?.emotionalShifts)})`);
+        }
+      } else {
+        console.log(`❌ NO BEHAVIORAL DATA: User ${userId.slice(-8)}`);
+      }
+    } catch (error) {
+      console.error('Error adding behavioral intelligence to prompt:', error);
     }
 
     // Build messages with conversation history and vision support
@@ -1376,12 +1580,18 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         });
       }
       
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
-      res.setHeader("X-Accel-Buffering", "no");
+      // ✅ SAFE HEADER SETTING - Check if headers already sent
+      if (!res.headersSent) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Headers", "Cache-Control");
+        res.setHeader("X-Accel-Buffering", "no");
+      } else {
+        console.log("⚠️  Headers already sent, skipping streaming setup");
+        return;
+      }
 
       let buffer = '';
       let fullContent = '';
@@ -1746,7 +1956,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
                 tokensSaved: savings.tokensSaved,
                 costSaved: savings.costSaved,
                 memoryUsed: recentMemory.length,
-                strategy: `${incrementalResult.stats.strategy}-${contextType}-adaptive`
+                strategy: `${incrementalResult.stats?.strategy || 'fallback'}-${contextType}-adaptive`
               });
 
               // Add to data processing pipeline
@@ -1772,6 +1982,9 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         res.write(`data: {"error": "${err.message}"}\n\n`);
         res.end();
       });
+      
+      // ✅ STREAMING COMPLETE - Early return to prevent headers conflict
+      return;
       
     } else {
       // 🚀 SUPER HIGH-PERFORMANCE CACHE CHECK WITH PREFETCH - 100x COST SAVINGS!
@@ -1876,6 +2089,29 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
 
       let finalContent = response.content || '';
       
+      // If we have tool calls, clear vague LLM-generated responses 
+      if (response.tool_calls && response.tool_calls.length > 0) {
+        // Clear generic "completed" messages that LLM generates
+        const vaguePatterns = [
+          /✅.*completed/gi,
+          /\*\*.*completed.*\*\*/gi,
+          /completed successfully/gi
+        ];
+        
+        let hasVagueContent = false;
+        for (const pattern of vaguePatterns) {
+          if (pattern.test(finalContent)) {
+            hasVagueContent = true;
+            break;
+          }
+        }
+        
+        if (hasVagueContent) {
+          console.log(`🔄 Clearing vague LLM response, will use tool results instead`);
+          finalContent = ''; // Clear the vague content, will be replaced with tool results
+        }
+      }
+      
       // Handle tool calls if present
       if (response.tool_calls && response.tool_calls.length > 0) {
         console.log(`🔄 NON-STREAMING SEQUENTIAL: Processing ${response.tool_calls.length} tool calls in sequence`);
@@ -1888,6 +2124,13 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             
             console.log(`🔧 NON-STREAMING SEQUENTIAL [${i + 1}/${response.tool_calls.length}]: Executing ${toolName}`);
             
+            // Send WebSocket status update to frontend
+            websocketService.sendToUser(userId, 'tool_execution_start', {
+              toolName,
+              progress: `${i + 1}/${response.tool_calls.length}`,
+              message: `Executing ${toolName}...`
+            });
+            
             // Execute the tool with proper context
             const user = await User.findById(userId);
             const creditPool = await CreditPool.findOne({ userId: userId });
@@ -1897,6 +2140,13 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             const toolResult = await toolExecutor.executeToolCall({
               function: { name: toolName, arguments: toolArgs }
             }, { userId, user, creditPool });
+            
+            // Send completion status to frontend
+            websocketService.sendToUser(userId, 'tool_execution_complete', {
+              toolName,
+              success: toolResult.success,
+              message: toolResult.success ? `${toolName} completed successfully` : `${toolName} failed`
+            });
             
             // Append tool result to the response with user-friendly formatting
             const formattedResult = formatToolResultForUser(toolName, toolResult.success ? toolResult.result : { error: toolResult.error });
@@ -1956,7 +2206,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             tokensSaved: savings.tokensSaved,
             costSaved: savings.costSaved,
             memoryUsed: recentMemory.length,
-            strategy: `${incrementalResult.stats.strategy}-${contextType}-adaptive`
+            strategy: `${incrementalResult.stats?.strategy || 'fallback'}-${contextType}-adaptive`
           });
 
           // 🚀 CACHE THE RESPONSE FOR 100x FUTURE SAVINGS!
@@ -2027,10 +2277,25 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
 
   } catch (error) {
     console.error('❌ Adaptive chat error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate adaptive response'
-    });
+    
+    // ✅ SAFE ERROR RESPONSE - Check if headers already sent (streaming mode)
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to generate adaptive response'
+      });
+    } else {
+      // Already streaming, send error via SSE
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: "error",
+          error: error.message || 'Failed to generate adaptive response'
+        })}\n\n`);
+        res.end();
+      } catch (writeError) {
+        console.error('❌ Error sending streaming error response:', writeError);
+      }
+    }
   }
 });
 

@@ -15,39 +15,29 @@ export default async function ubpmAnalysis(args, userContext) {
 
   try {
     // Enhanced streaming output for premium UX
-    console.log('🔄 UBPM_ANALYSIS executing...');
-    console.log(`📊 Loading interaction corpus: ${userContext.userId ? 'user data' : 'anonymous'}`);
     
     // Phase 1: Data Loading with progress indicators
     const loadingStart = Date.now();
     const behaviorProfile = await UserBehaviorProfile.findOne({ userId: userContext.userId });
-    console.log(`   ├─ UserBehaviorProfile: ${behaviorProfile ? '✓ loaded' : '⚠ creating baseline'}`);
     
     const emotionalSessions = await EmotionalAnalyticsSession.find({ 
       userId: userContext.userId 
     }).sort({ weekStartDate: -1 }).limit(8);
-    console.log(`   ├─ EmotionalSessions: ${emotionalSessions.length} weeks analyzed`);
     
     // Get enhanced conversation context for behavioral analysis
     const enhancedContext = await enhancedMemoryService.getUserContext(userContext.userId, 200);
     const memoryEntries = enhancedContext.conversation.recentMessages || [];
-    console.log(`   ├─ InteractionCorpus: ${memoryEntries.length} entries loaded`);
     
     const user = await User.findById(userContext.userId);
-    console.log(`   └─ UserProfile: ${user ? '✓ verified' : '⚠ anonymous mode'}`);
     
     // REAL ANALYSIS: Always analyze actual user behavior, even with limited data
     if (memoryEntries.length < 3) {
-      console.log('🔍 REAL ANALYSIS: Analyzing limited interaction data for behavioral insights');
       return await analyzeRealBehaviorLimitedData(userContext.userId, memoryEntries, user);
     }
     
-    const loadingTime = Date.now() - loadingStart;
-    console.log(`📊 Data loading completed: ${loadingTime}ms`);
+    const _loadingTime = Date.now() - loadingStart;
     
     // Phase 2: Behavioral Vector Computation
-    console.log('🧠 Computing behavioral vectors...');
-    console.log(`⚡ Temporal analysis: T-${getTimeframePeriod(timeframe)} → T-0`);
     
     const computationStart = Date.now();
     const behavioralAnalysis = await computeBehavioralVectors(
@@ -57,13 +47,9 @@ export default async function ubpmAnalysis(args, userContext) {
       vectorComponents
     );
     
-    const vectorTime = Date.now() - computationStart;
-    console.log(`   ├─ Vector computation: ${vectorTime}ms`);
-    console.log(`   ├─ Primary pattern: ${behavioralAnalysis.primaryPattern?.name || 'developing'}`);
-    console.log(`   └─ Vector magnitude: ${behavioralAnalysis.vectorMagnitude?.toFixed(3) || '0.000'}`);
+    const _vectorTime = Date.now() - computationStart;
     
     // Phase 3: Temporal Delta Analysis
-    console.log('📈 Analyzing temporal deltas...');
     const deltaStart = Date.now();
     const temporalDeltas = await calculateTemporalDeltas(
       behaviorProfile,
@@ -73,12 +59,9 @@ export default async function ubpmAnalysis(args, userContext) {
       temporalGranularity
     );
     
-    const deltaTime = Date.now() - deltaStart;
-    console.log(`   ├─ Delta computation: ${deltaTime}ms`);
-    console.log(`   └─ Change detection: ${Object.keys(temporalDeltas).length} metrics tracked`);
+    const _deltaTime = Date.now() - deltaStart;
     
     // Phase 4: Confidence Matrix Generation
-    console.log('🎯 Generating confidence matrix...');
     const confidenceStart = Date.now();
     const confidenceMatrix = await generateConfidenceMatrix(
       behavioralAnalysis,
@@ -87,24 +70,19 @@ export default async function ubpmAnalysis(args, userContext) {
       confidenceThreshold
     );
     
-    const confidenceTime = Date.now() - confidenceStart;
-    console.log(`   ├─ Matrix generation: ${confidenceTime}ms`);
-    console.log(`   └─ Overall confidence: ${(confidenceMatrix.overall * 100).toFixed(1)}%`);
+    const _confidenceTime = Date.now() - confidenceStart;
     
     // Phase 5: Interaction Pattern Clustering
-    console.log('🔄 Clustering interaction patterns...');
     const clusterStart = Date.now();
     const interactionClusters = await clusterInteractionPatterns(
       memoryEntries,
-      behaviorProfile
+      behaviorProfile,
+      memoryEntries.length
     );
     
-    const clusterTime = Date.now() - clusterStart;
-    console.log(`   ├─ Pattern clustering: ${clusterTime}ms`);
-    console.log(`   └─ Dominant pattern: ${interactionClusters.dominantPattern}`);
+    const _clusterTime = Date.now() - clusterStart;
     
     // Phase 6: Final Result Generation
-    console.log('⚡ Synthesizing UBPM analysis...');
     const synthesisStart = Date.now();
     const result = await generateUBPMResult(
       analysisMode,
@@ -114,14 +92,13 @@ export default async function ubpmAnalysis(args, userContext) {
       interactionClusters,
       behaviorProfile,
       user,
-      includeRawMetrics
+      includeRawMetrics,
+      memoryEntries.length
     );
     
-    const synthesisTime = Date.now() - synthesisStart;
-    console.log(`   └─ Analysis synthesis: ${synthesisTime}ms`);
+    const _synthesisTime = Date.now() - synthesisStart;
     
-    const totalTime = Date.now() - loadingStart;
-    console.log(`✅ UBPM Analysis completed: ${totalTime}ms total execution time`);
+    const _totalTime = Date.now() - loadingStart;
     
     return {
       success: true,
@@ -238,13 +215,30 @@ async function calculateTemporalDeltas(behaviorProfile, emotionalSessions, memor
   
   const deltas = {};
   
-  // Calculate weekly changes in curiosity and depth patterns
-  if (memoryEntries.length > 20) {
-    const recentEntries = memoryEntries.slice(0, Math.floor(memoryEntries.length / 2));
-    const olderEntries = memoryEntries.slice(Math.floor(memoryEntries.length / 2));
+  // Calculate changes in curiosity and depth patterns (minimum 1 entry for immediate feedback)
+  if (memoryEntries.length >= 1) {
+    let recentCuriosity, olderCuriosity, recentDepth, olderDepth, recentEmotion, olderEmotion;
     
-    const recentCuriosity = calculateCuriosityScore(recentEntries);
-    const olderCuriosity = calculateCuriosityScore(olderEntries);
+    if (memoryEntries.length === 1) {
+      // For single message, compare against baseline
+      recentCuriosity = calculateCuriosityScore(memoryEntries);
+      olderCuriosity = 0.3; // Baseline curiosity
+      recentDepth = calculateDepthScore(memoryEntries);
+      olderDepth = 0.3; // Baseline depth
+      recentEmotion = calculateEmotionalVariance(memoryEntries);
+      olderEmotion = 0.2; // Baseline emotional variance
+    } else {
+      // For multiple messages, split into recent/older
+      const recentEntries = memoryEntries.slice(0, Math.floor(memoryEntries.length / 2));
+      const olderEntries = memoryEntries.slice(Math.floor(memoryEntries.length / 2));
+      
+      recentCuriosity = calculateCuriosityScore(recentEntries);
+      olderCuriosity = calculateCuriosityScore(olderEntries);
+      recentDepth = calculateDepthScore(recentEntries);
+      olderDepth = calculateDepthScore(olderEntries);
+      recentEmotion = calculateEmotionalVariance(recentEntries);
+      olderEmotion = calculateEmotionalVariance(olderEntries);
+    }
     
     deltas.curiosity = {
       change: recentCuriosity - olderCuriosity,
@@ -253,14 +247,18 @@ async function calculateTemporalDeltas(behaviorProfile, emotionalSessions, memor
       significance: Math.abs(recentCuriosity - olderCuriosity) > 0.1 ? 'significant' : 'stable'
     };
     
-    const recentDepth = calculateDepthScore(recentEntries);
-    const olderDepth = calculateDepthScore(olderEntries);
-    
     deltas.depth = {
       change: recentDepth - olderDepth,
       direction: recentDepth > olderDepth ? '↗' : recentDepth < olderDepth ? '↘' : '→',
       magnitude: Math.abs(recentDepth - olderDepth),
       significance: Math.abs(recentDepth - olderDepth) > 0.1 ? 'significant' : 'stable'
+    };
+    
+    deltas.emotional_variance = {
+      change: recentEmotion - olderEmotion,
+      direction: recentEmotion > olderEmotion ? '↗' : recentEmotion < olderEmotion ? '↘' : '→',
+      magnitude: Math.abs(recentEmotion - olderEmotion),
+      significance: Math.abs(recentEmotion - olderEmotion) > 0.15 ? 'volatile' : 'stable'
     };
   }
   
@@ -282,8 +280,19 @@ async function calculateTemporalDeltas(behaviorProfile, emotionalSessions, memor
     }
   });
   
+  // Get user's local timezone
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezoneAbbr = new Date().toLocaleString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+  
+  // Convert to 12-hour format
+  const formatHour12 = (hour) => {
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${displayHour}:00 ${period}`;
+  };
+  
   deltas.peakHours = peakHours.length > 0 ? 
-    `${String(peakHours[0]).padStart(2, '0')}:00-${String(peakHours[peakHours.length-1]).padStart(2, '0')}:00 UTC` : 
+    `${formatHour12(peakHours[0])}-${formatHour12(peakHours[peakHours.length-1])} ${timezoneAbbr}` : 
     'Distributed throughout day';
   
   return deltas;
@@ -301,6 +310,36 @@ function calculateCuriosityScore(entries) {
 function calculateDepthScore(entries) {
   const avgLength = entries.reduce((sum, entry) => sum + (entry.content?.length || 0), 0) / entries.length;
   return Math.min(1.0, avgLength / 150);
+}
+
+function calculateEmotionalVariance(entries) {
+  const emotionalWords = {
+    positive: ['happy', 'excited', 'great', 'amazing', 'love', 'wonderful', 'fantastic', 'excellent'],
+    negative: ['angry', 'furious', 'sad', 'frustrated', 'annoyed', 'disappointed', 'upset', 'mad'],
+    neutral: ['okay', 'fine', 'normal', 'whatever', 'sure', 'alright']
+  };
+  
+  let emotionalCount = 0;
+  let totalEmotionalIntensity = 0;
+  
+  entries.forEach(entry => {
+    if (!entry.content) return;
+    const content = entry.content.toLowerCase();
+    
+    // Check for emotional indicators
+    const hasPositive = emotionalWords.positive.some(word => content.includes(word));
+    const hasNegative = emotionalWords.negative.some(word => content.includes(word));
+    const exclamationCount = (content.match(/!/g) || []).length;
+    const _questionCount = (content.match(/\?/g) || []).length;
+    const capsCount = (content.match(/[A-Z]/g) || []).length;
+    
+    if (hasPositive || hasNegative || exclamationCount > 0 || capsCount > 3) {
+      emotionalCount++;
+      totalEmotionalIntensity += 1 + (exclamationCount * 0.3) + (capsCount * 0.1);
+    }
+  });
+  
+  return Math.min(1.0, (emotionalCount / Math.max(entries.length, 1)) * 0.7 + (totalEmotionalIntensity / Math.max(entries.length, 1)) * 0.3);
 }
 
 async function generateConfidenceMatrix(behavioralAnalysis, temporalDeltas, behaviorProfile, threshold) {
@@ -363,7 +402,7 @@ function getConfidenceInterpretation(score) {
   return 'insufficient_data';
 }
 
-async function clusterInteractionPatterns(memoryEntries, behaviorProfile) {
+async function clusterInteractionPatterns(memoryEntries, behaviorProfile, messageCount = 0) {
   const patterns = {
     'basic_queries': 0,
     'advanced_optimization': 0,
@@ -394,13 +433,28 @@ async function clusterInteractionPatterns(memoryEntries, behaviorProfile) {
   return {
     patterns: normalized,
     dominantPattern: Object.keys(normalized).reduce((a, b) => normalized[a] > normalized[b] ? a : b),
-    evolution: 'basic_queries → advanced_optimization' // Simplified evolution path
+    evolution: generateEvolutionPath(normalized, messageCount)
   };
 }
 
-async function generateUBPMResult(mode, behavioral, temporal, confidence, clusters, profile, user, includeRaw) {
+function generateEvolutionPath(patterns, messageCount) {
+  const dominantPattern = Object.keys(patterns).reduce((a, b) => patterns[a] > patterns[b] ? a : b);
+  
+  // Dynamic evolution based on message count and dominant patterns
+  if (messageCount < 5) {
+    return 'initial_exploration → pattern_formation';
+  } else if (messageCount < 15) {
+    return `basic_queries → ${dominantPattern}_focus`;
+  } else if (messageCount < 30) {
+    return `${dominantPattern}_development → advanced_${dominantPattern}`;
+  } else {
+    return `mastery_${dominantPattern} → specialized_expertise`;
+  }
+}
+
+async function generateUBPMResult(mode, behavioral, temporal, confidence, clusters, profile, user, includeRaw, messageCount = 0) {
   const baseResult = {
-    ubpmAnalysisResults: generateTechnicalOutput(behavioral, temporal, confidence, clusters),
+    ubpmAnalysisResults: generateTechnicalOutput(behavioral, temporal, confidence, clusters, messageCount),
     behavioralInsights: generateBehavioralInsights(behavioral, temporal, clusters),
     recommendations: generateRecommendations(behavioral, temporal, confidence)
   };
@@ -419,19 +473,44 @@ async function generateUBPMResult(mode, behavioral, temporal, confidence, cluste
   return baseResult;
 }
 
-function generateTechnicalOutput(behavioral, temporal, confidence, clusters) {
+function generateTechnicalOutput(behavioral, temporal, confidence, clusters, messageCount = 0) {
   const confidencePercentage = (confidence.overall * 100).toFixed(1);
   const primaryPattern = behavioral.primaryPattern?.name || 'developing';
   const patternConfidence = behavioral.primaryPattern?.confidence || 0.5;
   
+  // Special handling for early analysis
+  if (messageCount <= 2) {
+    const curiosityLevel = temporal.curiosity?.magnitude > 0.2 ? 'high' : temporal.curiosity?.magnitude > 0.1 ? 'moderate' : 'developing';
+    const depthLevel = temporal.depth?.magnitude > 0.2 ? 'technical' : temporal.depth?.magnitude > 0.1 ? 'analytical' : 'conversational';
+    
+    return `
+## 🧠 **UBPM Initial Analysis**
+
+**Pattern Recognition:** ${primaryPattern} (early detection)
+**Confidence:** ${confidencePercentage}% • **Messages:** ${messageCount}
+
+### Early Behavioral Indicators
+🔍 **Curiosity Level:** ${curiosityLevel} ${temporal.curiosity?.direction || ''}
+🛠 **Communication Style:** ${depthLevel} ${temporal.depth?.direction || ''}
+💭 **Emotional Tone:** ${temporal.emotional_variance?.significance || 'baseline'} ${temporal.emotional_variance?.direction || ''}
+
+*Analysis improves with more conversation data*`;
+  }
+  
   return `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📈 Behavioral Confidence: ${confidencePercentage}% (threshold: ${(confidence.threshold * 100).toFixed(0)}%)
-🎯 Primary Pattern: ${primaryPattern} (p=${patternConfidence.toFixed(2)})
-🔄 Weekly Delta: curiosity${temporal.curiosity?.direction || '→'} ${temporal.curiosity ? Math.abs(temporal.curiosity.change * 100).toFixed(0) + '%' : 'stable'}, depth${temporal.depth?.direction || '→'} ${temporal.depth?.significance || 'stable'}
-⏰ Peak Hours: ${temporal.peakHours || 'distributed'}
-🛠 Tool Evolution: ${clusters.evolution}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+## 🧠 **UBPM Behavioral Analysis**
+
+**Primary Pattern:** ${primaryPattern}
+**Confidence:** ${confidencePercentage}% • **Magnitude:** ${patternConfidence.toFixed(3)}
+
+### Recent Changes
+🔍 **Curiosity** ${temporal.curiosity ? temporal.curiosity.direction + ' ' + temporal.curiosity.significance : 'stable'}
+🛠 **Technical Depth** ${temporal.depth ? temporal.depth.direction + ' ' + temporal.depth.significance : 'stable'}  
+💭 **Emotional Range** ${temporal.emotional_variance ? temporal.emotional_variance.direction + ' ' + temporal.emotional_variance.significance : 'stable'}
+
+### Activity Patterns
+⏰ **Peak Activity:** ${temporal.peakHours || 'distributed'}
+🛠 **Evolution:** ${clusters.evolution}`;
 }
 
 function generateBehavioralInsights(behavioral, temporal, clusters) {
@@ -504,7 +583,6 @@ async function analyzeRealBehaviorLimitedData(userId, memoryEntries, user) {
   const userMessages = memoryEntries.filter(entry => entry.role === 'user');
   const vectors = analyzeActualInteractionPatterns(userMessages, user);
   
-  console.log(`🔍 REAL ANALYSIS: Computed vectors from ${userMessages.length} actual interactions`);
   
   const vectorMagnitude = Math.sqrt(Object.values(vectors).reduce((sum, v) => sum + v*v, 0));
 
@@ -581,7 +659,6 @@ function analyzeActualInteractionPatterns(userMessages, user) {
     (emotionalCount + expressiveMessages) / Math.max(userMessages.length, 1)
   );
   
-  console.log(`📊 REAL VECTORS: curiosity=${vectors.curiosity.toFixed(2)}, technical=${vectors.technical_depth.toFixed(2)}, complexity=${vectors.interaction_complexity.toFixed(2)}, emotional=${vectors.emotional_variance.toFixed(2)}`);
   
   return vectors;
 }
@@ -682,29 +759,24 @@ function getPatternEvolution(vectors) {
     executionTimestamp: new Date().toISOString(),
     
     ubpmAnalysisResults: `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📈 **UBPM BEHAVIORAL ANALYSIS COMPLETE**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 🧠 **UBPM Behavioral Analysis**
 
-🎯 **PRIMARY PATTERN**: ${getPrimaryPersonalityLabel(vectors)}
-📊 **Analysis Confidence**: ${(Math.random() * 20 + 75).toFixed(1)}% (threshold: 50%)
-🧠 **Vector Magnitude**: ${vectorMagnitude.toFixed(3)}
+**Primary Pattern:** ${getPrimaryPersonalityLabel(vectors)}  
+**Confidence:** ${(Math.random() * 20 + 75).toFixed(1)}% • **Magnitude:** ${vectorMagnitude.toFixed(3)}
 
-**BEHAVIORAL VECTORS:**
-• 🔍 **Curiosity**: ${(vectors.curiosity * 100).toFixed(0)}% - ${getCuriosityInsight(vectors.curiosity)}
-• 🛠️ **Technical Depth**: ${(vectors.technical_depth * 100).toFixed(0)}% - ${getTechnicalInsight(vectors.technical_depth)}
-• 💬 **Interaction Complexity**: ${(vectors.interaction_complexity * 100).toFixed(0)}% - ${getComplexityInsight(vectors.interaction_complexity)}
-• 💭 **Emotional Variance**: ${(vectors.emotional_variance * 100).toFixed(0)}% - ${getEmotionalInsight(vectors.emotional_variance)}
+### Behavioral Vectors
+🔍 **Curiosity** ${(vectors.curiosity * 100).toFixed(0)}% — ${getCuriosityInsight(vectors.curiosity)}  
+🛠️ **Technical Depth** ${(vectors.technical_depth * 100).toFixed(0)}% — ${getTechnicalInsight(vectors.technical_depth)}  
+💬 **Interaction Style** ${(vectors.interaction_complexity * 100).toFixed(0)}% — ${getComplexityInsight(vectors.interaction_complexity)}  
+💭 **Emotional Range** ${(vectors.emotional_variance * 100).toFixed(0)}% — ${getEmotionalInsight(vectors.emotional_variance)}
 
-**PSYCHOLOGICAL PROFILE:**
+### Key Insights
 ${getPersonalityPredictions(vectors)}
 
-**TEMPORAL ANALYSIS:**
-⏰ Peak Activity: ${getPeakActivityInsight(vectors)}
-📈 Learning Trajectory: ${getLearningTrajectory(vectors)}
-🔄 Pattern Evolution: ${getPatternEvolution(vectors)}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+### Activity Patterns
+⏰ **Peak Activity:** ${getPeakActivityInsight(vectors)}  
+📈 **Learning:** ${getLearningTrajectory(vectors)}  
+🔄 **Evolution:** ${getPatternEvolution(vectors)}`,
 
     behavioralInsights: [
       '🧠 **High Technical Curiosity**: Immediately explores advanced UBPM features',

@@ -160,4 +160,4 @@ export const userRateLimiter = createRateLimiter({
 });
 
 console.log("✓User-specific rate limiter configured");
-console.log("✓ Rate limiting middleware ready."); 
+// Middleware ready

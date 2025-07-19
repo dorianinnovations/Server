@@ -21,4 +21,4 @@ export const sanitizeResponse = (text) => {
 };
 
 console.log("✓Response sanitization function configured");
-console.log("✓Sanitization utilities initialization completed"); 
+// Component ready

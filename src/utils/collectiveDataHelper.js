@@ -404,4 +404,4 @@ export class CollectiveDataFormatter {
 // Export singleton instance
 export const collectiveDataFormatter = new CollectiveDataFormatter();
 
-console.log("✓Collective data helper utilities initialization completed"); 
+// Component ready

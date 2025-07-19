@@ -90,6 +90,6 @@ collectiveDataConsentSchema.statics.getConsentStats = async function () {
 
 const CollectiveDataConsent = mongoose.model("CollectiveDataConsent", collectiveDataConsentSchema);
 
-console.log("✓CollectiveDataConsent schema and model defined.");
+// Model ready
 
 export default CollectiveDataConsent; 

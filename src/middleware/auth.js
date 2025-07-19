@@ -55,4 +55,4 @@ export const protect = (req, res, next) => {
   }
 };
 
-console.log("✓Authentication middleware ready."); 
+// Middleware ready

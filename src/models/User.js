@@ -108,6 +108,6 @@ userSchema.set('toObject', { virtuals: true });
 
 const User = mongoose.model("User", userSchema);
 
-console.log("✓Enhanced User schema and model defined.");
+// User model ready
 
 export default User; 

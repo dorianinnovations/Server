@@ -25,6 +25,6 @@ taskSchema.index({ userId: 1, status: 1, priority: -1, runAt: 1 }); // Compound 
 taskSchema.index({ userId: 1, taskType: 1, status: 1 }); // For task type queries
 
 const Task = mongoose.model("Task", taskSchema);
-console.log("✓Task schema and model defined.");
+// Model ready
 
 export default Task; 

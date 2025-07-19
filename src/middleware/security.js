@@ -266,4 +266,4 @@ export const securityHeaders = (req, res, next) => {
   }
 };
 
-console.log("✓ Security middleware ready."); 
+// Middleware ready
