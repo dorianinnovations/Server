@@ -21,6 +21,12 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES || process.env.JWT_EXPIRES_IN || '1d',
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 5000,
+  
+  // AWS Configuration for secure cloud storage
+  AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  AWS_REGION: process.env.AWS_REGION || 'us-east-2',
+  S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'numina-user-content',
 };
 
 console.log('✓Environment configuration loaded successfully');

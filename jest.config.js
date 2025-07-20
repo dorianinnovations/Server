@@ -17,4 +17,7 @@ export default {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  globalSetup: '<rootDir>/tests/utils/globalTestSetup.js',
+  globalTeardown: '<rootDir>/tests/utils/globalTestTeardown.js',
+  maxWorkers: 1, // Run tests sequentially to avoid database conflicts
 }; 

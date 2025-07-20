@@ -522,7 +522,7 @@ class WebSocketService {
   getServerStats() {
     return {
       connectedUsers: this.connectedUsers.size,
-      totalRooms: this.io.sockets.adapter.rooms.size,
+      totalRooms: this.io?.sockets?.adapter?.rooms?.size || 0,
       serverUptime: process.uptime(),
       memoryUsage: process.memoryUsage()
     };

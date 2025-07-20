@@ -10,14 +10,14 @@ let authToken;
 let testUser;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create({ binary: { version: '7.0.3' } });
-  const mongoUri = mongoServer.getUri();
-  await mongoose.connect(mongoUri);
+  
+  
+  
 });
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  if (mongoServer) await mongoServer.stop();
+  
+  
 });
 
 beforeEach(async () => {

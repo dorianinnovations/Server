@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { setTimeout } from 'node:timers/promises';
+import { clearDatabase } from './utils/globalTestSetup.js';
 
 // Load test environment variables
 dotenv.config({ path: '.env.test' });
@@ -21,3 +21,8 @@ global.console = {
 if (typeof jest !== 'undefined') {
   jest.setTimeout(30000);
 }
+
+// Clear database between tests
+beforeEach(async () => {
+  await clearDatabase();
+});

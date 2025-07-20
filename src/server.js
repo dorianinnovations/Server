@@ -55,6 +55,7 @@ import collectiveDataRoutes from "./routes/collectiveData.js";
 import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
 import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
+import secureCloudRoutes from "./routes/secureCloud.js";
 
 log.debug("Route modules imported");
 
@@ -209,6 +210,7 @@ const initializeServer = async () => {
   app.use("/collective-snapshots", collectiveSnapshotsRoutes);
   app.use("/emotional-analytics", emotionalAnalyticsRoutes);
   app.use("/scheduled-aggregation", scheduledAggregationRoutes);
+  app.use("/api/cloud", secureCloudRoutes);
   
   // Register mobile-optimized routes
   app.use("/", mobileRoutes);
@@ -336,6 +338,7 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/collective-snapshots", collectiveSnapshotsRoutes);
       app.use("/emotional-analytics", emotionalAnalyticsRoutes);
       app.use("/scheduled-aggregation", scheduledAggregationRoutes);
+      app.use("/api/cloud", secureCloudRoutes);
       app.use("/", mobileRoutes);
       app.use("/", syncRoutes);
       app.use("/", apiDocsRoutes);
