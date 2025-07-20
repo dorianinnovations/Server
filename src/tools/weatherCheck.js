@@ -8,7 +8,12 @@ export default async function weatherCheck(args, _userContext) {
 
     // Use OpenWeatherMap API if available, otherwise fallback to weather web search
     if (process.env.OPENWEATHER_API_KEY) {
-      return await getOpenWeatherData(location, days, units);
+      try {
+        return await getOpenWeatherData(location, days, units);
+      } catch (apiError) {
+        console.warn('OpenWeather API failed, falling back to web search:', apiError.message);
+        return await getWeatherFromWebSearch(location, days, units);
+      }
     } else {
       return await getWeatherFromWebSearch(location, days, units);
     }
@@ -57,8 +62,10 @@ async function getOpenWeatherData(location, days, units) {
       },
       message: `Current weather in ${data.name}: ${Math.round(data.main.temp)}°${units === 'metric' ? 'C' : 'F'}, ${data.weather[0].description}`
     };
-  } catch (_error) {
-    throw new Error('Failed to fetch weather from OpenWeatherMap API');
+  } catch (error) {
+    console.warn('OpenWeather API error:', error.response?.status, error.response?.data?.message || error.message);
+    // If API key is invalid or other API error, fall back to web search
+    throw new Error('OpenWeather API unavailable - falling back to web search');
   }
 }
 

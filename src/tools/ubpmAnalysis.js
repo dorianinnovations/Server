@@ -1,5 +1,4 @@
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import User from '../models/User.js';
 
@@ -20,9 +19,7 @@ export default async function ubpmAnalysis(args, userContext) {
     const loadingStart = Date.now();
     const behaviorProfile = await UserBehaviorProfile.findOne({ userId: userContext.userId });
     
-    const emotionalSessions = await EmotionalAnalyticsSession.find({ 
-      userId: userContext.userId 
-    }).sort({ weekStartDate: -1 }).limit(8);
+    const emotionalSessions = [];
     
     // Get enhanced conversation context for behavioral analysis
     const enhancedContext = await enhancedMemoryService.getUserContext(userContext.userId, 200);

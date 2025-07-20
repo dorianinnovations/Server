@@ -187,19 +187,109 @@ router.get('/api/docs', async (req, res) => {
               timestamp: 'ISO8601 (optional)'
             }
           },
-          '/analytics/insights': {
+          // AI-Powered Analytics & Insights (NEW)
+          '/analytics/llm': {
             method: 'POST',
-            description: 'Generate LLM insights',
+            description: 'Main AI analytics processing endpoint',
             auth: true,
             body: {
-              timeRange: 'string (7d|30d|90d)',
-              focus: 'string (general|mood|patterns)'
+              category: 'string (optional: communication|personality|behavioral|emotional|growth)',
+              forceGenerate: 'boolean (optional: bypass cooldown, default: false)'
+            },
+            response: {
+              success: 'boolean',
+              cooldownStatus: 'object (if no category specified)',
+              recentInsights: 'array (if no category specified)',
+              insight: 'object (if category specified)',
+              processingTime: 'number (milliseconds)'
+            }
+          },
+          '/analytics/llm/insights': {
+            method: 'POST',
+            description: 'Generate AI-powered insights for specific category',
+            auth: true,
+            body: {
+              category: 'string (required: communication|personality|behavioral|emotional|growth)',
+              forceGenerate: 'boolean (optional: bypass cooldown, default: false)'
+            },
+            queryParams: {
+              stream: 'boolean (optional: enable Server-Sent Events streaming)'
+            },
+            response: {
+              success: 'boolean',
+              insight: {
+                insight: 'string (2-sentence AI-generated insight)',
+                confidence: 'number (0-1)',
+                evidence: 'array (supporting evidence points)',
+                category: 'string',
+                timestamp: 'number'
+              },
+              processingTime: 'number (milliseconds)'
+            },
+            errors: {
+              400: 'Invalid category',
+              429: 'Cooldown active (timegated)',
+              500: 'Generation failed'
+            }
+          },
+          '/analytics/llm/status': {
+            method: 'GET',
+            description: 'Get user analytics and cooldown status',
+            auth: true,
+            response: {
+              success: 'boolean',
+              cooldownStatus: 'object (per-category cooldown info)',
+              recentInsights: 'array (last 5 insights)',
+              availableCategories: 'array (insight categories)'
             }
           },
           '/analytics/llm/weekly-digest': {
             method: 'POST',
-            description: 'Generate weekly emotional digest',
-            auth: true
+            description: 'Generate weekly analytics digest across all categories',
+            auth: true,
+            response: {
+              success: 'boolean',
+              weeklyDigest: {
+                generatedAt: 'number (timestamp)',
+                insights: 'object (per-category insights)',
+                recentInsights: 'array (fallback insights)',
+                categories: 'array',
+                summary: 'string'
+              }
+            }
+          },
+          '/analytics/llm/recommendations': {
+            method: 'POST',
+            description: 'AI-powered recommendations based on behavioral patterns',
+            auth: true,
+            body: {
+              category: 'string (optional)',
+              type: 'string (optional: general|growth|communication)'
+            },
+            response: {
+              success: 'boolean',
+              recommendations: 'array (actionable recommendations)',
+              category: 'string',
+              generatedAt: 'number'
+            }
+          },
+          '/analytics/llm/patterns': {
+            method: 'POST',
+            description: 'Deep pattern analysis with LLM integration',
+            auth: true,
+            body: {
+              timeframe: 'string (optional: 7d|30d|90d, default: 30d)',
+              categories: 'array (optional: category filter, default: all)'
+            },
+            response: {
+              success: 'boolean',
+              patterns: {
+                temporal: 'object (activity patterns)',
+                behavioral: 'object (behavior analysis)',
+                growth: 'object (development trajectory)'
+              },
+              dataPoints: 'object (analysis metadata)'
+            }
           }
         },
 
@@ -557,8 +647,12 @@ router.get('/api/routes', (req, res) => {
         'POST /emotions',
         'GET /emotion-history',
         'GET /emotion-metrics',
-        'POST /analytics/insights',
-        'POST /analytics/llm/weekly-digest'
+        'POST /analytics/llm',
+        'POST /analytics/llm/insights',
+        'GET /analytics/llm/status',
+        'POST /analytics/llm/weekly-digest',
+        'POST /analytics/llm/recommendations',
+        'POST /analytics/llm/patterns'
       ],
       cloud: [
         'GET /cloud/events',

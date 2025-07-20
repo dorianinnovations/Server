@@ -1,7 +1,6 @@
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -255,9 +254,7 @@ class PersonalizationEngine {
   async generateHistoricalInsights(userId) {
     try {
       const profile = await UserBehaviorProfile.findOne({ userId });
-      const emotionalSessions = await EmotionalAnalyticsSession.find({ userId })
-        .sort({ weekStartDate: -1 })
-        .limit(12); // Last 3 months
+      const emotionalSessions = [];
 
       const insights = {
         cyclicalPatterns: this.identifyCyclicalPatterns(profile, emotionalSessions),

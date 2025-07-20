@@ -31,31 +31,24 @@ import completionRoutes from "./routes/completion.js";
 import analyticsRoutes from "./routes/analytics.js";
 import taskRoutes from "./routes/tasks.js";
 import docsRoutes from "./routes/docs.js";
-import emotionsRoutes from "./routes/emotions.js";
-import emotionHistoryRoutes from "./routes/emotionHistory.js";
-import emotionMetricsRoutes from "./routes/emotionMetrics.js";
 import aiRoutes from "./routes/ai.js";
 import cloudRoutes from "./routes/cloud.js";
 import mobileRoutes from "./routes/mobile.js";
 import personalInsightsRoutes from "./routes/personalInsights.js";
-import cascadingRecommendationsRoutes from "./routes/cascadingRecommendations.js";
 import syncRoutes from "./routes/sync.js";
+import conversationSyncRoutes from "./routes/conversationSync.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
 import personalizedAIRoutes from "./routes/personalizedAI.js";
-import testPersonalizationRoutes from "./routes/testPersonalization.js";
-import testGPT4oRoutes from "./routes/testGPT4o.js";
 import numinaPersonalityRoutes from "./routes/numinaPersonality.js";
 import toolsRoutes from "./routes/tools.js";
 import walletRoutes from "./routes/wallet.js";
 import subscriptionRoutes from "./routes/subscription.js";
-import debugRoutes from "./routes/debug.js";
-import testUBPMRoutes from "./routes/testUBPM.js";
 import dataCleanupRoutes from "./routes/dataCleanup.js";
 import collectiveDataRoutes from "./routes/collectiveData.js";
 import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
-import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
 import secureCloudRoutes from "./routes/secureCloud.js";
+import analyticsLLMRoutes from "./routes/analyticsLLM.js";
 
 log.debug("Route modules imported");
 
@@ -91,11 +84,12 @@ log.debug("Service modules imported");
 import "./models/User.js";
 import "./models/ShortTermMemory.js";
 import "./models/Task.js";
-import "./models/EmotionalAnalyticsSession.js";
 import "./models/CollectiveDataConsent.js";
 import "./models/CollectiveSnapshot.js";
 import "./models/Event.js";
 import "./models/UserBehaviorProfile.js";
+import "./models/AnalyticsInsight.js";
+import "./models/InsightCooldown.js";
 
 log.debug("Database models loaded");
 
@@ -188,33 +182,26 @@ const initializeServer = async () => {
   app.use("/", analyticsRoutes);
   app.use("/", taskRoutes);
   app.use("/", docsRoutes);
-  app.use("/emotions", emotionsRoutes);
-  app.use("/emotion-history", emotionHistoryRoutes);
-  app.use("/emotion-metrics", emotionMetricsRoutes);
   app.use("/analytics", analyticsRoutes);
+  app.use("/analytics/llm", analyticsLLMRoutes);
   app.use("/ai", aiRoutes);
   app.use("/personalized-ai", personalizedAIRoutes);
-  app.use("/test-personalization", testPersonalizationRoutes);
-  app.use("/test-gpt4o", testGPT4oRoutes);
   app.use("/numina-personality", numinaPersonalityRoutes);
   app.use("/tools", toolsRoutes);
   app.use("/wallet", walletRoutes);
   app.use("/subscription", subscriptionRoutes);
-  app.use("/", debugRoutes);
-  app.use("/test-ubpm", testUBPMRoutes);
   app.use("/data-cleanup", dataCleanupRoutes);
   app.use("/cloud", cloudRoutes);
   app.use("/personal-insights", personalInsightsRoutes);
-  app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
   app.use("/collective-data", collectiveDataRoutes);
   app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-  app.use("/emotional-analytics", emotionalAnalyticsRoutes);
   app.use("/scheduled-aggregation", scheduledAggregationRoutes);
   app.use("/api/cloud", secureCloudRoutes);
   
   // Register mobile-optimized routes
   app.use("/", mobileRoutes);
   app.use("/", syncRoutes);
+  app.use("/conversation", conversationSyncRoutes);
   app.use("/", apiDocsRoutes);
 
   log.success("API routes registered");
@@ -317,30 +304,22 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/", completionRoutes);
       app.use("/", taskRoutes);
       app.use("/", docsRoutes);
-      app.use("/emotions", emotionsRoutes);
-      app.use("/emotion-history", emotionHistoryRoutes);
-      app.use("/emotion-metrics", emotionMetricsRoutes);
       app.use("/analytics", analyticsRoutes);
       app.use("/ai", aiRoutes);
       app.use("/personalized-ai", personalizedAIRoutes);
-      app.use("/test-personalization", testPersonalizationRoutes);
-      app.use("/test-gpt4o", testGPT4oRoutes);
       app.use("/numina-personality", numinaPersonalityRoutes);
       app.use("/tools", toolsRoutes);
       app.use("/wallet", walletRoutes);
       app.use("/subscription", subscriptionRoutes);
-      app.use("/", debugRoutes);
-      app.use("/test-ubpm", testUBPMRoutes);
       app.use("/cloud", cloudRoutes);
       app.use("/personal-insights", personalInsightsRoutes);
-      app.use("/cascading-recommendations", cascadingRecommendationsRoutes);
       app.use("/collective-data", collectiveDataRoutes);
       app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-      app.use("/emotional-analytics", emotionalAnalyticsRoutes);
       app.use("/scheduled-aggregation", scheduledAggregationRoutes);
       app.use("/api/cloud", secureCloudRoutes);
       app.use("/", mobileRoutes);
       app.use("/", syncRoutes);
+      app.use("/conversation", conversationSyncRoutes);
       app.use("/", apiDocsRoutes);
       
       // Test endpoint

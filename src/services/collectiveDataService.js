@@ -1,6 +1,5 @@
 import User from "../models/User.js";
 import CollectiveDataConsent from "../models/CollectiveDataConsent.js";
-import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import logger from "../utils/logger.js";
 import { createCache } from "../utils/cache.js";
 
@@ -301,11 +300,8 @@ class CollectiveDataService {
 
       const recentEmotions = await User.aggregate(recentPipeline);
 
-      // Get active sessions
-      const activeSessions = await EmotionalAnalyticsSession.countDocuments({
-        userId: { $in: userIds },
-        status: { $in: ["active", "in_progress"] }
-      });
+      // Get active sessions - now handled by AI-driven system
+      const activeSessions = 0;
 
       const result = {
         success: true,

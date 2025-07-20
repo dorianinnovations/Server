@@ -1,12 +1,12 @@
 import { SECURITY_CONFIG } from "../config/constants.js";
 import logger from "../utils/logger.js";
 
-console.log("🛡️ Initializing rate limiting middleware...");
+// Rate limiting middleware initialization
 
 // In-memory store for rate limiting (in production, use Redis)
 const rateLimitStore = new Map();
 
-console.log("✓Rate limit store created");
+// Rate limit store ready
 
 // Clean up expired entries every 5 minutes
 setInterval(() => {
@@ -18,7 +18,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-console.log("✓Rate limit cleanup interval configured");
+// Cleanup interval configured
 
 /**
  * Create rate limiting middleware

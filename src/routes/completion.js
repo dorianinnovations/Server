@@ -11,7 +11,6 @@ import { getIncrementalMemory, optimizeContextSize } from "../utils/incrementalM
 import { trackMemoryUsage, calculateOptimizationSavings } from "../utils/memoryAnalytics.js";
 import ubpmService from "../services/ubpmService.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
-import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import logger from "../utils/logger.js";
 import toolRegistry from "../services/toolRegistry.js";
 import toolExecutor from "../services/toolExecutor.js";
@@ -125,11 +124,10 @@ const detectUBPMQuery = (userPrompt, recentMemory = []) => {
 // Get Rich UBPM Data for GPT-4o
 const getRichUBPMData = async (userId) => {
   try {
-    const [user, behaviorProfile, recentMemories, emotionalSessions] = await Promise.all([
+    const [user, behaviorProfile, recentMemories] = await Promise.all([
       User.findById(userId).select('emotionalLog profile createdAt'),
       UserBehaviorProfile.findOne({ userId }),
-      ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(50),
-      EmotionalAnalyticsSession.find({ userId }).sort({ weekStartDate: -1 }).limit(8)
+      ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(50)
     ]);
 
     if (!behaviorProfile) {
@@ -151,7 +149,7 @@ const getRichUBPMData = async (userId) => {
         timeRange: recentMemories.length > 0 ? 
           `${new Date(recentMemories[recentMemories.length - 1].timestamp).toLocaleDateString()} - ${new Date(recentMemories[0].timestamp).toLocaleDateString()}` : 'No recent activity'
       },
-      emotionalInsights: emotionalSessions.slice(0, 4).map(session => ({
+      emotionalInsights: [].slice(0, 4).map(session => ({
         week: session.weekStartDate.toLocaleDateString(),
         primaryEmotion: session.primaryEmotion,
         intensity: session.averageIntensity,
@@ -666,7 +664,7 @@ router.post("/completion", protect, async (req, res) => {
     const shouldUseTools = isToolRequiredMessage(userPrompt);
     
     if (shouldUseTools) {
-      console.log('🔧 TOOLS: Message requires tools, loading tool registry');
+      // Loading tool registry for request
       try {
         const allTools = await toolRegistry.getAllTools();
         // Limit to essential tools to avoid 400 errors

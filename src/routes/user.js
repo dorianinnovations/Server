@@ -4,7 +4,6 @@ import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
-import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
 
@@ -132,8 +131,6 @@ router.delete("/delete/:userId?", protect, async (req, res) => {
       // Delete user's behavioral profile
       UserBehaviorProfile.deleteMany({ userId: targetUserId }),
       
-      // Delete user's emotional analytics sessions
-      EmotionalAnalyticsSession.deleteMany({ userId: targetUserId }),
       
       // Delete the user account itself
       User.findByIdAndDelete(targetUserId)

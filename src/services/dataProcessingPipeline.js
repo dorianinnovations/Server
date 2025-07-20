@@ -1,7 +1,6 @@
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import personalizationEngine from './personalizationEngine.js';
 import advancedAnalytics from './advancedAnalytics.js';
 import connectionEngine from './connectionEngine.js';

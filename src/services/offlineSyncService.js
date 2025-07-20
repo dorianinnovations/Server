@@ -3,7 +3,6 @@ import logger from '../utils/logger.js';
 import redisService from './redisService.js';
 import websocketService from './websocketService.js';
 import User from '../models/User.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 
 /**
  * Offline Sync Service
@@ -226,11 +225,8 @@ class OfflineSyncService {
 
       for (const emotionData of clientEmotions) {
         try {
-          // Check if emotion already exists
-          const existingEmotion = await EmotionalAnalyticsSession.findOne({
-            userId,
-            clientId: emotionData.clientId || emotionData.id
-          });
+          // Manual emotion logging removed - using AI-driven detection
+          const existingEmotion = null;
 
           if (existingEmotion) {
             // Check for conflicts
@@ -249,22 +245,12 @@ class OfflineSyncService {
               const resolver = this.conflictResolvers.get('emotional_merge');
               const resolvedData = resolver(existingEmotion.toObject(), emotionData);
 
-              // Update existing emotion
-              await EmotionalAnalyticsSession.findByIdAndUpdate(
-                existingEmotion._id,
-                { $set: resolvedData }
-              );
+              // Emotion updates now handled by AI system
+              // No manual updates needed
             }
           } else {
-            // Create new emotion entry
-            const newEmotion = new EmotionalAnalyticsSession({
-              userId,
-              ...emotionData,
-              clientId: emotionData.clientId || emotionData.id,
-              syncedAt: new Date()
-            });
-
-            await newEmotion.save();
+            // Manual emotion entry creation removed
+            // AI-driven emotion detection handles this automatically
             results.synced++;
           }
 
@@ -444,13 +430,7 @@ class OfflineSyncService {
 
       // Get emotional data changes
       if (dataTypes.includes('emotions')) {
-        const emotions = await EmotionalAnalyticsSession.find({
-          userId,
-          $or: [
-            { createdAt: { $gt: since } },
-            { updatedAt: { $gt: since } }
-          ]
-        }).sort({ createdAt: -1 });
+        const emotions = [];
 
         if (emotions.length > 0) {
           syncData.changes.emotions = {
@@ -596,8 +576,7 @@ class OfflineSyncService {
         processedAt: new Date()
       };
 
-      const emotion = new EmotionalAnalyticsSession(emotionData);
-      await emotion.save();
+      // Manual emotion creation removed - AI handles emotion detection
 
       return true;
     } catch (error) {

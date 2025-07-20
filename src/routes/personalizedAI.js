@@ -8,7 +8,6 @@ import websocketService from '../services/websocketService.js';
 import personalizationEngine from '../services/personalizationEngine.js';
 import connectionEngine from '../services/connectionEngine.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -45,7 +44,7 @@ router.post('/contextual-chat', protect, async (req, res) => {
           .lean()
       ),
       UserBehaviorProfile.findOne({ userId }),
-      EmotionalAnalyticsSession.getCurrentSession(userId)
+Promise.resolve(null)
     ]);
 
     if (!user) {

@@ -1,7 +1,6 @@
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -35,7 +34,7 @@ class AdvancedAnalytics {
         UserBehaviorProfile.findOne({ userId }),
         User.findById(userId).select('emotionalLog profile createdAt'),
         ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(50),
-        EmotionalAnalyticsSession.find({ userId }).sort({ weekStartDate: -1 }).limit(12)
+        Promise.resolve([])
       ]);
 
       if (!user) {

@@ -1,7 +1,6 @@
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import logger from '../utils/logger.js';
 import websocketService from './websocketService.js';
 
@@ -51,7 +50,7 @@ class UBPMService {
         User.findById(userId).select('emotionalLog profile createdAt'),
         UserBehaviorProfile.findOne({ userId }),
         ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(100),
-        EmotionalAnalyticsSession.find({ userId }).sort({ weekStartDate: -1 }).limit(4)
+        Promise.resolve([])
       ]);
 
       // Create initial profile if none exists

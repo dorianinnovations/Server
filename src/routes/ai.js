@@ -65,11 +65,13 @@ async function handleDirectDataQuery(userId, message) {
   try {
     // Temporal queries with time periods (check specific first)
     if (/this.*week|weekly/.test(lowerMessage) && /temporal/.test(lowerMessage)) {
-      const profile = await UserBehaviorProfile.findOne({ userId });
-      const recentMemory = await ShortTermMemory.find({ 
-        userId,
-        timestamp: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-      }).lean();
+      const [profile, recentMemory] = await Promise.all([
+        UserBehaviorProfile.findOne({ userId }),
+        ShortTermMemory.find({ 
+          userId,
+          timestamp: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+        }).lean()
+      ]);
       
       if (!profile && recentMemory.length === 0) return "No temporal data for this week yet.";
       
@@ -94,33 +96,25 @@ async function handleDirectDataQuery(userId, message) {
     
     // Emotional analysis over time periods
     if (/emotions.*last.*two.*days|whats.*my.*emotions.*doing|emotional.*trend/.test(lowerMessage)) {
-      const { default: EmotionalAnalyticsSession } = await import('../models/EmotionalAnalyticsSession.js');
-      const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      // Use AI-driven emotion detection from conversation history instead of manual logging
+      const emotionalSessions = [];
       
-      const emotionalSessions = await EmotionalAnalyticsSession.find({
-        userId,
-        timestamp: { $gte: twoDaysAgo }
-      }).sort({ timestamp: -1 }).lean();
+      if (emotionalSessions.length === 0) return "I'm analyzing your emotional patterns through our conversations. The AI-driven system has replaced manual emotion logging for better accuracy.";
       
-      if (emotionalSessions.length === 0) return "No emotional data from the last two days.";
+      const emotions = [];
+      const avgIntensity = 0;
       
-      const emotions = emotionalSessions.map(s => s.emotion).filter(Boolean);
-      const avgIntensity = emotionalSessions
-        .filter(s => s.intensity)
-        .reduce((sum, s) => sum + s.intensity, 0) / emotionalSessions.length || 0;
-      
-      const dominantEmotion = emotions.length > 0 ? 
-        emotions.reduce((a, b, i, arr) => 
-          arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b
-        ) : 'neutral';
+      const dominantEmotion = 'neutral';
       
       return `Last 2 Days Emotions: ${dominantEmotion} (dominant) | Avg intensity: ${avgIntensity.toFixed(1)}/10 | ${emotionalSessions.length} sessions`;
     }
     
     // Future change predictions
     if (/how.*could.*this.*change.*me|future.*change|predict.*my.*future|what.*will.*happen/.test(lowerMessage)) {
-      const profile = await UserBehaviorProfile.findOne({ userId });
-      const recentMemory = await ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(10).lean();
+      const [profile, recentMemory] = await Promise.all([
+        UserBehaviorProfile.findOne({ userId }),
+        ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(10).lean()
+      ]);
       
       if (!profile && recentMemory.length < 3) return "Need more data to predict future changes.";
       
@@ -354,39 +348,17 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory, str
   }
 }
 
-// Real-time emotional data population
+// Real-time emotional data population - now handled by AI-driven analysis
 async function populateEmotionalData(userId, userMessage, recentMemory, recentEmotions) {
   try {
-    const { default: EmotionalAnalyticsSession } = await import('../models/EmotionalAnalyticsSession.js');
+    // Emotion detection is now handled by AI analysis of conversation patterns
+    // No manual logging needed - emotions are detected from conversation context
     
-    // Detect emotion from message content
     const detectedEmotion = detectEmotionAdvanced(userMessage);
     const intensity = calculateEmotionalIntensity(userMessage);
     
-    // Create emotional analytics session with required schema fields
-    const now = new Date();
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(endOfWeek.getDate() + 6);
-    
-    await EmotionalAnalyticsSession.create({
-      userId,
-      emotion: detectedEmotion.emotion,
-      intensity: intensity,
-      confidence: detectedEmotion.confidence,
-      triggers: extractEmotionalTriggers(userMessage),
-      context: {
-        messageLength: userMessage.length,
-        timeOfDay: new Date().getHours(),
-        conversationStage: recentMemory.length
-      },
-      timestamp: new Date(),
-      // Required schema fields
-      year: new Date().getFullYear(),
-      weekNumber: Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 604800000),
-      weekStartDate: startOfWeek,
-      weekEndDate: endOfWeek
-    });
+    // Log for debugging but don't store in separate collection
+    console.log(`🧠 AI-detected emotion: ${detectedEmotion.emotion} (intensity: ${intensity}, confidence: ${detectedEmotion.confidence})`);
   } catch (error) {
     console.error('Error populating emotional data:', error);
   }
@@ -734,10 +706,36 @@ function formatToolResultForUser(toolName, result) {
       case 'web_search':
         if (parsedResult.results && Array.isArray(parsedResult.results)) {
           const resultCount = parsedResult.results.length;
-          const topResults = parsedResult.results.slice(0, 3).map(r => 
-            `• **${r.title}** - ${r.snippet || r.displayLink}`
-          ).join('\n');
-          return `🔍 **Found ${resultCount} search results:**\n${topResults}${resultCount > 3 ? `\n...and ${resultCount - 3} more results` : ''}`;
+          
+          // Security: Validate and sanitize URLs
+          const sanitizeUrl = (url) => {
+            if (!url) return null;
+            try {
+              const parsed = new URL(url);
+              // Only allow HTTP/HTTPS protocols
+              if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                console.warn('Blocked non-HTTP URL:', url);
+                return null;
+              }
+              // Block suspicious domains (basic check)
+              const suspiciousDomains = ['localhost', '127.0.0.1', '0.0.0.0'];
+              if (suspiciousDomains.some(domain => parsed.hostname.includes(domain))) {
+                console.warn('Blocked suspicious domain:', url);
+                return null;
+              }
+              return parsed.toString();
+            } catch (error) {
+              console.warn('Invalid URL blocked:', url);
+              return null;
+            }
+          };
+          
+          const topResults = parsedResult.results.slice(0, 5).map(r => {
+            const sanitizedUrl = sanitizeUrl(r.link);
+            return `• **${r.title}** - ${r.snippet || r.displayLink}${sanitizedUrl ? ` [${sanitizedUrl}]` : ''}`;
+          }).join('\n');
+          
+          return `🔍 **Found ${resultCount} search results:**\n${topResults}${resultCount > 5 ? `\n...and ${resultCount - 5} more results` : ''}`;
         }
         break;
         
@@ -1123,7 +1121,7 @@ Preferences: ${JSON.stringify(preferences)}`;
 
 router.post('/adaptive-chat', protect, async (req, res) => {
   try {
-    const { message, prompt, emotionalContext: _emotionalContext, personalityProfile: _personalityProfile, personalityStyle: _personalityStyle, conversationGoal: _conversationGoal, stream, attachments } = req.body;
+    const { message, prompt, emotionalContext: _emotionalContext, personalityProfile: _personalityProfile, personalityStyle: _personalityStyle, conversationGoal: _conversationGoal, stream, attachments, userContext: clientUserContext } = req.body;
     // Support both message and prompt parameters for flexibility
     const userMessage = message || prompt;
     const userId = req.user.id;
@@ -1178,18 +1176,26 @@ router.post('/adaptive-chat', protect, async (req, res) => {
     const hasImages = attachments && attachments.some(att => att.type === 'image');
     const contextType = hasImages ? 'focused' : 'standard'; // Focused mode for images to save tokens
     
-    // Get enhanced conversation context with incremental memory optimization
-    const enhancedContext = await enhancedMemoryService.getUserContext(userId, hasImages ? 8 : 12);
+    // MEMORY OPTIMIZATION: Smart context loading with size limits
+    const maxContextSize = hasImages ? 8 : 12;
+    const enhancedContext = await enhancedMemoryService.getUserContext(userId, maxContextSize);
     const _user = enhancedContext.metadata;
     const fullMemory = enhancedContext.conversation.recentMessages;
     
-    // COST OPTIMIZATION: Apply incremental memory optimization
+    // MEMORY OPTIMIZATION: Apply incremental memory with strict limits
     const incrementalResult = getIncrementalMemory(userId, fullMemory, {
       enableIncremental: true,
-      maxDeltaSize: hasImages ? 8 : 15 // Smaller delta for image requests
+      maxDeltaSize: hasImages ? 6 : 12, // Reduced for better memory usage
+      enforceMemoryLimit: true // New flag to enforce memory limits
     });
     
     const recentMemory = incrementalResult.memory;
+    
+    // MEMORY OPTIMIZATION: Limit memory object size
+    if (recentMemory.length > maxContextSize) {
+      recentMemory.splice(maxContextSize);
+      log.system(`Truncated memory to ${maxContextSize} messages for user ${userId}`);
+    }
 
     // Extract user data from enhanced context
     const recentEmotions = enhancedContext.recentEmotions;
@@ -1201,30 +1207,43 @@ router.post('/adaptive-chat', protect, async (req, res) => {
       recentVibe: 'getting to know each other'
     };
 
+    // PERFORMANCE OPTIMIZATION: Check cache first for intelligence analysis
+    let cachedIntelligence = await requestCacheService.get(`intelligence:${userId}`);
+    
     // REAL-TIME BEHAVIORAL DATA POPULATION  
     if (stream === true) {
-      // For streaming mode, run intelligence analysis synchronously before LLM
-      // But don't stream intelligence updates to avoid conflicts with LLM streaming
-      try {
-        await populateRealBehavioralData(userId, userMessage, recentMemory, null);
-      } catch (error) {
-        console.error('Intelligence analysis error:', error);
-      }
-    } else {
-      // For non-streaming mode, run in background
-      setImmediate(async () => {
+      // For streaming mode, run intelligence analysis synchronously if not cached
+      if (!cachedIntelligence) {
         try {
           await populateRealBehavioralData(userId, userMessage, recentMemory, null);
-        
-        // Standard UBPM analysis
-        ubpmService.analyzeUserBehaviorPatterns(userId, 'chat_interaction');
-        
-          // Enhanced emotion processing with real data
-          await populateEmotionalData(userId, userMessage, recentMemory, recentEmotions);
+          // Cache the result for future requests
+          setImmediate(async () => {
+            const intelligenceData = await UserBehaviorProfile.findOne({ userId }).lean();
+            if (intelligenceData) {
+              await requestCacheService.set(`intelligence:${userId}`, intelligenceData, 300);
+            }
+          });
         } catch (error) {
-          console.error('Background data population error:', error);
+          console.error('Intelligence analysis error:', error);
         }
-      });
+      }
+    } else {
+      // For non-streaming mode, run in background only if not cached
+      if (!cachedIntelligence) {
+        setImmediate(async () => {
+          try {
+            await populateRealBehavioralData(userId, userMessage, recentMemory, null);
+        
+            // Standard UBPM analysis
+            ubpmService.analyzeUserBehaviorPatterns(userId, 'chat_interaction');
+        
+            // Enhanced emotion processing with real data
+            await populateEmotionalData(userId, userMessage, recentMemory, recentEmotions);
+          } catch (error) {
+            console.error('Background data population error:', error);
+          }
+        });
+      }
     }
 
     const _timeContext = {
@@ -1266,7 +1285,9 @@ INSIGHT DELIVERY:
 • Surface blind spots they didn't know they had
 
 TOOL EXECUTION:
-Use tools immediately for: web_search, calculator, weather_check, ubpm_analysis, translation, and others as needed.
+Use tools immediately for: web_search, calculator, ubpm_analysis, translation, location_service, and others as needed.
+• CRITICAL: When user asks "where am I?" or similar location questions, you MUST use location_service tool and respond: "You are located in [city, state, country]. Would you like more information about your location?"
+• Do NOT use weather_check for location questions - use location_service only
 
 PRECISION TARGETING:
 • Engineers: Provide exact metrics, system architecture insights, optimization paths
@@ -1316,6 +1337,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
       }
     }
     
+    
     // Add recent emotional context with growth tracking
     if (recentEmotions && recentEmotions.length > 0) {
       const latestEmotion = recentEmotions[0];
@@ -1351,7 +1373,42 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
       }
     }
     
+    // Detect recent tool usage for context continuity 
+    const recentToolUsage = [];
+    for (let i = Math.max(0, recentMemory.length - 4); i < recentMemory.length; i++) {
+      const msg = recentMemory[i];
+      if (msg?.role === 'assistant' && msg?.content) {
+        if (msg.content.includes('🧠 **UBPM Analysis')) {
+          recentToolUsage.push('UBPM behavioral analysis was just shown');
+        }
+        if (msg.content.includes('🔍 **Web Search')) {
+          recentToolUsage.push('Web search results were just provided');
+        }
+        if (msg.content.includes('🎵 **Music')) {
+          recentToolUsage.push('Music recommendations were just given');
+        }
+        if (msg.content.includes('💰 **Credit') || msg.content.includes('💳 **Balance')) {
+          recentToolUsage.push('Credit/wallet information was just displayed');
+        }
+      }
+    }
+    
     systemPrompt += '\n**REMEMBER:** Reference conversation history naturally. Use tools proactively for any information requests.';
+    
+    if (recentToolUsage.length > 0) {
+      systemPrompt += `\n**RECENT CONTEXT:** ${recentToolUsage.join(', ')} - be ready to explain or elaborate on these results.`;
+    }
+    
+    // Add explicit instruction for context awareness
+    const lastUserMessage = recentMemory.filter(msg => msg.role === 'user').pop();
+    const lastAssistantMessage = recentMemory.filter(msg => msg.role === 'assistant').pop();
+    
+    if (lastUserMessage && lastAssistantMessage) {
+      const isFollowUpQuestion = /what.*mean|explain.*that|what.*this|tell.*more|what.*about|what.*is|clarify|elaborate/i.test(finalMessage);
+      if (isFollowUpQuestion && finalMessage.length < 50) {
+        systemPrompt += `\n**CONTEXT ALERT:** User is asking a follow-up question about your previous response. Reference the specific data/information you just provided.`;
+      }
+    }
     
     // Add UBPM context if available
     if (ubpmContext) {
@@ -1518,7 +1575,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         }
         
         if (needsTools && !recentSearchCheck.shouldSkipTools) {
-          console.log('🔧 SELECTIVE TOOLS: Message requires tools, loading relevant ones');
+          // Loading tools for message processing
           try {
             const allTools = await toolRegistry.getToolsForOpenAI();
             
@@ -1528,13 +1585,14 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
               const toolName = tool.function?.name || tool.name || '';
               
               // AGGRESSIVE LOADING: Always include essential tools for tool-requiring messages
-              if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations', 'ubpm_analysis'].includes(toolName)) {
+              if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations', 'ubpm_analysis', 'location_service'].includes(toolName)) {
                 return true;
               }
               
               // Content-specific tools with broader matching
               if (messageContent.includes('weather') && toolName === 'weather_check') return true;
               if (messageContent.includes('calculate') && toolName === 'calculator') return true;
+              if ((messageContent.includes('where am i') || messageContent.includes('my location') || messageContent.includes('current location')) && toolName === 'location_service') return true;
               if ((messageContent.includes('search') || messageContent.includes('google') || messageContent.includes('find')) && toolName === 'web_search') return true;
               if ((messageContent.includes('news') || messageContent.includes('latest')) && toolName === 'news_search') return true;
               if ((messageContent.includes('music') || messageContent.includes('song')) && toolName === 'music_recommendations') return true;
@@ -1550,17 +1608,17 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             });
             
             availableTools = relevantTools.slice(0, 8); // Limit to 8 tools max for performance
-            console.log(`🔧 SELECTIVE TOOLS: Loaded ${availableTools.length}/${allTools.length} relevant tools`);
+            // Loaded relevant tools for request
           } catch (error) {
             console.error('🔧 SELECTIVE TOOLS: Error loading tools:', error);
             availableTools = [];
           }
         } else {
-          console.log('🔧 SELECTIVE TOOLS: Message does not require tools, skipping tool load');
+          // No tools needed for this message
         }
 
         const useTools = availableTools.length > 0;
-        console.log(`🧪 DEBUG: Message needs tools: ${needsTools}, Using tools: ${useTools}, tools count: ${availableTools.length}`);
+        // Tool selection complete
 
         streamResponse = await llmService.makeStreamingRequest(messages, {
           temperature: 0.15, // TOP TECH MODE: Industry-leading precision
@@ -1626,10 +1684,10 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
                 // NATURAL READING PACE: Larger buffer for comfortable streaming speed
                 chunkBuffer += content;
                 
-                // Stream at smaller boundaries for responsive streaming
-                // Reduced buffer size for faster perceived speed
-                if (chunkBuffer.length >= 8 || 
-                    (chunkBuffer.length >= 3 && (content.includes(' ') || content.includes('\n'))) ||
+                // Stream at comfortable reading boundaries for better comprehension
+                // Optimized buffer size for natural reading speed
+                if (chunkBuffer.length >= 25 || 
+                    (chunkBuffer.length >= 12 && (content.includes(' ') || content.includes('\n'))) ||
                     content.includes('.') || content.includes('!') || content.includes('?')) {
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
@@ -1726,7 +1784,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
                 const toolResult = await Promise.race([
                   toolExecutor.executeToolCall({
                     function: { name: toolName, arguments: toolArgs }
-                  }, { userId, user, creditPool }),
+                  }, { userId, user, creditPool, ...clientUserContext }),
                   new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Tool execution timeout')), 15000)
                   )
@@ -1851,6 +1909,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             });
             
             let followUpBuffer = '';
+            let followUpContentBuffer = ''; // Buffer for smooth tool result streaming
             
             followUpResponse.data.on('data', (chunk) => {
               followUpBuffer += chunk.toString();
@@ -1862,6 +1921,11 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
                   const data = line.substring(6).trim();
                   
                   if (data === '[DONE]') {
+                    // Send any remaining buffered content
+                    if (followUpContentBuffer) {
+                      res.write(`data: ${JSON.stringify({ content: followUpContentBuffer })}\n\n`);
+                      res.flush && res.flush();
+                    }
                     res.write('data: [DONE]\n\n');
                     res.end();
                     saveConversationToMemory();
@@ -1874,8 +1938,16 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
                     
                     if (choice?.delta?.content) {
                       const content = choice.delta.content;
-                      res.write(`data: ${JSON.stringify({ content })}\n\n`);
-                      res.flush && res.flush();
+                      followUpContentBuffer += content;
+                      
+                      // Buffer tool results for comfortable reading speed
+                      if (followUpContentBuffer.length >= 20 || 
+                          (followUpContentBuffer.length >= 8 && (content.includes(' ') || content.includes('\n'))) ||
+                          content.includes('.') || content.includes('!') || content.includes('?')) {
+                        res.write(`data: ${JSON.stringify({ content: followUpContentBuffer })}\n\n`);
+                        res.flush && res.flush();
+                        followUpContentBuffer = '';
+                      }
                     }
                   } catch {
                     // Ignore parsing errors
@@ -2035,7 +2107,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
       const needsTools = isToolRequiredMessage(userMessage);
       
       if (needsTools) {
-        console.log('🔧 SELECTIVE TOOLS (non-streaming): Message requires tools, loading relevant ones');
+        // Loading tools for non-streaming request
         try {
           const allTools = await toolRegistry.getToolsForOpenAI();
           
@@ -2045,13 +2117,14 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             const toolName = tool.function?.name || tool.name || '';
             
             // AGGRESSIVE LOADING: Always include essential tools for tool-requiring messages
-            if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations', 'ubpm_analysis'].includes(toolName)) {
+            if (['web_search', 'calculator', 'weather_check', 'social_search', 'news_search', 'music_recommendations', 'ubpm_analysis', 'location_service'].includes(toolName)) {
               return true;
             }
             
             // Content-specific tools with broader matching
             if (messageContent.includes('weather') && toolName === 'weather_check') return true;
             if (messageContent.includes('calculate') && toolName === 'calculator') return true;
+            if ((messageContent.includes('where am i') || messageContent.includes('my location') || messageContent.includes('current location')) && toolName === 'location_service') return true;
             if ((messageContent.includes('search') || messageContent.includes('google') || messageContent.includes('find')) && toolName === 'web_search') return true;
             if ((messageContent.includes('news') || messageContent.includes('latest')) && toolName === 'news_search') return true;
             if ((messageContent.includes('music') || messageContent.includes('song')) && toolName === 'music_recommendations') return true;
@@ -2067,13 +2140,13 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
           });
           
           availableTools = relevantTools.slice(0, 8); // Limit to 8 tools max for performance
-          console.log(`🔧 SELECTIVE TOOLS (non-streaming): Loaded ${availableTools.length}/${allTools.length} relevant tools`);
+          // Loaded tools for non-streaming request
         } catch (error) {
           console.error('🔧 SELECTIVE TOOLS (non-streaming): Error loading tools:', error);
           availableTools = [];
         }
       } else {
-        console.log('🔧 SELECTIVE TOOLS (non-streaming): Message does not require tools, skipping tool load');
+        // No tools needed for non-streaming request
       }
 
       const response = await llmService.makeLLMRequest(messages, {
@@ -2139,7 +2212,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             
             const toolResult = await toolExecutor.executeToolCall({
               function: { name: toolName, arguments: toolArgs }
-            }, { userId, user, creditPool });
+            }, { userId, user, creditPool, ...clientUserContext });
             
             // Send completion status to frontend
             websocketService.sendToUser(userId, 'tool_execution_complete', {

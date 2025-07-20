@@ -27,6 +27,14 @@ export const env = {
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
   AWS_REGION: process.env.AWS_REGION || 'us-east-2',
   S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'numina-user-content',
+  
+  // RESEND Email Configuration
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  FROM_EMAIL: process.env.FROM_EMAIL || 'noreply@numina.ai',
+  
+  // Fallback email configuration (Gmail SMTP)
+  EMAIL_USER: process.env.EMAIL_USER,
+  EMAIL_APP_PASSWORD: process.env.EMAIL_APP_PASSWORD,
 };
 
 console.log('✓Environment configuration loaded successfully');

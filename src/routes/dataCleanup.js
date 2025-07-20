@@ -4,7 +4,6 @@ import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import Task from '../models/Task.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import { HTTP_STATUS, MESSAGES } from '../config/constants.js';
 import logger from '../utils/logger.js';
 
@@ -28,7 +27,7 @@ router.get('/audit', protect, async (req, res) => {
       ShortTermMemory.find({ userId }).sort({ timestamp: -1 }),
       Task.find({ userId }).sort({ createdAt: -1 }),
       UserBehaviorProfile.findOne({ userId }),
-      EmotionalAnalyticsSession.find({ userId }).sort({ weekStartDate: -1 })
+      Promise.resolve([])
     ]);
 
     // Calculate storage usage
@@ -117,7 +116,7 @@ router.get('/system-audit', protect, async (req, res) => {
       ShortTermMemory.countDocuments(),
       Task.countDocuments(),
       UserBehaviorProfile.countDocuments(),
-      EmotionalAnalyticsSession.countDocuments()
+      Promise.resolve(0)
     ]);
 
     // Get users with most data
@@ -187,16 +186,14 @@ router.post('/cleanup-orphaned', protect, async (req, res) => {
       userId: { $nin: userIdStrings }
     });
 
-    const orphanedEmotionalSessions = await EmotionalAnalyticsSession.find({
-      userId: { $nin: userIdStrings }
-    });
+    const orphanedEmotionalSessions = [];
 
     // Delete orphaned data
     const cleanupResults = await Promise.allSettled([
       ShortTermMemory.deleteMany({ userId: { $nin: userIdStrings } }),
       Task.deleteMany({ userId: { $nin: userIdStrings } }),
       UserBehaviorProfile.deleteMany({ userId: { $nin: userIdStrings } }),
-      EmotionalAnalyticsSession.deleteMany({ userId: { $nin: userIdStrings } })
+      Promise.resolve({ deletedCount: 0 })
     ]);
 
     const deletedCounts = {
@@ -250,7 +247,7 @@ router.post('/cleanup-old', protect, async (req, res) => {
     const cleanupResults = await Promise.allSettled([
       ShortTermMemory.deleteMany({ timestamp: { $lt: cutoffDate } }),
       Task.deleteMany({ createdAt: { $lt: cutoffDate } }),
-      EmotionalAnalyticsSession.deleteMany({ weekStartDate: { $lt: cutoffDate } })
+      Promise.resolve({ deletedCount: 0 })
     ]);
 
     const deletedCounts = {

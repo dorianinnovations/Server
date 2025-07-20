@@ -5,7 +5,6 @@ import logger from '../utils/logger.js';
 import redisService from '../services/redisService.js';
 import websocketService from '../services/websocketService.js';
 import User from '../models/User.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 import multer from 'multer';
 import sharp from 'sharp';
 import { fileTypeFromBuffer } from 'file-type';
@@ -55,9 +54,6 @@ router.post('/mobile/batch',
           switch (endpoint) {
             case '/profile':
               result = await handleProfileRequest(req.user.userId, method, data);
-              break;
-            case '/emotions':
-              result = await handleEmotionsRequest(req.user.userId, method, data);
               break;
             case '/analytics/insights':
               result = await handleAnalyticsRequest(req.user.userId, method, data);
@@ -139,7 +135,7 @@ router.get('/mobile/sync', authenticateToken, async (req, res) => {
     };
 
     // Define what data types to sync
-    const requestedTypes = dataTypes ? dataTypes.split(',') : ['profile', 'emotions', 'conversations', 'analytics'];
+    const requestedTypes = dataTypes ? dataTypes.split(',') : ['profile', 'conversations', 'analytics'];
 
     // Sync user profile if requested
     if (requestedTypes.includes('profile')) {
@@ -150,19 +146,6 @@ router.get('/mobile/sync', authenticateToken, async (req, res) => {
       };
     }
 
-    // Sync emotions if requested
-    if (requestedTypes.includes('emotions')) {
-      const recentEmotions = await EmotionalAnalyticsSession.find({
-        userId,
-        createdAt: { $gte: lastSyncDate }
-      }).sort({ createdAt: -1 }).limit(100);
-
-      syncData.data.emotions = {
-        updated: recentEmotions.length > 0,
-        data: recentEmotions,
-        count: recentEmotions.length
-      };
-    }
 
     // Sync conversations if requested
     if (requestedTypes.includes('conversations')) {
@@ -246,9 +229,6 @@ router.post('/mobile/offline-queue',
           // Process based on endpoint
           let result;
           switch (endpoint) {
-            case '/emotions':
-              result = await handleEmotionsRequest(userId, method, data);
-              break;
             case '/analytics/session':
               result = await handleAnalyticsRequest(userId, method, data);
               break;
@@ -483,36 +463,6 @@ async function handleProfileRequest(userId, method, data) {
   }
 }
 
-async function handleEmotionsRequest(userId, method, data) {
-  try {
-    if (method === 'POST') {
-      const emotionData = {
-        userId,
-        ...data,
-        timestamp: new Date()
-      };
-      
-      const session = new EmotionalAnalyticsSession(emotionData);
-      await session.save();
-      
-      // Notify via WebSocket
-      websocketService.sendToUser(userId, 'emotion_saved', emotionData);
-      
-      return { success: true, data: session };
-    }
-    
-    if (method === 'GET') {
-      const emotions = await EmotionalAnalyticsSession.find({ userId })
-        .sort({ createdAt: -1 })
-        .limit(50);
-      return { success: true, data: emotions };
-    }
-    
-    return { success: false, error: 'Method not supported' };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-}
 
 async function handleAnalyticsRequest(userId, method, _data) {
   try {

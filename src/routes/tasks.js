@@ -163,6 +163,18 @@ async function processTask(task, userId) {
         taskResult = `Mood analysis complete. Patterns identified in your emotional data suggest focusing on stress management techniques.`;
         break;
 
+      case "process_daily_insights":
+        // Process daily emotional insights using taskScheduler
+        const { default: taskScheduler } = await import("../services/taskScheduler.js");
+        taskResult = await taskScheduler.processDailyInsights(userId, task.parameters);
+        break;
+
+      case "generate_weekly_report":
+        // Generate weekly report using taskScheduler
+        const { default: taskSchedulerWeekly } = await import("../services/taskScheduler.js");
+        taskResult = await taskSchedulerWeekly.generateWeeklyReport(userId, task.parameters);
+        break;
+
       default:
         taskResult = `Unknown task type: ${task.taskType}. Please check task configuration.`;
         taskStatus = "failed";

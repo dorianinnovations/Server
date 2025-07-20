@@ -16,6 +16,9 @@
     "test-api": "node scripts/testAPI.js",
     "test-websocket": "node scripts/testWebSocket.js",
     "test-numina-senses": "node scripts/testNuminaSenses.js",
+    "optimize-db": "node scripts/optimizeDatabase.js",
+    "test-performance": "node scripts/performanceTest.js",
+    "test-optimizations": "node scripts/testOptimizations.js",
     "lint": "eslint src/ --quiet",
     "lint:errors": "eslint src/ tests/ --quiet --max-warnings 0"
   },

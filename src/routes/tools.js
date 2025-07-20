@@ -41,7 +41,7 @@ router.get('/available', authMiddleware, async (req, res) => {
 
 router.post('/execute', authMiddleware, async (req, res) => {
   try {
-    const { toolName, arguments: args } = req.body;
+    const { toolName, arguments: args, userContext: clientUserContext } = req.body;
     
     if (!toolName) {
       return res.status(400).json({
@@ -53,10 +53,12 @@ router.post('/execute', authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id);
     const creditPool = await CreditPool.findOne({ userId: req.user.id });
     
+    // Merge server userContext with client-provided userContext (e.g., location data)
     const userContext = {
       userId: req.user.id,
       user: user,
       creditPool: creditPool,
+      ...clientUserContext, // Include location and other client context
     };
     
     const toolCall = {

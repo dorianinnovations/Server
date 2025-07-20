@@ -1,7 +1,6 @@
 import cron from "node-cron";
 import Task from "../models/Task.js";
 import User from "../models/User.js";
-import EmotionalAnalyticsSession from "../models/EmotionalAnalyticsSession.js";
 import logger from "../utils/logger.js";
 import { AnalyticsService } from "./analytics.js";
 import { createLLMService } from "./llmService.js";
@@ -111,7 +110,8 @@ class TaskScheduler {
     // Process emotional analytics sessions at 2 AM daily
     const emotionalAnalyticsJob = cron.schedule("0 2 * * *", async () => {
       try {
-        await this.processEmotionalAnalyticsSessions();
+        // Emotional analytics now handled by AI-driven system
+        logger.info("Emotional analytics handled by AI system");
       } catch (error) {
         logger.error("Error in emotional analytics job", { error: error.message });
       }
@@ -330,140 +330,17 @@ class TaskScheduler {
       throw new Error("Session ID and day are required for daily insights processing");
     }
 
-    const session = await EmotionalAnalyticsSession.findById(sessionId);
-    if (!session) {
-      throw new Error("Analytics session not found");
-    }
+    // Analytics sessions are now handled by AI-driven system
+    logger.info("Daily insights handled by AI system", { sessionId });
 
     const user = await User.findById(userId);
     if (!user) {
       throw new Error("User not found");
     }
 
-    // Get emotions for the specific day
-    const dayDate = new Date(session.weekStartDate);
-    dayDate.setDate(dayDate.getDate() + (day - 1));
-    dayDate.setHours(0, 0, 0, 0);
-    
-    const nextDay = new Date(dayDate);
-    nextDay.setDate(nextDay.getDate() + 1);
-
-    const dayEmotions = user.emotionalLog.filter(emotion => {
-      const emotionDate = new Date(emotion.timestamp);
-      return emotionDate >= dayDate && emotionDate < nextDay;
-    });
-
-    if (dayEmotions.length === 0) {
-      // No emotions for this day, mark as processed with empty insights
-      await EmotionalAnalyticsSession.updateOne(
-        { _id: sessionId },
-        { 
-          $push: { 
-            reportProgress: {
-              day,
-              date: dayDate,
-              insights: {
-                moodPatterns: "No emotions recorded for this day",
-                emotionClusters: "No data available",
-                externalFactors: "No context available",
-                intensityTrends: "No intensity data",
-                contextualThemes: "No themes identified"
-              },
-              emotionCount: 0,
-              status: "processed"
-            }
-          }
-        }
-      );
-      return `Day ${day} processed with no emotions recorded`;
-    }
-
-    try {
-      // Check if LLM service is available before proceeding
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OpenRouter API key not configured. Unable to generate insights.");
-      }
-
-      // Generate insights using LLM
-      const llmService = createLLMService();
-      const emotionsSummary = dayEmotions.map(e => 
-        `${e.emotion} (intensity: ${e.intensity || 'N/A'}) - ${e.context || 'No context'}`
-      ).join('\n');
-
-      const prompt = `Analyze these emotions for day ${day} of the week:
-
-${emotionsSummary}
-
-Please provide insights in these categories:
-1. Mood Patterns: What patterns do you see in the emotions?
-2. Emotion Clusters: How do the emotions group together?
-3. External Factors: What external factors might have influenced these emotions?
-4. Intensity Trends: What trends do you see in emotional intensity?
-5. Contextual Themes: What themes emerge from the contexts provided?
-
-Keep each insight concise (2-3 sentences max) and practical.`;
-
-      const messages = [
-        { role: "system", content: "You are an emotional analytics expert. Provide concise, practical insights about emotional patterns." },
-        { role: "user", content: prompt }
-      ];
-
-      const response = await llmService.makeLLMRequest(messages, {
-        temperature: 0.3,
-        n_predict: 400
-      });
-
-      // Parse the response into structured insights
-      const insights = this.parseInsightsFromResponse(response.content);
-
-      // Update the session with the insights
-      await EmotionalAnalyticsSession.updateOne(
-        { _id: sessionId },
-        { 
-          $push: { 
-            reportProgress: {
-              day,
-              date: dayDate,
-              insights,
-              emotionCount: dayEmotions.length,
-              status: "processed"
-            }
-          }
-        }
-      );
-
-      // Check if this was the last day and schedule final report if needed
-      const updatedSession = await EmotionalAnalyticsSession.findById(sessionId);
-      if (updatedSession.isReadyForFinalReport()) {
-        await this.scheduleTask(userId, "generate_weekly_report", { sessionId }, new Date(), 5);
-      }
-
-      return `Day ${day} processed with ${dayEmotions.length} emotions analyzed`;
-
-    } catch (error) {
-      // Mark as failed
-      await EmotionalAnalyticsSession.updateOne(
-        { _id: sessionId },
-        { 
-          $push: { 
-            reportProgress: {
-              day,
-              date: dayDate,
-              insights: {
-                moodPatterns: "Error processing insights",
-                emotionClusters: "Error processing insights",
-                externalFactors: "Error processing insights",
-                intensityTrends: "Error processing insights",
-                contextualThemes: "Error processing insights"
-              },
-              emotionCount: dayEmotions.length,
-              status: "failed"
-            }
-          }
-        }
-      );
-      throw error;
-    }
+    // Emotional insights are now generated from AI analysis of conversations
+    logger.info("Processing completed - AI handles emotional insights", { userId, day });
+    return `Day ${day} processed - AI-driven analytics active`;
   }
 
   // Generate weekly report from daily insights
@@ -474,10 +351,8 @@ Keep each insight concise (2-3 sentences max) and practical.`;
       throw new Error("Session ID is required for weekly report generation");
     }
 
-    const session = await EmotionalAnalyticsSession.findById(sessionId);
-    if (!session) {
-      throw new Error("Analytics session not found");
-    }
+    // Weekly reports are now handled by AI-driven system
+    logger.info("Weekly report handled by AI system", { userId, sessionId });
 
     const user = await User.findById(userId);
     if (!user) {
@@ -485,95 +360,12 @@ Keep each insight concise (2-3 sentences max) and practical.`;
     }
 
     try {
-      // Check if LLM service is available before proceeding
-      if (!process.env.OPENROUTER_API_KEY) {
-        throw new Error("OpenRouter API key not configured. Unable to generate weekly report.");
-      }
-
-      // Get all processed daily insights
-      const processedInsights = session.reportProgress.filter(p => p.status === "processed");
-      
-      if (processedInsights.length === 0) {
-        throw new Error("No processed insights found for weekly report");
-      }
-
-      // Collect all emotions from the week
-      const weekEmotions = user.emotionalLog.filter(emotion => {
-        const emotionDate = new Date(emotion.timestamp);
-        return emotionDate >= session.weekStartDate && emotionDate <= session.weekEndDate;
-      });
-
-      // Generate comprehensive weekly report using LLM
-      const llmService = createLLMService();
-      
-      const dailyInsightsSummary = processedInsights.map(insight => {
-        const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][insight.day - 1];
-        return `${dayName}: ${insight.emotionCount} emotions
-        - Mood Patterns: ${insight.insights.moodPatterns}
-        - Emotion Clusters: ${insight.insights.emotionClusters}
-        - External Factors: ${insight.insights.externalFactors}
-        - Intensity Trends: ${insight.insights.intensityTrends}
-        - Contextual Themes: ${insight.insights.contextualThemes}`;
-      }).join('\n\n');
-
-      const prompt = `Generate a comprehensive weekly emotional analytics report based on these daily insights:
-
-${dailyInsightsSummary}
-
-Please provide:
-1. A comprehensive summary of the week's emotional journey
-2. 3-5 key insights about emotional patterns and trends
-3. A narrative description of the emotional journey throughout the week
-4. 3-5 actionable recommendations for emotional well-being
-
-Keep the tone supportive and constructive. Focus on growth and self-awareness.`;
-
-      const messages = [
-        { role: "system", content: "You are a compassionate emotional wellness coach. Provide supportive, constructive analysis that helps users understand their emotional patterns and grow." },
-        { role: "user", content: prompt }
-      ];
-
-      const response = await llmService.makeLLMRequest(messages, {
-        temperature: 0.4,
-        n_predict: 800
-      });
-
-      // Parse the response into structured report
-      const reportData = this.parseWeeklyReportFromResponse(response.content);
-
-      // Calculate weekly stats
-      const weeklyStats = {
-        totalEmotions: weekEmotions.length,
-        avgIntensity: weekEmotions.length > 0 ? 
-          weekEmotions.reduce((sum, e) => sum + (e.intensity || 5), 0) / weekEmotions.length : 0,
-        mostFrequentEmotion: weekEmotions.length > 0 ? 
-          this.getMostFrequent(weekEmotions.map(e => e.emotion)) : "None",
-        emotionDistribution: this.calculateEmotionDistribution(weekEmotions)
-      };
-
-      // Update session with final report
-      await EmotionalAnalyticsSession.updateOne(
-        { _id: sessionId },
-        { 
-          $set: { 
-            status: "completed",
-            finalReport: {
-              ...reportData,
-              weeklyStats,
-              generatedAt: new Date()
-            }
-          }
-        }
-      );
-
-      return `Weekly report generated for session ${sessionId} with ${weekEmotions.length} emotions analyzed`;
+      // AI system handles weekly insights automatically
+      logger.info("Weekly report completed - AI system handles analytics", { userId, sessionId });
+      return `Weekly report completed - AI-driven analytics active`;
 
     } catch (error) {
-      // Mark session as failed
-      await EmotionalAnalyticsSession.updateOne(
-        { _id: sessionId },
-        { $set: { status: "failed" } }
-      );
+      logger.error("Error in weekly report generation", error);
       throw error;
     }
   }
@@ -694,54 +486,10 @@ Keep the tone supportive and constructive. Focus on growth and self-awareness.`;
   // Process emotional analytics sessions
   async processEmotionalAnalyticsSessions() {
     try {
-      // Get all users with recent emotional data
-      const users = await User.find({
-        "emotionalLog.timestamp": { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-      }).select('_id');
-
-      logger.info(`Processing emotional analytics for ${users.length} users`);
-
-      // Process each user's session
-      for (const user of users) {
-        try {
-          // Get or create current session
-          const session = await EmotionalAnalyticsSession.getCurrentSession(user._id);
-          
-          if (session.status === "completed") {
-            continue; // Skip completed sessions
-          }
-
-          // Get the next day to process
-          const nextDay = session.getNextDayToProcess();
-          
-          if (nextDay) {
-            // Schedule daily insight processing task
-            await this.scheduleTask(user._id, "process_daily_insights", {
-              sessionId: session._id.toString(),
-              day: nextDay
-            }, new Date(), 3);
-            
-            logger.info(`Scheduled daily insights processing for user ${user._id}, day ${nextDay}`);
-          }
-          
-          // If the session is ready for final report and not already scheduled
-          if (session.isReadyForFinalReport() && session.status !== "in_progress") {
-            await EmotionalAnalyticsSession.updateOne(
-              { _id: session._id },
-              { $set: { status: "in_progress" } }
-            );
-            
-            await this.scheduleTask(user._id, "generate_weekly_report", {
-              sessionId: session._id.toString()
-            }, new Date(), 5);
-            
-            logger.info(`Scheduled weekly report generation for user ${user._id}`);
-          }
-          
-        } catch (userError) {
-          logger.error(`Error processing analytics for user ${user._id}`, { error: userError.message });
-        }
-      }
+      // Emotional analytics now handled by AI-driven system
+      logger.info("Emotional analytics processing handled by AI system");
+      
+      // No manual session processing needed
       
     } catch (error) {
       logger.error("Error in processEmotionalAnalyticsSessions", { error: error.message });

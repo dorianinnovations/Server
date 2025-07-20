@@ -3,6 +3,28 @@ import toolExecutor from './toolExecutor.js';
 
 const defaultTools = [
   {
+    name: 'location_service',
+    description: 'Get user current location when asked "where am I" or similar location questions',
+    category: 'utility',
+    schema: {
+      type: 'object',
+      properties: {
+        action: { 
+          type: 'string', 
+          enum: ['get_location', 'geocode', 'reverse_geocode'], 
+          default: 'get_location',
+          description: 'Location service action to perform'
+        }
+      }
+    },
+    implementation: 'locationService',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 0,
+    permissions: ['read']
+  },
+  {
     name: 'ubpm_analysis',
     description: 'User Behavior Pattern Modeling - Advanced temporal analysis of interaction vectors, behavioral deltas, and confidence matrices for deep behavioral insights',
     category: 'utility',
@@ -584,7 +606,7 @@ const defaultTools = [
   // QUICK UTILITY TOOLS
   {
     name: 'weather_check',
-    description: 'Get current weather and forecast for any location',
+    description: 'Get current weather and forecast for a specific location. Only use when user asks about weather, temperature, or forecast. Do NOT use for general location questions.',
     category: 'utility',
     schema: {
       type: 'object',
@@ -596,7 +618,7 @@ const defaultTools = [
       required: ['location']
     },
     implementation: 'weatherCheck',
-    enabled: true,
+    enabled: false,
     requiresAuth: true,
     requiresPayment: false,
     costPerExecution: 0,

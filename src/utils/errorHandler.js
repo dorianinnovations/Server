@@ -1,6 +1,6 @@
 import logger from "./logger.js";
 
-console.log("🛡️ Initializing error handling system...");
+// Error handling system initialization
 
 // Custom error classes
 export class AppError extends Error {
@@ -45,7 +45,7 @@ export class RateLimitError extends AppError {
   }
 }
 
-console.log("✓Custom error classes defined");
+// Custom error classes ready
 
 // Global error handler middleware
 export const globalErrorHandler = (err, req, res, next) => {
@@ -101,7 +101,7 @@ export const globalErrorHandler = (err, req, res, next) => {
   });
 };
 
-console.log("✓Global error handler configured");
+// Global error handler ready
 
 // Async error wrapper
 export const catchAsync = (fn) => {
@@ -110,7 +110,7 @@ export const catchAsync = (fn) => {
   };
 };
 
-console.log("✓Async error wrapper configured");
+// Async error wrapper ready
 
 // Validation helper
 export const validateRequest = (schema) => {

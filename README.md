@@ -25,7 +25,7 @@ npm run lint
 
 ```
 numina-server/
-├── src/
+├── src/                          # Main application source
 │   ├── config/                   # App configuration
 │   │   ├── constants.js          # HTTP status codes & messages
 │   │   ├── database.js           # MongoDB connection
@@ -33,7 +33,7 @@ numina-server/
 │   ├── models/                   # Mongoose schemas
 │   │   ├── User.js                    # User auth & profile
 │   │   ├── UserBehaviorProfile.js     # Behavioral analytics
-│   │   ├── EmotionalAnalyticsSession.js # Emotion tracking
+│   │   ├── [Removed] EmotionalAnalyticsSession.js # Replaced with AI-driven emotion detection
 │   │   ├── ShortTermMemory.js         # Conversation memory
 │   │   ├── CollectiveDataConsent.js   # Privacy consent
 │   │   ├── CollectiveSnapshot.js      # Collective insights
@@ -106,7 +106,20 @@ numina-server/
 │   │   ├── newsSearch.js              # News search
 │   │   ├── stockLookup.js             # Stock information
 │   │   ├── translation.js             # Language translation
-│   │   └── [15+ more tools...]        # Additional specialized tools
+│   │   ├── passwordGenerator.js       # Password generation
+│   │   ├── qrGenerator.js             # QR code generation
+│   │   ├── timezoneConverter.js       # Timezone conversion
+│   │   ├── textGenerator.js           # Text generation
+│   │   ├── spotifyPlaylist.js         # Spotify integration
+│   │   ├── socialSearch.js            # Social media search
+│   │   ├── reservationBooking.js      # Booking assistance
+│   │   ├── nutritionLookup.js         # Nutrition information
+│   │   ├── linkedinHelper.js          # LinkedIn assistance
+│   │   ├── locationService.js         # Location services
+│   │   ├── itineraryGenerator.js      # Travel planning
+│   │   ├── creditManagement.js        # Credit system tools
+│   │   ├── ubpmAnalysis.js            # UBPM analysis
+│   │   └── [additional tools...]      # More specialized tools
 │   ├── utils/                    # Utility functions
 │   │   ├── logger.js                  # Winston logging
 │   │   ├── errorHandler.js            # Error handling
@@ -115,22 +128,114 @@ numina-server/
 │   │   ├── memory.js                  # Memory management
 │   │   ├── analyticsHelper.js         # Analytics utilities
 │   │   ├── imageCompression.js        # Image processing
-│   │   └── collectiveDataHelper.js    # Collective data utilities
+│   │   ├── imageCompressionBasic.js   # Basic image compression
+│   │   ├── collectiveDataHelper.js    # Collective data utilities
+│   │   ├── incrementalMemory.js       # Incremental memory system
+│   │   ├── memoryAnalytics.js         # Memory analytics
+│   │   └── memoryImportance.js        # Memory importance scoring
 │   └── server.js                 # Main application entry
 ├── tests/                        # Test suites
 │   ├── integration/              # API integration tests
+│   │   ├── test_credit_setup.js      # Credit system tests
+│   │   ├── test_endpoints.js         # Endpoint testing
+│   │   ├── test_secure_cloud.js      # Cloud security tests
+│   │   ├── test_stripe_wallet.js     # Payment tests
+│   │   └── test_tools.js             # Tool execution tests
 │   ├── unit/                     # Unit tests
-│   └── scripts/                  # Test utilities
-├── eslint.config.js              # ESLint configuration
-├── package.json                  # Dependencies & scripts
-└── README.md                     # This file
+│   ├── e2e/                      # End-to-end tests
+│   │   └── complete-user-journey.test.js # Full user journey tests
+│   ├── middleware/               # Middleware tests
+│   │   └── security.test.js          # Security middleware tests
+│   ├── routes/                   # Route-specific tests
+│   │   ├── auth.test.js              # Authentication tests
+│   │   ├── collectiveData.test.js    # Collective data tests
+│   │   ├── collectiveSnapshots.test.js # Snapshot tests
+│   │   ├── health.test.js            # Health check tests
+│   │   ├── scheduledAggregation.test.js # Aggregation tests
+│   │   └── user.test.js              # User management tests
+│   ├── utils/                    # Utility tests
+│   │   ├── cache.test.js             # Cache utility tests
+│   │   ├── sanitize.test.js          # Sanitization tests
+│   │   ├── globalTestSetup.js        # Test setup utilities
+│   │   ├── globalTestTeardown.js     # Test teardown utilities
+│   │   ├── testSetup.js              # Test configuration
+│   │   └── successRateMonitor.js     # Success rate monitoring
+│   ├── scripts/                   # Test utilities & scripts
+│   │   ├── checkSnapshots.js         # Snapshot verification
+│   │   ├── cleanupAndRegenerate.js   # Test data cleanup
+│   │   ├── clearCache.js             # Cache clearing
+│   │   ├── continuousMonitoring.js    # Continuous monitoring
+│   │   ├── create_test_user.js       # Test user creation
+│   │   ├── createTestUsers.js        # Bulk test user creation
+│   │   ├── performance-test.js       # Performance testing
+│   │   ├── runE2EWithMetrics.js      # E2E with metrics
+│   │   ├── seed_events.js            # Event seeding
+│   │   ├── seedTestData.js           # Test data seeding
+│   │   ├── setup_test_user.js        # Test user setup
+│   │   ├── setup_verified_account.js # Verified account setup
+│   │   ├── simpleWSTest.js           # WebSocket testing
+│   │   ├── testAPI.js                # API testing
+│   │   ├── testNuminaSenses.js       # Numina senses testing
+│   │   ├── testWebSocket.js          # WebSocket testing
+│   │   ├── test-final-email.js       # Email testing
+│   │   └── quick-email-test.js       # Quick email tests
+│   ├── metrics/                    # Test metrics
+│   │   ├── accuracy-test.json        # Accuracy metrics
+│   │   ├── historical-test.json      # Historical test data
+│   │   └── success-rates.json        # Success rate data
+│   ├── setup.js                     # Test setup configuration
+│   ├── test-server.js               # Test server instance
+│   ├── test-payload.json            # Test payloads
+│   └── signup-payload.json          # Signup test data
+├── scripts/                        # Development & deployment scripts
+│   ├── deploy.sh                    # Deployment script
+│   ├── optimizeDatabase.js          # Database optimization
+│   ├── performanceTest.js           # Performance testing
+│   ├── realWorldStressTest.sh       # Real-world stress testing
+│   ├── stressTest.sh                # Stress testing
+│   ├── testOptimizations.js         # Optimization testing
+│   ├── testResendEmail.js           # Email service testing
+│   ├── testRealEmail.js             # Real email testing
+│   ├── testEmailFixed.js            # Fixed email testing
+│   ├── testEmail.js                 # Basic email testing
+│   ├── testCloudFeatures.js         # Cloud feature testing
+│   ├── seedTestUsers.js             # Test user seeding
+│   ├── seedCloudEvents.js           # Cloud event seeding
+│   └── wipeData.js                  # Data cleanup
+├── logs/                           # Application logs
+├── coverage/                       # Test coverage reports
+├── .expo/                          # Expo configuration
+├── .claude/                        # Claude AI configuration
+├── server.js                       # Render deployment wrapper
+├── package.json                    # Dependencies & scripts
+├── package-lock.json               # Locked dependencies
+├── eslint.config.js                # ESLint configuration
+├── jest.config.js                  # Jest test configuration
+├── babel.config.js                 # Babel configuration
+├── app.json                        # App configuration
+├── Procfile                        # Heroku deployment
+├── railway.json                    # Railway deployment
+├── render.yaml                     # Render deployment
+├── deploy-email-update.sh          # Email deployment script
+├── server.log                      # Server log file
+├── .gitignore                      # Git ignore rules
+├── LICENSE                         # License file
+└── README.md                       # This file
 ```
 
 ## ✨ Core Features
 
 ### 🤖 AI & Personalization
 - **Advanced AI Chat**: OpenRouter integration with GPT-4o, Claude, and other models
-- **Tool Ecosystem**: 25+ specialized AI tools (web search, weather, calculator, etc.)
+- **Tool Ecosystem**: 25+ specialized AI tools organized by category:
+  - **Search & Information**: Web search, news, academic research, image search
+  - **Financial**: Stock lookup, cryptocurrency, currency conversion, credit management
+  - **Productivity**: Calculator, code generation, password generation, QR generation
+  - **Travel & Location**: Weather, timezone conversion, location services, itinerary generation
+  - **Entertainment**: Music recommendations, Spotify integration, text generation
+  - **Health & Fitness**: Fitness tracking, nutrition lookup, email assistance
+  - **Social & Professional**: LinkedIn helper, social search, reservation booking
+  - **Specialized**: Translation, UBPM analysis, collective data tools
 - **Personalization Engine**: Adaptive AI personality based on user behavior
 - **Emotional Intelligence**: Deep emotional analytics and pattern recognition
 - **Memory System**: Conversation memory with intelligent importance scoring
@@ -242,16 +347,68 @@ npm start            # Production server
 npm run build        # Build for production (if applicable)
 ```
 
+### File Organization
+
+The project follows a clean, organized structure:
+
+- **`src/`**: Main application source code
+  - **`config/`**: Configuration files (database, constants, environment)
+  - **`models/`**: Mongoose schemas and data models
+  - **`routes/`**: API endpoint handlers
+  - **`services/`**: Business logic and external service integrations
+  - **`middleware/`**: Express middleware (auth, security, caching)
+  - **`tools/`**: 25+ specialized AI tools
+  - **`utils/`**: Utility functions and helpers
+
+- **`tests/`**: Comprehensive test suite
+  - **`integration/`**: API integration tests
+  - **`unit/`**: Unit tests for individual components
+  - **`e2e/`**: End-to-end user journey tests
+  - **`scripts/`**: Test utilities and automation scripts
+  - **`metrics/`**: Test performance and accuracy metrics
+
+- **`scripts/`**: Development and deployment scripts
+  - Performance testing and optimization
+  - Database management and seeding
+  - Email service testing
+  - Stress testing and monitoring
+
+### Key Files
+
+- **`server.js`**: Render deployment wrapper (main server in `src/server.js`)
+- **`package.json`**: Dependencies and npm scripts
+- **`eslint.config.js`**: Code quality and linting rules
+- **`jest.config.js`**: Test configuration
+- **Deployment configs**: `railway.json`, `render.yaml`, `Procfile`
+
 ## 🧪 Testing
 
-Comprehensive test suite with Jest:
-- **Unit Tests**: Individual service and utility testing
-- **Integration Tests**: API endpoint testing
-- **Coverage Reports**: Detailed test coverage analysis
+Comprehensive test suite with Jest organized into logical categories:
+
+### Test Structure
+- **Unit Tests** (`tests/unit/`): Individual service and utility testing
+- **Integration Tests** (`tests/integration/`): API endpoint and service integration testing
+- **E2E Tests** (`tests/e2e/`): Complete user journey testing
+- **Route Tests** (`tests/routes/`): Specific endpoint testing
+- **Middleware Tests** (`tests/middleware/`): Security and middleware testing
+- **Utility Tests** (`tests/utils/`): Helper function testing
+
+### Test Scripts
+- **Performance Testing**: `tests/scripts/performance-test.js`
+- **Email Testing**: `tests/scripts/test-final-email.js`, `tests/scripts/quick-email-test.js`
+- **WebSocket Testing**: `tests/scripts/testWebSocket.js`
+- **User Setup**: `tests/scripts/createTestUsers.js`, `tests/scripts/setup_test_user.js`
+- **Data Seeding**: `tests/scripts/seedTestData.js`, `tests/scripts/seed_events.js`
+
+### Test Metrics
+- **Accuracy Tracking**: `tests/metrics/accuracy-test.json`
+- **Historical Data**: `tests/metrics/historical-test.json`
+- **Success Rates**: `tests/metrics/success-rates.json`
 
 ```bash
 npm test                    # Run all tests
 npm run test:coverage      # Test with coverage report
+npm run test:watch         # Run tests in watch mode
 ```
 
 ## 📊 Performance Features
@@ -261,6 +418,32 @@ npm run test:coverage      # Test with coverage report
 - **Request Caching**: Intelligent API response caching
 - **Performance Monitoring**: Real-time metrics and logging
 - **Memory Management**: Efficient resource usage tracking
+
+## 🛠️ Development Scripts
+
+The project includes comprehensive development and testing scripts:
+
+### Performance & Optimization
+- **`scripts/performanceTest.js`**: Comprehensive performance testing
+- **`scripts/optimizeDatabase.js`**: Database optimization utilities
+- **`scripts/testOptimizations.js`**: Optimization testing and validation
+- **`scripts/stressTest.sh`**: Stress testing for API endpoints
+- **`scripts/realWorldStressTest.sh`**: Real-world scenario stress testing
+
+### Email & Communication
+- **`scripts/testResendEmail.js`**: Email service testing
+- **`scripts/testRealEmail.js`**: Real email delivery testing
+- **`scripts/testEmailFixed.js`**: Fixed email configuration testing
+- **`scripts/testEmail.js`**: Basic email functionality testing
+
+### Data Management
+- **`scripts/seedTestUsers.js`**: Bulk test user creation
+- **`scripts/seedCloudEvents.js`**: Cloud event data seeding
+- **`scripts/wipeData.js`**: Data cleanup and reset utilities
+
+### Deployment
+- **`scripts/deploy.sh`**: Automated deployment script
+- **`deploy-email-update.sh`**: Email service deployment updates
 
 ## 🔐 Security Features
 

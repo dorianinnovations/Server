@@ -1,6 +1,5 @@
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
-import EmotionalAnalyticsSession from '../models/EmotionalAnalyticsSession.js';
 
 /**
  * UNIFIED INTELLIGENCE ENGINE
@@ -290,16 +289,54 @@ class IntelligenceEngine {
 
       return await ShortTermMemory.find({ userId })
         .sort({ timestamp: -1 })
-        .limit(500); // Increased from 200 for better analysis
+        .limit(300) // Reduced for better performance
+        .lean(); // Add lean() for memory optimization
     } catch (error) {
       console.error('❌ Error loading conversation history:', error);
       return []; // Graceful degradation
     }
   }
 
+  // PERFORMANCE: Parallel data loading for intelligence engine
+  async loadUserDataParallel(userId, wsCallback = null) {
+    try {
+      if (wsCallback) {
+        wsCallback({
+          type: "intelligence_update",
+          phase: "loading_parallel",
+          detail: "Loading user data in parallel..."
+        });
+      }
+      
+      const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      
+      const [conversationHistory, behaviorProfile, emotionalSessions] = await Promise.all([
+        ShortTermMemory.find({ userId })
+          .sort({ timestamp: -1 })
+          .limit(300)
+          .lean(),
+        UserBehaviorProfile.findOne({ userId }).lean(),
+        Promise.resolve([])
+      ]);
+      
+      return {
+        conversationHistory,
+        behaviorProfile,
+        emotionalSessions
+      };
+    } catch (error) {
+      console.error('❌ Error loading user data:', error);
+      return {
+        conversationHistory: [],
+        behaviorProfile: null,
+        emotionalSessions: []
+      };
+    }
+  }
+
   async loadBehaviorProfile(userId) {
     try {
-      return await UserBehaviorProfile.findOne({ userId });
+      return await UserBehaviorProfile.findOne({ userId }).lean();
     } catch (error) {
       console.error('❌ Error loading behavior profile:', error);
       return null; // Graceful degradation
@@ -309,10 +346,7 @@ class IntelligenceEngine {
   async loadEmotionalSessions(userId) {
     try {
       const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      return await EmotionalAnalyticsSession.find({ 
-        userId, 
-        weekStartDate: { $gte: oneMonthAgo }
-      }).sort({ weekStartDate: -1 });
+      return [];
     } catch (error) {
       console.error('❌ Error loading emotional sessions:', error);
       return []; // Graceful degradation

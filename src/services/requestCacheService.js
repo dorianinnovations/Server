@@ -442,6 +442,40 @@ class RequestCacheService {
   }
 
   /**
+   * Simple get method for direct cache access
+   */
+  async get(key) {
+    try {
+      const cached = this.memoryCache.get(key);
+      if (cached && Date.now() - cached.timestamp < this.cacheExpiry) {
+        return cached.response || cached;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting from cache:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Simple set method for direct cache storage
+   */
+  async set(key, value, ttlSeconds = null) {
+    try {
+      const expiry = ttlSeconds ? ttlSeconds * 1000 : this.cacheExpiry;
+      this.memoryCache.set(key, {
+        response: value,
+        timestamp: Date.now(),
+        expiry: expiry
+      });
+      return true;
+    } catch (error) {
+      console.error('Error setting cache:', error);
+      return false;
+    }
+  }
+
+  /**
    * Warm up cache with common queries for improved performance
    */
   async warmupCache() {
