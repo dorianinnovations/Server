@@ -1626,10 +1626,10 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
                 // NATURAL READING PACE: Larger buffer for comfortable streaming speed
                 chunkBuffer += content;
                 
-                // Stream at word boundaries for natural reading rhythm
-                // Buffer 15-25 characters OR complete words for optimal reading pace
-                if (chunkBuffer.length >= 15 || 
-                    (chunkBuffer.length >= 8 && (content.includes(' ') || content.includes('\n'))) ||
+                // Stream at smaller boundaries for responsive streaming
+                // Reduced buffer size for faster perceived speed
+                if (chunkBuffer.length >= 8 || 
+                    (chunkBuffer.length >= 3 && (content.includes(' ') || content.includes('\n'))) ||
                     content.includes('.') || content.includes('!') || content.includes('?')) {
                   res.write(`data: ${JSON.stringify({ content: chunkBuffer })}\n\n`);
                   res.flush && res.flush();
