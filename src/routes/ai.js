@@ -1060,7 +1060,7 @@ function _generateEmotionReasoning(currentEmotionalState, conversationPatterns) 
   return reasons.length > 0 ? reasons.join(', ') : 'conversation tone analysis';
 }
 
-router.post('/emotional-state', protect, requireFeature('emotionalAnalysis'), async (req, res) => {
+router.post('/emotional-state', protect, async (req, res) => {
   try {
     const { recentEmotions, conversationHistory, timeContext } = req.body;
     const userId = req.user.id;
