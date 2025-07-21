@@ -52,10 +52,10 @@ export const globalErrorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
 
-  // Log error
+  // Log error (no stack traces in production)
   logger.error("Global error handler", {
     error: err.message,
-    stack: err.stack,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
     url: req.url,
     method: req.method,
     userId: req.user?.id || "anonymous",
@@ -124,5 +124,5 @@ export const validateRequest = (schema) => {
   };
 };
 
-console.log("✓Request validation helper configured");
+logger.debug("Request validation helper configured");
 // Component ready

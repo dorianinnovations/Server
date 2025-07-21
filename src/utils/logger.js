@@ -129,6 +129,20 @@ export const requestLogger = (req, res, next) => {
 
 // Enhanced error logging middleware
 export const errorLogger = (err, req, res, next) => {
+  // Clean error logging without stack traces in production
+  const errorData = {
+    error: err.message,
+    method: req.method,
+    url: req.url,
+    ip: req.ip,
+    userId: req.user?.id
+  };
+  
+  // Only add stack trace in development
+  if (process.env.NODE_ENV === 'development') {
+    errorData.stack = err.stack;
+  }
+  
   log.error("Request error", err, {
     method: req.method,
     url: req.url,

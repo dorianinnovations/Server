@@ -6,6 +6,7 @@ import Task from "../models/Task.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
+import { getUserTier, getTierLimits } from "../config/tiers.js";
 
 const router = express.Router();
 
@@ -19,9 +20,20 @@ router.get("/profile", protect, async (req, res) => {
         message: MESSAGES.USER_NOT_FOUND 
       });
     }
+    // Add tier information to user profile
+    const userTier = getUserTier(user);
+    const tierLimits = getTierLimits(user);
+    
     res.json({ 
       status: MESSAGES.SUCCESS, 
-      data: { user } 
+      data: { 
+        user,
+        tierBadge: {
+          tier: userTier,
+          name: tierLimits.name,
+          features: tierLimits.features
+        }
+      }
     });
   } catch (err) {
     console.error("Error fetching user profile:", err);

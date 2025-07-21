@@ -9,6 +9,10 @@ import websocketService from '../services/websocketService.js';
 import personalizationEngine from '../services/personalizationEngine.js';
 import connectionEngine from '../services/connectionEngine.js';
 import intelligenceEngine from '../services/intelligenceEngine.js';
+import intelligenceCompressor from '../services/intelligenceCompressor.js';
+import intelligenceCompressorV2 from '../services/intelligenceCompressorV2.js';
+import compressionAnalytics from '../services/compressionAnalytics.js';
+import intelligenceOptimizer from '../services/intelligenceOptimizer.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
 import toolRegistry from '../services/toolRegistry.js';
@@ -19,6 +23,8 @@ import ubpmService from '../services/ubpmService.js';
 import { getIncrementalMemory, optimizeContextSize } from '../utils/incrementalMemory.js';
 import { trackMemoryUsage, calculateOptimizationSavings } from '../utils/memoryAnalytics.js';
 import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from '../utils/imageCompressionBasic.js';
+import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
+import { getUserTier } from '../config/tiers.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -288,6 +294,109 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory, str
         microComplexity: intelligenceContext?.micro?.messageComplexity?.current,
         fullContext: intelligenceContext
       });
+      
+      // 🔍 DETAILED INTELLIGENCE BREAKDOWN - Show actual data instead of [Object]
+      if (intelligenceContext) {
+        console.log(`📊 MICRO ANALYSIS:`, JSON.stringify(intelligenceContext.micro, null, 2));
+        console.log(`📈 MEDIUM ANALYSIS:`, JSON.stringify(intelligenceContext.medium, null, 2));
+        console.log(`🎯 MACRO ANALYSIS:`, JSON.stringify(intelligenceContext.macro, null, 2));
+        console.log(`🧬 SYNTHESIS:`, JSON.stringify(intelligenceContext.synthesis, null, 2));
+        
+        // 🚨 DATA COMPLETENESS CHECK - Verify nothing is missing
+        const dataCheck = {
+          microFields: Object.keys(intelligenceContext.micro || {}),
+          mediumFields: Object.keys(intelligenceContext.medium || {}),
+          macroFields: Object.keys(intelligenceContext.macro || {}),
+          synthesisFields: Object.keys(intelligenceContext.synthesis || {}),
+          totalDataPoints: 0
+        };
+        
+        // Count all data points to track completeness
+        const countDataPoints = (obj) => {
+          let count = 0;
+          for (const key in obj) {
+            if (obj[key] !== null && obj[key] !== undefined) {
+              count++;
+              if (typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+                count += countDataPoints(obj[key]);
+              }
+            }
+          }
+          return count;
+        };
+        
+        dataCheck.totalDataPoints = countDataPoints(intelligenceContext);
+        console.log(`🔍 INTELLIGENCE COMPLETENESS CHECK:`, dataCheck);
+        
+        // 🗜️ ULTRA-INTELLIGENT COMPRESSION V2 - Advanced optimization
+        const messageType = detectMessageType(userMessage);
+        const messageComplexity = intelligenceContext?.micro?.messageComplexity?.current || 5;
+        
+        // 🚀 REAL-TIME OPTIMIZATION - Ultimate performance tuning
+        const systemLoad = { cpu: 0.5, memory: 0.6, overall: 0.55 };
+        const userContext = {
+          messageComplexity: messageComplexity,
+          conversationHistory: recentMemory,
+          technicalLevel: 0.8,
+          engagementLevel: 0.9,
+          messageFrequency: 0.7,
+          sessionLength: 1800, // 30 minutes
+          questionQuality: 0.85
+        };
+        
+        // Check for A/B test assignment
+        const abTestStrategy = compressionAnalytics.getStrategyForABTest('compression_optimization', userId);
+        
+        let compressionOptions = {
+          model: 'gpt-4o',
+          qualityTarget: 0.85,
+          conversationHistory: recentMemory,
+          userPreferences: {},
+          forceStrategy: abTestStrategy
+        };
+        
+        // Apply real-time optimization
+        const optimizationResult = await intelligenceOptimizer.optimizeInRealTime(
+          compressionOptions, userContext, systemLoad
+        );
+        
+        if (optimizationResult.success) {
+          compressionOptions = optimizationResult.optimizedOptions;
+          console.log(`⚡ REAL-TIME OPTIMIZATION APPLIED:`, {
+            expectedImprovement: optimizationResult.optimization.expectedImprovement,
+            validationScore: optimizationResult.optimization.validationScore,
+            optimizationTime: optimizationResult.optimization.optimizationTime + 'ms'
+          });
+        }
+        
+        const compressionResult = await intelligenceCompressorV2.compressForLLM(
+          intelligenceContext,
+          messageType,
+          messageComplexity,
+          compressionOptions
+        );
+        
+        // Record compression performance for analytics
+        compressionAnalytics.recordCompression(compressionResult);
+        
+        // Record A/B test result if applicable
+        if (abTestStrategy) {
+          compressionAnalytics.recordABTestResult('compression_optimization', abTestStrategy, compressionResult.metadata);
+        }
+        
+        console.log(`🚀 ULTRA-COMPRESSION V2:`, {
+          strategy: compressionResult.metadata.strategy,
+          compressionRatio: compressionResult.metadata.compressionRatio + '%',
+          tokenBudget: compressionResult.metadata.tokenBudget,
+          actualTokens: compressionResult.metadata.actualTokens,
+          qualityScore: compressionResult.metadata.qualityScore,
+          processingTime: compressionResult.metadata.processingTime + 'ms',
+          clusters: compressionResult.metadata.intelligenceClusters,
+          originalDataPoints: dataCheck.totalDataPoints
+        });
+        
+        console.log(`🎯 OPTIMIZED INTELLIGENCE PROMPT:`, compressionResult.compressedPrompt);
+      }
     } catch (error) {
       console.error(`❌ Intelligence engine error:`, error);
       // Create fallback intelligence context
@@ -951,7 +1060,7 @@ function _generateEmotionReasoning(currentEmotionalState, conversationPatterns) 
   return reasons.length > 0 ? reasons.join(', ') : 'conversation tone analysis';
 }
 
-router.post('/emotional-state', protect, async (req, res) => {
+router.post('/emotional-state', protect, requireFeature('emotionalAnalysis'), async (req, res) => {
   try {
     const { recentEmotions, conversationHistory, timeContext } = req.body;
     const userId = req.user.id;
@@ -1119,7 +1228,7 @@ Preferences: ${JSON.stringify(preferences)}`;
   }
 });
 
-router.post('/adaptive-chat', protect, async (req, res) => {
+router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
   try {
     const { message, prompt, emotionalContext: _emotionalContext, personalityProfile: _personalityProfile, personalityStyle: _personalityStyle, conversationGoal: _conversationGoal, stream, attachments, userContext: clientUserContext } = req.body;
     // Support both message and prompt parameters for flexibility
@@ -1402,6 +1511,12 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
     // Add explicit instruction for context awareness
     const lastUserMessage = recentMemory.filter(msg => msg.role === 'user').pop();
     const lastAssistantMessage = recentMemory.filter(msg => msg.role === 'assistant').pop();
+    
+    // Handle "what did I just do/ask" queries
+    const isLastActionQuery = /what.*did.*i.*just.*(?:do|ask|request|say)|what.*was.*my.*last|previous.*(?:action|request|question)|what.*just.*asked/i.test(finalMessage);
+    if (isLastActionQuery && lastUserMessage) {
+      systemPrompt += `\n**LAST ACTION:** User's previous request was: "${lastUserMessage.content}" - reference this specific request directly.`;
+    }
     
     if (lastUserMessage && lastAssistantMessage) {
       const isFollowUpQuestion = /what.*mean|explain.*that|what.*this|tell.*more|what.*about|what.*is|clarify|elaborate/i.test(finalMessage);
@@ -1748,7 +1863,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             const toolMessages = [];
             
             // Set up connection keep-alive during tool execution
-            const keepAliveInterval = setInterval(() => {
+            keepAliveInterval = setInterval(() => {
               if (!res.destroyed) {
                 res.write(`data: ${JSON.stringify({ keepAlive: true })}\n\n`);
                 res.flush && res.flush();
@@ -1830,9 +1945,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             
             const totalSequentialTime = Date.now() - totalStartTime;
             if (typeof keepAliveInterval !== 'undefined') {
-              if (typeof keepAliveInterval !== 'undefined') {
               clearInterval(keepAliveInterval);
-            }
             }
             console.log(`🔄 SEQUENTIAL EXECUTION: All ${toolCalls.length} tools completed in ${totalSequentialTime}ms`);
             
@@ -2439,7 +2552,7 @@ Feedback Type: ${feedbackType || 'general development'}`;
   }
 });
 
-router.post('/personalized-insights', protect, async (req, res) => {
+router.post('/personalized-insights', protect, requireFeature('personalizedInsights'), async (req, res) => {
   try {
     const { userData, emotionalHistory, goalPreferences, timeframe } = req.body;
     
@@ -2550,5 +2663,87 @@ async function checkRecentSearchDuplication(userId, userMessage, recentMemory) {
   
   return { isDuplicate: false, shouldSkipTools: false, reference: null };
 }
+
+// Message type detection for intelligent compression
+function detectMessageType(message) {
+  const lowerMessage = message.toLowerCase();
+  
+  // Question patterns
+  if (/\?|what|how|why|when|where|can you|could you|would you|should|do you/.test(lowerMessage)) {
+    return 'question';
+  }
+  
+  // Emotional patterns
+  if (/feel|emotion|upset|happy|sad|worried|excited|frustrated|love|hate/.test(lowerMessage)) {
+    return 'emotional';
+  }
+  
+  // Technical patterns
+  if (/code|program|algorithm|system|debug|error|function|api|database|analyze/.test(lowerMessage)) {
+    return 'technical';
+  }
+  
+  // Creative patterns
+  if (/create|design|imagine|brainstorm|idea|creative|art|story|poem/.test(lowerMessage)) {
+    return 'creative';
+  }
+  
+  // Greeting patterns
+  if (/hello|hi|hey|good morning|good afternoon|good evening/.test(lowerMessage)) {
+    return 'greeting';
+  }
+  
+  // Analysis patterns
+  if (/analyze|pattern|insight|understand|explain|breakdown|ubpm/.test(lowerMessage)) {
+    return 'analysis';
+  }
+  
+  return 'standard';
+}
+
+/**
+ * POST /ai/upgrade-message
+ * Graceful upgrade message for chat when limits are reached
+ */
+router.post('/upgrade-message', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const userTier = getUserTier(user);
+    
+    let upgradeMessage;
+    let upgradeOptions;
+    
+    if (userTier === 'CORE') {
+      upgradeMessage = "Thank you for using Numina! 🌟\n\nYou've reached your daily chat limit on the Core tier. To continue our conversation and unlock advanced features like emotional analysis, personalized insights, and tool access, consider upgrading to:\n\n• **Pro** - 200 daily chats + all premium features\n• **Aether** - Unlimited chats + priority processing\n\nWould you like to learn more about our premium tiers?";
+      upgradeOptions = ['PRO', 'AETHER'];
+    } else if (userTier === 'PRO') {
+      upgradeMessage = "Thank you for being a Pro user! ✨\n\nYou've reached your daily limit. Upgrade to Aether for unlimited chats and priority processing!";
+      upgradeOptions = ['AETHER'];
+    } else {
+      upgradeMessage = "Welcome back, Aether user! You have unlimited access. 💫";
+      upgradeOptions = [];
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        message: upgradeMessage,
+        tier: userTier,
+        upgradeOptions,
+        tone: "supportive",
+        suggestedFollowUps: userTier !== 'AETHER' ? [
+          "Tell me about Pro features",
+          "What's included in Aether?",
+          "How much do upgrades cost?"
+        ] : []
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 export default router;

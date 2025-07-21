@@ -14,6 +14,7 @@ import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
 import logger from "../utils/logger.js";
 import toolRegistry from "../services/toolRegistry.js";
 import toolExecutor from "../services/toolExecutor.js";
+import { checkTierLimits } from "../middleware/tierLimiter.js";
 
 const router = express.Router();
 
@@ -555,7 +556,7 @@ const processResponseAndSave = async (fullContent, userPrompt, userId, userCache
 };
 
 // ...existing code...
-router.post("/completion", protect, async (req, res) => {
+router.post("/completion", protect, checkTierLimits, async (req, res) => {
   const startTime = Date.now();
   const userId = req.user.id;
   const userPrompt = req.body.prompt;

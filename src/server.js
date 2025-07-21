@@ -49,6 +49,9 @@ import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
 import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
 import secureCloudRoutes from "./routes/secureCloud.js";
 import analyticsLLMRoutes from "./routes/analyticsLLM.js";
+import intelligenceDebugRoutes from "./routes/intelligenceDebug.js";
+import compressionDashboardRoutes from "./routes/compressionDashboard.js";
+import tierTestRoutes from "./routes/tierTest.js";
 
 log.debug("Route modules imported");
 
@@ -160,7 +163,7 @@ const initializeServer = async () => {
   const globalHttpsAgent = new https.Agent({
     keepAlive: true,
     maxSockets: 50,
-    rejectUnauthorized: false,
+    rejectUnauthorized: true,
     timeout: 60000,
   });
 
@@ -184,6 +187,9 @@ const initializeServer = async () => {
   app.use("/", docsRoutes);
   app.use("/analytics", analyticsRoutes);
   app.use("/analytics/llm", analyticsLLMRoutes);
+  app.use("/intelligence-debug", intelligenceDebugRoutes);
+  app.use("/compression-dashboard", compressionDashboardRoutes);
+  app.use("/tier-test", tierTestRoutes);
   app.use("/ai", aiRoutes);
   app.use("/personalized-ai", personalizedAIRoutes);
   app.use("/numina-personality", numinaPersonalityRoutes);
@@ -305,6 +311,10 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/", taskRoutes);
       app.use("/", docsRoutes);
       app.use("/analytics", analyticsRoutes);
+      app.use("/analytics/llm", analyticsLLMRoutes);
+      app.use("/intelligence-debug", intelligenceDebugRoutes);
+      app.use("/compression-dashboard", compressionDashboardRoutes);
+      app.use("/tier-test", tierTestRoutes);
       app.use("/ai", aiRoutes);
       app.use("/personalized-ai", personalizedAIRoutes);
       app.use("/numina-personality", numinaPersonalityRoutes);

@@ -30,7 +30,7 @@ export const env = {
   
   // RESEND Email Configuration
   RESEND_API_KEY: process.env.RESEND_API_KEY,
-  FROM_EMAIL: process.env.FROM_EMAIL || 'noreply@numina.ai',
+  FROM_EMAIL: process.env.FROM_EMAIL || 'noreply@aidorian.com',
   
   // Fallback email configuration (Gmail SMTP)
   EMAIL_USER: process.env.EMAIL_USER,

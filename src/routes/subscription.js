@@ -2,6 +2,7 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 import User from '../models/User.js';
 import CreditPool from '../models/CreditPool.js';
+import emailService from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -9,19 +10,19 @@ const router = express.Router();
 router.get('/status', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    const trace = user.subscription?.numinaTrace || {};
+    const subscription = user.subscription || {};
     
     res.json({
       success: true,
       data: {
-        numinaTrace: {
-          isActive: trace.isActive || false,
-          plan: trace.plan || null,
-          startDate: trace.startDate,
-          endDate: trace.endDate,
-          autoRenew: trace.autoRenew || false,
-          nextBillingDate: trace.nextBillingDate,
-          hasActiveSubscription: user.hasActiveNuminaTrace()
+        subscription: {
+          isActive: subscription.isActive || false,
+          plan: subscription.plan || 'core',
+          startDate: subscription.startDate,
+          endDate: subscription.endDate,
+          autoRenew: subscription.autoRenew || false,
+          nextBillingDate: subscription.nextBillingDate,
+          hasActiveSubscription: subscription.isActive && ['pro', 'aether'].includes(subscription.plan)
         }
       }
     });
@@ -34,47 +35,54 @@ router.get('/status', protect, async (req, res) => {
   }
 });
 
-// Subscribe to Numina Trace
+// Subscribe to Numina Trace (now supports Core/Pro/Aether tiers)
 router.post('/numina-trace/subscribe', protect, async (req, res) => {
   try {
     const { plan, paymentMethodId } = req.body;
     
-    if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
+    if (!['core', 'pro', 'aether'].includes(plan)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid subscription plan'
+        error: 'Invalid subscription plan. Must be core, pro, or aether.'
       });
     }
 
     const user = await User.findById(req.user.id);
     const now = new Date();
     
-    // Calculate end date based on plan
-    let endDate = null;
-    let nextBillingDate = null;
-    
-    if (plan === 'monthly') {
-      endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
-      nextBillingDate = endDate;
-    } else if (plan === 'yearly') {
-      endDate = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 365 days
-      nextBillingDate = endDate;
+    // For Core tier, no payment is needed (free tier)
+    if (plan === 'core') {
+      // Just ensure user has basic tier set up
+      user.subscription = user.subscription || {};
+      user.subscription.plan = 'core';
+      user.subscription.isActive = true;
+      user.subscription.startDate = now;
+      await user.save();
+      
+      return res.json({
+        success: true,
+        data: {
+          message: 'Core tier activated successfully!',
+          subscription: { plan: 'core', isActive: true, startDate: now }
+        }
+      });
     }
-    // lifetime plan has no end date
     
-    // Update user subscription
+    // Calculate end date based on plan (monthly billing for Pro and Aether)
+    let endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    let nextBillingDate = endDate;
+    
+    // Update user subscription (Pro/Aether tiers)
     user.subscription = user.subscription || {};
-    user.subscription.numinaTrace = {
-      isActive: true,
-      startDate: now,
-      endDate: endDate,
-      plan: plan,
-      paymentMethodId: paymentMethodId,
-      autoRenew: plan !== 'lifetime',
-      cancelledAt: null,
-      lastPaymentDate: now,
-      nextBillingDate: nextBillingDate
-    };
+    user.subscription.plan = plan;
+    user.subscription.isActive = true;
+    user.subscription.startDate = now;
+    user.subscription.endDate = endDate;
+    user.subscription.paymentMethodId = paymentMethodId;
+    user.subscription.autoRenew = true;
+    user.subscription.cancelledAt = null;
+    user.subscription.lastPaymentDate = now;
+    user.subscription.nextBillingDate = nextBillingDate;
     
     await user.save();
     
@@ -94,11 +102,42 @@ router.post('/numina-trace/subscribe', protect, async (req, res) => {
       await creditPool.save();
     }
 
+    // Send payment confirmation email (non-blocking)
+    const subscriptionDetails = {
+      plan: plan,
+      price: plan === 'pro' ? 29.99 : plan === 'aether' ? 99.99 : 0,
+      currency: 'USD',
+      nextBillingDate: nextBillingDate
+    };
+
+    emailService.sendPaymentConfirmationEmail(
+      user.email,
+      user.displayName || user.email.split('@')[0],
+      subscriptionDetails
+    )
+    .then(result => {
+      if (result.success) {
+        console.log('✅ Payment confirmation email sent via', result.service, 'to:', user.email);
+        if (result.messageId) {
+          console.log('📧 Email ID:', result.messageId);
+        }
+      } else {
+        console.warn('⚠️ Payment confirmation email failed:', result.error);
+      }
+    })
+    .catch(err => console.error('❌ Payment confirmation email error:', err));
+
     res.json({
       success: true,
       data: {
-        message: 'Successfully subscribed to Numina Trace!',
-        subscription: user.subscription.numinaTrace,
+        message: `Successfully subscribed to ${plan.charAt(0).toUpperCase() + plan.slice(1)} tier!`,
+        subscription: {
+          plan: user.subscription.plan,
+          isActive: user.subscription.isActive,
+          startDate: user.subscription.startDate,
+          endDate: user.subscription.endDate,
+          nextBillingDate: user.subscription.nextBillingDate
+        },
         creditPoolActivated: true
       }
     });
@@ -112,21 +151,21 @@ router.post('/numina-trace/subscribe', protect, async (req, res) => {
   }
 });
 
-// Cancel Numina Trace subscription
+// Cancel subscription
 router.post('/numina-trace/cancel', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     
-    if (!user.subscription?.numinaTrace?.isActive) {
+    if (!user.subscription?.isActive || user.subscription?.plan === 'core') {
       return res.status(400).json({
         success: false,
-        error: 'No active subscription to cancel'
+        error: 'No active paid subscription to cancel'
       });
     }
     
     // Set cancellation date to end of current billing period
-    user.subscription.numinaTrace.cancelledAt = user.subscription.numinaTrace.endDate || new Date();
-    user.subscription.numinaTrace.autoRenew = false;
+    user.subscription.cancelledAt = user.subscription.endDate || new Date();
+    user.subscription.autoRenew = false;
     
     await user.save();
 
@@ -134,7 +173,7 @@ router.post('/numina-trace/cancel', protect, async (req, res) => {
       success: true,
       data: {
         message: 'Subscription cancelled. Access will continue until the end of your billing period.',
-        activeUntil: user.subscription.numinaTrace.cancelledAt
+        activeUntil: user.subscription.cancelledAt
       }
     });
 
@@ -154,50 +193,44 @@ router.get('/pricing', async (req, res) => {
     data: {
       plans: [
         {
-          name: 'monthly',
-          displayName: 'Monthly',
-          price: 19.99,
+          name: 'core',
+          displayName: 'Core',
+          price: 0,
           currency: 'USD',
-          duration: '1 month',
+          duration: '/month',
           features: [
-            'All AI tools and features',
-            'Restaurant reservations',
-            'Playlist creation',
-            'Travel planning',
-            'Priority support'
+            'Basic AI Chat',
+            '1 Daily Request',
+            'Standard Support'
           ]
         },
         {
-          name: 'yearly',
-          displayName: 'Yearly',
-          price: 199.99,
+          name: 'pro',
+          displayName: 'Pro',
+          price: 29.99,
           currency: 'USD',
-          duration: '12 months',
-          savings: 'Save $39.89',
+          duration: '/month',
+          savings: 'Most Popular',
           features: [
-            'All AI tools and features',
-            'Restaurant reservations', 
-            'Playlist creation',
-            'Travel planning',
-            'Priority support',
-            'Advanced analytics'
+            'All AI Tools',
+            '200 Daily Requests',
+            'Emotional Analysis',
+            'Personalized Insights',
+            'Priority Support'
           ]
         },
         {
-          name: 'lifetime',
-          displayName: 'Lifetime',
-          price: 499.99,
+          name: 'aether',
+          displayName: 'Aether',
+          price: 99.99,
           currency: 'USD',
-          duration: 'Forever',
-          savings: 'Best Value',
+          duration: '/month',
           features: [
-            'All AI tools and features',
-            'Restaurant reservations',
-            'Playlist creation', 
-            'Travel planning',
-            'Priority support',
-            'Advanced analytics',
-            'Beta feature access'
+            'Everything in Pro',
+            'Unlimited Requests',
+            'Priority Processing',
+            'Advanced Analytics',
+            'Early Access Features'
           ]
         }
       ]
