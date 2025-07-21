@@ -79,9 +79,11 @@ router.post('/sync-conversations', protect, async (req, res) => {
     }
 
     // Update user's last sync timestamp
-    await enhancedMemoryService.updateUserMetadata(userId, {
-      lastConversationSync: new Date(),
-      totalSyncedMessages: syncedMessages
+    await enhancedMemoryService.updateUserConstants(userId, {
+      personalInfo: {
+        lastConversationSync: new Date(),
+        totalSyncedMessages: syncedMessages
+      }
     });
 
     res.json({

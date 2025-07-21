@@ -6,7 +6,7 @@
 export const TIER_CONFIG = {
   CORE: {
     name: 'Core',
-    dailyRequests: 1,
+    dailyRequests: 1500,
     requestsPerMinute: 2,
     maxTokensPerRequest: 2000,
     features: {
@@ -15,12 +15,12 @@ export const TIER_CONFIG = {
       personalizedInsights: false,
       toolAccess: false,
       memoryRetention: 7, // days
-      conversationHistory: 50 // messages
+      conversationHistory: 1500 // messages
     }
   },
   PRO: {
     name: 'Pro', 
-    dailyRequests: 200,
+    dailyRequests: 10000,
     requestsPerMinute: 10,
     maxTokensPerRequest: 8000,
     features: {
@@ -29,7 +29,7 @@ export const TIER_CONFIG = {
       personalizedInsights: true,
       toolAccess: true,
       memoryRetention: 90, // days
-      conversationHistory: 1000 // messages
+      conversationHistory: 10000 // messages
     }
   },
   AETHER: {
