@@ -39,7 +39,6 @@ Utility function tests:
 Test utilities and setup scripts:
 - `testAPI.js` - API testing utilities
 - `testWebSocket.js` - WebSocket connection tests
-- `testNuminaSenses.js` - AI perception system tests
 - `performance-test.js` - Performance benchmarking
 - `seedTestData.js` - Test data generation
 - `createTestUsers.js` - User creation utilities

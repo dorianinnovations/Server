@@ -222,16 +222,6 @@ class DataProcessingPipeline {
       await this.updateEmotionalProfile(behaviorProfile, eventData);
     }
 
-    // Broadcast emotion update if confident
-    if (source === 'user_input' || (eventData.confidence && eventData.confidence > 0.7)) {
-      websocketService.sendToUser(userId, 'numina_senses_updated', {
-        emotion,
-        intensity,
-        confidence: eventData.confidence || 0.8,
-        source,
-        timestamp: new Date()
-      });
-    }
 
     // Check for emotional support opportunities
     await this.checkEmotionalSupportOpportunities(userId, eventData);

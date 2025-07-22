@@ -2,6 +2,7 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 import aiInsightService from '../services/aiInsightService.js';
 import logger from '../utils/logger.js';
+import { analyticsRateLimiters } from '../middleware/analyticsRateLimiter.js';
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ const router = express.Router();
  * POST /analytics/llm
  * Main AI analytics processing endpoint
  */
-router.post('/', protect, async (req, res) => {
+router.post('/', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     const { category, forceGenerate = false } = req.body;
@@ -86,7 +87,7 @@ router.post('/', protect, async (req, res) => {
  * POST /analytics/llm/insights
  * Generate AI-powered insights for specific category
  */
-router.post('/insights', protect, async (req, res) => {
+router.post('/insights', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     const { category, forceGenerate = false } = req.body;
@@ -199,7 +200,7 @@ router.post('/insights', protect, async (req, res) => {
  * POST /analytics/llm/weekly-digest
  * Generate weekly analytics digest
  */
-router.post('/weekly-digest', protect, async (req, res) => {
+router.post('/weekly-digest', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     
@@ -246,7 +247,7 @@ router.post('/weekly-digest', protect, async (req, res) => {
  * POST /analytics/llm/recommendations
  * AI-powered recommendations based on behavioral patterns
  */
-router.post('/recommendations', protect, async (req, res) => {
+router.post('/recommendations', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     const { category, type = 'general' } = req.body;
@@ -285,7 +286,7 @@ router.post('/recommendations', protect, async (req, res) => {
  * POST /analytics/llm/patterns
  * Deep pattern analysis with LLM integration
  */
-router.post('/patterns', protect, async (req, res) => {
+router.post('/patterns', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     const { timeframe = '30d', categories = ['all'] } = req.body;
@@ -356,7 +357,7 @@ router.get('/status', protect, async (req, res) => {
  * POST /advanced-profiling
  * Advanced psychological profiling with predictive analytics
  */
-router.post('/advanced-profiling', protect, async (req, res) => {
+router.post('/advanced-profiling', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     const { includePredicitive = true, includeCognitive = true, depth = 'comprehensive' } = req.body;
@@ -447,7 +448,7 @@ router.post('/advanced-profiling', protect, async (req, res) => {
  * POST /real-time-insights
  * Real-time psychological state analysis
  */
-router.post('/real-time-insights', protect, async (req, res) => {
+router.post('/real-time-insights', protect, analyticsRateLimiters.llmAnalytics, async (req, res) => {
   try {
     const userId = req.user.id;
     const { timeWindow = '1h', analysisType = 'emotional_state' } = req.body;

@@ -6,6 +6,7 @@ import { createUserCache } from "../utils/cache.js";
 import { getRecentMemory } from "../utils/memory.js";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
+import { analyticsRateLimiters } from "../middleware/analyticsRateLimiter.js";
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const router = express.Router();
  * Generate personalized growth insights based on user's emotional journey
  * Supports both static and streaming modes
  */
-router.get("/growth-summary", protect, rateLimiters.general, async (req, res) => {
+router.get("/growth-summary", protect, analyticsRateLimiters.personalGrowthInsights, async (req, res) => {
   const stream = req.query.stream === 'true';
   
   if (stream) {
@@ -342,7 +343,7 @@ Keep it personal, specific, and under 300 words. Focus on progress, not deficits
  * GET /personal-insights/milestones
  * Track and celebrate user achievement milestones
  */
-router.get("/milestones", protect, async (req, res) => {
+router.get("/milestones", protect, analyticsRateLimiters.personalGrowthInsights, async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);

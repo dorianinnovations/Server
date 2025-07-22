@@ -175,7 +175,6 @@ numina-server/
 │   │   ├── setup_verified_account.js # Verified account setup
 │   │   ├── simpleWSTest.js           # WebSocket testing
 │   │   ├── testAPI.js                # API testing
-│   │   ├── testNuminaSenses.js       # Numina senses testing
 │   │   ├── testWebSocket.js          # WebSocket testing
 │   │   ├── test-final-email.js       # Email testing
 │   │   └── quick-email-test.js       # Quick email tests

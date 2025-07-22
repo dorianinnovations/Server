@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import fetch from 'node-fetch';
 
-console.log('🎧 Simple WebSocket Listener for Numina Senses...\n');
+console.log('🎧 Simple WebSocket Listener...\n');
 
 // Get auth token
 const response = await fetch('http://localhost:5000/login', {
@@ -25,20 +25,13 @@ socket.on('connect', () => {
   console.log('✅ WebSocket connected');
 });
 
-socket.on('numina_senses_updated', data => {
-  console.log('\n🎭 EMOTION UPDATE RECEIVED:');
-  console.log(`   Emotion: ${data.emotion}`);
-  console.log(`   Intensity: ${data.intensity}`);
-  console.log(`   Confidence: ${Math.round(data.confidence * 100)}%`);
-  console.log(`   Reasoning: ${data.reasoning}\n`);
-});
 
 socket.on('disconnect', () => {
   console.log('❌ WebSocket disconnected');
 });
 
-console.log('🎧 Listening for emotion updates...');
-console.log('💬 Send a chat message in another terminal to test!\n');
+console.log('🎧 Listening for WebSocket events...');
+console.log('💬 Send a message in another terminal to test!\n');
 
 // Keep alive
 setInterval(() => {

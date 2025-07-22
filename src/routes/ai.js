@@ -25,9 +25,24 @@ import { trackMemoryUsage, calculateOptimizationSavings } from '../utils/memoryA
 import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from '../utils/imageCompressionBasic.js';
 import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
 import { getUserTier } from '../config/tiers.js';
+import { analyticsRateLimiters } from '../middleware/analyticsRateLimiter.js';
 
 const router = express.Router();
 const llmService = createLLMService();
+
+// Simple emotion detection function to replace aiPersonality functionality
+const detectSimpleEmotion = (message) => {
+  if (!message || typeof message !== 'string') return 'neutral';
+  
+  const text = message.toLowerCase();
+  if (text.includes('happy') || text.includes('joy') || text.includes('excited') || text.includes('great')) return 'happy';
+  if (text.includes('sad') || text.includes('depressed') || text.includes('down') || text.includes('terrible')) return 'sad';
+  if (text.includes('angry') || text.includes('mad') || text.includes('frustrated') || text.includes('annoyed')) return 'angry';
+  if (text.includes('anxious') || text.includes('worried') || text.includes('stressed') || text.includes('nervous')) return 'anxious';
+  if (text.includes('calm') || text.includes('peaceful') || text.includes('relaxed')) return 'calm';
+  
+  return 'neutral';
+};
 
 // INTELLIGENT SUMMARY FUNCTIONS for adaptive context sizing
 function generateTopicSummary(topicEvolution) {
@@ -980,253 +995,10 @@ function formatToolResultForUser(toolName, result) {
   }
 }
 
-// Helper functions for Dynamic Numina Senses
-// Background emotion processing (non-blocking)
-async function processEmotionInBackground(userId, userMessage, _recentMemory, _recentEmotions) {
-  try {
-    // Simple emotion detection for background processing
-    const detectedEmotion = detectSimpleEmotion(userMessage);
-    
-    if (detectedEmotion && detectedEmotion !== 'neutral') {
-      // Store emotion for future reference
-      console.log(`🎭 Background emotion detected for ${userId}: ${detectedEmotion}`);
-      
-      // Could save to database or update user profile here
-      // await User.findByIdAndUpdate(userId, { $push: { emotionalLog: { emotion: detectedEmotion, timestamp: new Date() } } });
-    }
-  } catch (error) {
-    console.error('Error in background emotion processing:', error);
-  }
-}
 
-function detectSimpleEmotion(message) {
-  if (!message) return 'neutral';
-  
-  const excited = /!{2,}|awesome|amazing|great|fantastic|love|excited/i.test(message);
-  const happy = /:\)|good|happy|glad|nice|cool|thanks/i.test(message);
-  const sad = /:\(|sad|down|upset|disappointed/i.test(message);
-  const frustrated = /angry|mad|frustrated|annoyed|ugh/i.test(message);
-  const anxious = /worried|nervous|anxious|stressed/i.test(message);
-  
-  if (excited) return 'excited';
-  if (happy) return 'happy';
-  if (sad) return 'sad';
-  if (frustrated) return 'frustrated';
-  if (anxious) return 'anxious';
-  
-  return 'neutral';
-}
 
-function _calculateEmotionConfidence(currentEmotionalState, emotionalInsights, conversationPatterns) {
-  let confidence = 0.3; // Base confidence
-  
-  // Boost confidence based on clear emotional indicators
-  if (currentEmotionalState.detectedMood !== 'neutral') confidence += 0.2;
-  if (currentEmotionalState.emotionalIntensity === 'high') confidence += 0.2;
-  if (currentEmotionalState.needsSupport) confidence += 0.15;
-  if (currentEmotionalState.sharingPersonal) confidence += 0.1;
-  
-  // Boost if we have emotional insights from context
-  if (emotionalInsights && emotionalInsights.primaryEmotion !== 'unknown') confidence += 0.15;
-  
-  // Boost for conversation depth (more data = more confidence)
-  if (conversationPatterns.conversationLength > 5) confidence += 0.1;
-  if (conversationPatterns.conversationLength > 15) confidence += 0.1;
-  
-  return Math.min(1.0, confidence);
-}
 
-function _generateEmotionReasoning(currentEmotionalState, conversationPatterns) {
-  const reasons = [];
-  
-  if (currentEmotionalState.needsSupport) {
-    reasons.push('seeking support');
-  }
-  if (currentEmotionalState.sharingPersonal) {
-    reasons.push('sharing personal thoughts');
-  }
-  if (currentEmotionalState.emotionalIntensity === 'high') {
-    reasons.push('high emotional intensity');
-  }
-  if (conversationPatterns.conversationLength > 10) {
-    reasons.push('engaged conversation');
-  }
-  
-  const trend = conversationPatterns.emotionalTrend;
-  if (trend && trend.includes('→')) {
-    reasons.push(`emotional progression: ${trend}`);
-  }
-  
-  return reasons.length > 0 ? reasons.join(', ') : 'conversation tone analysis';
-}
 
-router.post('/emotional-state', protect, async (req, res) => {
-  try {
-    const { recentEmotions, conversationHistory, timeContext } = req.body;
-    const userId = req.user.id;
-    
-    // Create cache key based on input data
-    const cacheKey = `emotional-state:${userId}:${JSON.stringify({ recentEmotions, timeContext }).substring(0, 100)}`;
-    const userCache = createUserCache();
-    
-    // Try to get from cache first (valid for 5 minutes)
-    const cachedResult = userCache.get(cacheKey);
-    if (cachedResult) {
-      console.log(`⚡ Cache hit for emotional state analysis for user ${userId}`);
-      return res.json({ success: true, data: cachedResult });
-    }
-    
-    const systemPrompt = `You are an expert emotional intelligence analyst. Analyze user emotional patterns and return structured JSON data with emotional state insights.
-
-Analyze the provided data and respond with JSON in this exact format:
-{
-  "primaryEmotion": "string",
-  "emotionalIntensity": number (0-10),
-  "emotionalStability": number (0-10),
-  "mood": "string",
-  "recommendations": ["recommendation1", "recommendation2"],
-  "compatibilityFactors": {
-    "socialEnergy": number (0-10),
-    "empathyLevel": number (0-10),
-    "openness": number (0-10)
-  },
-  "insights": "string description"
-}`;
-
-    const userPrompt = `Analyze this emotional data:
-Recent Emotions: ${JSON.stringify(recentEmotions)}
-Conversation History: ${JSON.stringify(conversationHistory)}
-Time Context: ${JSON.stringify(timeContext)}`;
-
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ];
-
-    const response = await llmService.makeLLMRequest(messages, {
-      temperature: 0.3,
-      n_predict: 300
-    });
-
-    let analysisData;
-    try {
-      analysisData = JSON.parse(response.content);
-    } catch {
-      analysisData = {
-        primaryEmotion: "neutral",
-        emotionalIntensity: 5,
-        emotionalStability: 7,
-        mood: "stable",
-        recommendations: ["Practice mindfulness", "Stay connected with others"],
-        compatibilityFactors: {
-          socialEnergy: 6,
-          empathyLevel: 7,
-          openness: 6
-        },
-        insights: "Unable to parse detailed analysis, showing default stable state"
-      };
-    }
-
-    // Cache the result for 5 minutes
-    userCache.set(cacheKey, analysisData, 300000);
-    console.log(`💾 Cached emotional state analysis for user ${userId}`);
-
-    res.json({
-      success: true,
-      data: analysisData
-    });
-
-  } catch (error) {
-    console.error('Emotional state analysis error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to analyze emotional state'
-    });
-  }
-});
-
-router.post('/personality-recommendations', protect, async (req, res) => {
-  try {
-    const { emotionalProfile, interactionHistory, preferences } = req.body;
-    const userId = req.user.id;
-    
-    // Create cache key based on input data
-    const cacheKey = `personality-recs:${userId}:${JSON.stringify({ emotionalProfile, preferences }).substring(0, 100)}`;
-    const userCache = createUserCache();
-    
-    // Try to get from cache first (valid for 10 minutes)
-    const cachedResult = userCache.get(cacheKey);
-    if (cachedResult) {
-      console.log(`⚡ Cache hit for personality recommendations for user ${userId}`);
-      return res.json({ success: true, data: cachedResult });
-    }
-    
-    const systemPrompt = `You are a personality analysis expert. Generate personalized recommendations based on user's emotional profile and interaction patterns.
-
-Return JSON in this format:
-{
-  "personalityType": "string",
-  "strengths": ["strength1", "strength2"],
-  "growthAreas": ["area1", "area2"],
-  "communicationStyle": "string",
-  "socialRecommendations": ["rec1", "rec2"],
-  "activitySuggestions": ["activity1", "activity2"],
-  "compatibilityPreferences": {
-    "idealPersonalityTypes": ["type1", "type2"],
-    "communicationStyles": ["style1", "style2"]
-  }
-}`;
-
-    const userPrompt = `Generate personality recommendations for:
-Emotional Profile: ${JSON.stringify(emotionalProfile)}
-Interaction History: ${JSON.stringify(interactionHistory)}
-Preferences: ${JSON.stringify(preferences)}`;
-
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ];
-
-    const response = await llmService.makeLLMRequest(messages, {
-      temperature: 0.4,
-      n_predict: 300
-    });
-
-    let recommendationData;
-    try {
-      recommendationData = JSON.parse(response.content);
-    } catch {
-      recommendationData = {
-        personalityType: "Balanced",
-        strengths: ["Adaptable", "Empathetic"],
-        growthAreas: ["Self-expression", "Confidence building"],
-        communicationStyle: "Thoughtful and considerate",
-        socialRecommendations: ["Join community groups", "Practice active listening"],
-        activitySuggestions: ["Mindfulness exercises", "Creative workshops"],
-        compatibilityPreferences: {
-          idealPersonalityTypes: ["Empathetic", "Creative"],
-          communicationStyles: ["Open", "Supportive"]
-        }
-      };
-    }
-
-    // Cache the result for 10 minutes
-    userCache.set(cacheKey, recommendationData, 600000);
-    console.log(`💾 Cached personality recommendations for user ${userId}`);
-
-    res.json({
-      success: true,
-      data: recommendationData
-    });
-
-  } catch (error) {
-    console.error('Personality recommendations error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate personality recommendations'
-    });
-  }
-});
 
 router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
   try {
@@ -2485,72 +2257,6 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
   }
 });
 
-router.post('/personality-feedback', protect, async (req, res) => {
-  try {
-    const { interactionData, behaviorPatterns, feedbackType } = req.body;
-    
-    const systemPrompt = `You are a personality development coach. Analyze user interactions and provide constructive feedback for personal growth.
-
-Return JSON in this format:
-{
-  "feedbackType": "string",
-  "observations": ["observation1", "observation2"],
-  "positivePatterns": ["pattern1", "pattern2"],
-  "improvementAreas": ["area1", "area2"],
-  "actionableSteps": ["step1", "step2"],
-  "encouragement": "string",
-  "progressTracking": {
-    "metricsToWatch": ["metric1", "metric2"],
-    "checkInFrequency": "string"
-  }
-}`;
-
-    const userPrompt = `Provide personality feedback for:
-Interaction Data: ${JSON.stringify(interactionData)}
-Behavior Patterns: ${JSON.stringify(behaviorPatterns)}
-Feedback Type: ${feedbackType || 'general development'}`;
-
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ];
-
-    const response = await llmService.makeLLMRequest(messages, {
-      temperature: 0.3,
-      n_predict: 512
-    });
-
-    let feedbackData;
-    try {
-      feedbackData = JSON.parse(response.content);
-    } catch {
-      feedbackData = {
-        feedbackType: "general development",
-        observations: ["Shows thoughtful engagement", "Demonstrates openness to growth"],
-        positivePatterns: ["Active participation", "Willingness to share"],
-        improvementAreas: ["Self-reflection", "Goal setting"],
-        actionableSteps: ["Practice daily check-ins", "Set small achievable goals"],
-        encouragement: "You're on a positive path of personal growth. Keep being curious about yourself!",
-        progressTracking: {
-          metricsToWatch: ["Self-awareness", "Communication patterns"],
-          checkInFrequency: "weekly"
-        }
-      };
-    }
-
-    res.json({
-      success: true,
-      data: feedbackData
-    });
-
-  } catch (error) {
-    console.error('Personality feedback error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate personality feedback'
-    });
-  }
-});
 
 router.post('/personalized-insights', protect, requireFeature('personalizedInsights'), async (req, res) => {
   try {
