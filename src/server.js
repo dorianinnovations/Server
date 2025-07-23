@@ -182,6 +182,16 @@ const initializeServer = async () => {
   setupMemoryMonitoring();
   log.success("Cache and memory monitoring initialized");
 
+  // Root health endpoint for monitoring
+  app.get("/", (req, res) => {
+    res.json({ 
+      status: "success", 
+      message: "Numina AI Server is running", 
+      timestamp: new Date().toISOString(),
+      version: "1.0.0"
+    });
+  });
+
   // Register API routes
   log.debug("Registering API routes");
   app.use("/", authRoutes);
