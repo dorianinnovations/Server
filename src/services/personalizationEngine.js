@@ -842,6 +842,155 @@ class PersonalizationEngine {
       timeline: '3-6 months'
     };
   }
+
+  /**
+   * EPIC 2: Initiate Pattern Analysis - The heart of the Pattern Engine
+   * Analyzes user's complete data landscape for hidden patterns and synchronicities
+   */
+  async initiatePatternAnalysis(userId, triggerContext) {
+    try {
+      logger.info('🧠 Starting comprehensive pattern analysis', { userId, triggerType: triggerContext.triggerType });
+
+      // Step 1: Gather all user data across collections
+      const analysisData = await this.gatherUserDataForAnalysis(userId);
+      
+      // Step 2: Invoke the LLM Pattern Discovery Engine
+      const { createLLMService } = await import('./llmService.js');
+      const llmService = createLLMService();
+      
+      const patternResults = await llmService.discoverHiddenPatterns({
+        userId,
+        triggerContext,
+        userData: analysisData,
+        timestamp: new Date().toISOString()
+      });
+
+      if (patternResults.success && patternResults.patterns?.length > 0) {
+        logger.info('✨ Hidden patterns discovered', { 
+          userId, 
+          patternCount: patternResults.patterns.length,
+          triggerType: triggerContext.triggerType
+        });
+
+        return {
+          success: true,
+          patterns: patternResults.patterns,
+          triggerContext,
+          timestamp: patternResults.timestamp,
+          analysisData: {
+            lockedNodeCount: analysisData.lockedNodes?.length || 0,
+            sessionCount: analysisData.sandboxSessions?.length || 0,
+            ubpmDataAvailable: !!analysisData.ubpmProfile,
+            emotionalDataPoints: analysisData.emotionalHistory?.length || 0
+          }
+        };
+      } else {
+        logger.info('No significant patterns discovered', { userId, triggerType: triggerContext.triggerType });
+        return {
+          success: false,
+          reason: 'No significant patterns found',
+          triggerContext
+        };
+      }
+
+    } catch (error) {
+      logger.error('❌ Pattern analysis failed', { userId, error: error.message });
+      return {
+        success: false,
+        error: error.message,
+        triggerContext
+      };
+    }
+  }
+
+  /**
+   * Gather comprehensive user data for pattern analysis
+   */
+  async gatherUserDataForAnalysis(userId) {
+    try {
+      const analysisData = {
+        timestamp: new Date().toISOString(),
+        userId
+      };
+
+      // Import models dynamically
+      const { default: User } = await import('../models/User.js');
+      const { default: LockedNode } = await import('../models/LockedNode.js');
+      const { default: SandboxSession } = await import('../models/SandboxSession.js');
+      const { default: UserBehaviorProfile } = await import('../models/UserBehaviorProfile.js');
+      const { default: ShortTermMemory } = await import('../models/ShortTermMemory.js');
+
+      // Gather user profile data
+      analysisData.user = await User.findById(userId).select('-password').lean();
+      
+      // Gather locked nodes (persistent discoveries)
+      analysisData.lockedNodes = await LockedNode.find({ userId, isActive: true })
+        .select('title content category createdAt lockData personalHook')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      // Gather sandbox sessions (exploration history)
+      analysisData.sandboxSessions = await SandboxSession.find({ userId, isActive: true })
+        .select('userQuery nodes timestamp metadata')
+        .sort({ lastAccessed: -1 })
+        .limit(10)
+        .lean();
+
+      // Gather UBPM behavioral data
+      analysisData.ubpmProfile = await UserBehaviorProfile.findOne({ userId }).lean();
+
+      // Gather emotional/memory history
+      analysisData.emotionalHistory = await ShortTermMemory.find({ userId })
+        .select('emotionalContext content timestamp')
+        .sort({ timestamp: -1 })
+        .limit(15)
+        .lean();
+
+      // Calculate data richness scores
+      analysisData.dataRichness = {
+        total: this.calculateDataRichness(analysisData),
+        lockedNodes: analysisData.lockedNodes?.length || 0,
+        sessions: analysisData.sandboxSessions?.length || 0,
+        behavioralDataPoints: analysisData.ubpmProfile ? 1 : 0,
+        emotionalDataPoints: analysisData.emotionalHistory?.length || 0
+      };
+
+      logger.debug('User data gathered for pattern analysis', {
+        userId,
+        dataRichness: analysisData.dataRichness
+      });
+
+      return analysisData;
+
+    } catch (error) {
+      logger.error('Failed to gather user data for analysis', { userId, error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Calculate overall data richness for pattern analysis
+   */
+  calculateDataRichness(analysisData) {
+    let score = 0;
+    
+    // Base user data
+    if (analysisData.user) score += 0.1;
+    
+    // Locked nodes (high value for pattern analysis)
+    const lockedNodeScore = Math.min(0.4, (analysisData.lockedNodes?.length || 0) * 0.1);
+    score += lockedNodeScore;
+    
+    // Sandbox sessions (exploration patterns)
+    const sessionScore = Math.min(0.3, (analysisData.sandboxSessions?.length || 0) * 0.05);
+    score += sessionScore;
+    
+    // UBPM behavioral data (critical for pattern recognition)
+    if (analysisData.ubpmProfile) score += 0.2;
+    
+    return Math.min(1.0, score);
+  }
 }
 
 // Export singleton instance

@@ -262,6 +262,149 @@ class TriggerSystem {
     return tool;
   }
 
+  /**
+   * Pattern Analysis Triggers - Core functionality for proactive pattern discovery
+   */
+  
+  async checkNodeLockingPattern(userId, nodeData) {
+    try {
+      const { LockedNode } = await import('../models/LockedNode.js');
+      
+      // Check for 3rd node with same category
+      if (nodeData.category) {
+        const sameCategory = await LockedNode.countDocuments({
+          userId,
+          category: nodeData.category,
+          isActive: true
+        });
+        
+        if (sameCategory >= 3) {
+          console.log('🔍 Pattern trigger: 3+ nodes in same category detected');
+          await this.triggerPatternAnalysis(userId, 'category_clustering', {
+            category: nodeData.category,
+            nodeCount: sameCategory,
+            triggerNode: nodeData
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error checking node locking pattern:', error);
+    }
+  }
+  
+  async checkSemanticSimilarity(userId, newQuery, nodeData) {
+    try {
+      const { LockedNode } = await import('../models/LockedNode.js');
+      
+      // Get locked nodes older than 1 month
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      
+      const oldLockedNodes = await LockedNode.find({
+        userId,
+        isActive: true,
+        createdAt: { $lt: oneMonthAgo }
+      }).select('title content category createdAt');
+      
+      // Simple semantic similarity check (could be enhanced with embeddings)
+      for (const node of oldLockedNodes) {
+        const similarity = this.calculateSimilarity(newQuery.toLowerCase(), 
+          `${node.title} ${node.content}`.toLowerCase());
+        
+        if (similarity > 0.7) {
+          console.log('🔍 Pattern trigger: High semantic similarity detected');
+          await this.triggerPatternAnalysis(userId, 'semantic_resonance', {
+            newQuery,
+            similarNode: node,
+            similarity,
+            monthsApart: Math.floor((Date.now() - node.createdAt) / (30 * 24 * 60 * 60 * 1000))
+          });
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('Error checking semantic similarity:', error);
+    }
+  }
+  
+  async checkSignificantDate(userId) {
+    try {
+      const { User } = await import('../models/User.js');
+      const { UserBehaviorProfile } = await import('../models/UserBehaviorProfile.js');
+      
+      const user = await User.findById(userId);
+      const profile = await UserBehaviorProfile.findOne({ userId });
+      
+      // Check if birthday is approaching (within 7 days)
+      if (user?.profile?.birthday) {
+        const birthday = new Date(user.profile.birthday);
+        const today = new Date();
+        const thisYear = today.getFullYear();
+        const thisYearBirthday = new Date(thisYear, birthday.getMonth(), birthday.getDate());
+        
+        const daysDiff = Math.floor((thisYearBirthday - today) / (24 * 60 * 60 * 1000));
+        
+        if (daysDiff >= 0 && daysDiff <= 7) {
+          console.log('🔍 Pattern trigger: Significant date approaching');
+          await this.triggerPatternAnalysis(userId, 'significant_date', {
+            dateType: 'birthday',
+            daysUntil: daysDiff,
+            age: thisYear - birthday.getFullYear()
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error checking significant date:', error);
+    }
+  }
+  
+  async triggerPatternAnalysis(userId, triggerType, triggerContext) {
+    try {
+      console.log('🧠 Initiating pattern analysis:', { userId, triggerType, triggerContext });
+      
+      // Import personalization engine
+      const { default: personalizationEngine } = await import('./personalizationEngine.js');
+      
+      // Call pattern analysis
+      const analysisResult = await personalizationEngine.initiatePatternAnalysis(userId, {
+        triggerType,
+        triggerContext,
+        timestamp: new Date().toISOString()
+      });
+      
+      if (analysisResult.success && analysisResult.patterns?.length > 0) {
+        console.log('✨ Pattern analysis discovered insights - preparing real-time delivery');
+        
+        // Import websocket service for real-time delivery
+        const { default: websocketService } = await import('./websocketService.js');
+        
+        // Deliver insight via websocket
+        websocketService.sendToUser(userId, 'pattern_insight', {
+          type: 'hidden_pattern_discovered',
+          triggerType,
+          patterns: analysisResult.patterns,
+          timestamp: analysisResult.timestamp
+        });
+        
+        console.log('🎯 Pattern insight delivered to user in real-time');
+      }
+      
+    } catch (error) {
+      console.error('❌ Pattern analysis trigger failed:', error);
+    }
+  }
+  
+  // Simple similarity calculation (Jaccard similarity)
+  calculateSimilarity(str1, str2) {
+    const words1 = new Set(str1.split(/\s+/));
+    const words2 = new Set(str2.split(/\s+/));
+    
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+    
+    return intersection.size / union.size;
+  }
+
   getStats() {
     return {
       queueLength: this.eventQueue.length,

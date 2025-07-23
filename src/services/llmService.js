@@ -284,11 +284,172 @@ export const createLLMService = () => {
     }
   };
 
+  /**
+   * Handle Window Query - Orchestrates the research workflow for Node Windows
+   * User Query -> Web Search -> Academic Search -> LLM Synthesis
+   */
+  const handleWindowQuery = async (nodeContext, userQuery, options = {}) => {
+    try {
+      console.log('🔬 Starting Window Query research workflow');
+      console.log('📝 Node Context:', nodeContext.title?.substring(0, 50));
+      console.log('❓ User Query:', userQuery?.substring(0, 100));
+
+      const results = {
+        userQuery,
+        nodeContext,
+        webSearchResults: null,
+        academicSearchResults: null,
+        synthesis: null,
+        tidBits: [],
+        timestamp: new Date().toISOString()
+      };
+
+      // Step 1: Web Search for current information
+      try {
+        const webSearchTool = (await import('../tools/webSearch.js')).default;
+        const webSearchArgs = {
+          query: `${userQuery} ${nodeContext.title}`,
+          searchType: 'general',
+          limit: 8
+        };
+        
+        results.webSearchResults = await webSearchTool(webSearchArgs, {});
+        console.log('🌐 Web search completed:', results.webSearchResults?.success ? 'Success' : 'Failed');
+      } catch (error) {
+        console.warn('⚠️ Web search failed:', error.message);
+        results.webSearchResults = { success: false, error: error.message };
+      }
+
+      // Step 2: Academic Search for scholarly information
+      try {
+        const academicSearchTool = (await import('../tools/academicSearch.js')).default;
+        const academicSearchArgs = {
+          query: `${userQuery} ${nodeContext.title}`,
+          field: nodeContext.category || undefined
+        };
+        
+        results.academicSearchResults = await academicSearchTool(academicSearchArgs, {});
+        console.log('🎓 Academic search completed:', results.academicSearchResults?.success ? 'Success' : 'Failed');
+      } catch (error) {
+        console.warn('⚠️ Academic search failed:', error.message);
+        results.academicSearchResults = { success: false, error: error.message };
+      }
+
+      // Step 3: LLM Synthesis of all research
+      try {
+        console.log('🧠 Starting LLM synthesis...');
+        
+        // Build synthesis prompt with all research data
+        const synthesisPrompt = buildSynthesisPrompt(nodeContext, userQuery, results);
+        
+        const synthesisResponse = await makeLLMRequest([
+          { 
+            role: 'system', 
+            content: 'You are a research synthesis expert. Your job is to analyze research data and extract meaningful, actionable insights that directly answer the user\'s question while connecting to their node context.' 
+          },
+          { role: 'user', content: synthesisPrompt }
+        ], {
+          temperature: 0.7,
+          n_predict: 1000
+        });
+
+        results.synthesis = synthesisResponse.content;
+        
+        // Extract tid-bits from synthesis
+        results.tidBits = extractTidBits(synthesisResponse.content);
+        
+        console.log('✅ Window Query research workflow completed successfully');
+        console.log('📊 Generated', results.tidBits.length, 'tid-bits for attachment');
+
+      } catch (error) {
+        console.error('❌ LLM synthesis failed:', error);
+        results.synthesis = `Research synthesis failed: ${error.message}`;
+        results.tidBits = [];
+      }
+
+      return {
+        success: true,
+        data: results
+      };
+
+    } catch (error) {
+      console.error('❌ Window Query workflow failed:', error);
+      return {
+        success: false,
+        error: error.message,
+        userQuery,
+        nodeContext
+      };
+    }
+  };
+
+  /**
+   * EPIC 2: Discover Hidden Patterns - The Master Pattern Recognition Engine
+   * Analyzes user's complete data landscape for synchronicities and meaningful connections
+   */
+  const discoverHiddenPatterns = async (analysisRequest) => {
+    try {
+      console.log('🔮 Starting hidden pattern discovery for user:', analysisRequest.userId);
+      console.log('🎯 Trigger type:', analysisRequest.triggerContext.triggerType);
+
+      const { userData, triggerContext } = analysisRequest;
+      
+      // Build comprehensive pattern analysis prompt
+      const patternPrompt = buildPatternAnalysisPrompt(userData, triggerContext);
+      
+      console.log('🧠 Invoking master pattern recognition...');
+      
+      const patternResponse = await makeLLMRequest([
+        { 
+          role: 'system', 
+          content: 'You are the Master Pattern Recognition Engine for the Numina AI system. Your purpose is to analyze the disparate data points of a user\'s life and reveal hidden patterns, synchronicities, and meaningful connections that they might have missed. You do not provide definitive answers - you present fascinating possibilities for the user to explore and evaluate.' 
+        },
+        { role: 'user', content: patternPrompt }
+      ], {
+        temperature: 0.8, // Higher creativity for pattern recognition
+        n_predict: 1500   // Allow for detailed pattern analysis
+      });
+
+      // Parse and structure the discovered patterns
+      const discoveredPatterns = parsePatternResponse(patternResponse.content, triggerContext);
+      
+      if (discoveredPatterns.length > 0) {
+        console.log('✨ Pattern discovery completed successfully');
+        console.log('🔍 Discovered', discoveredPatterns.length, 'potential patterns');
+        
+        return {
+          success: true,
+          patterns: discoveredPatterns,
+          triggerType: triggerContext.triggerType,
+          timestamp: new Date().toISOString(),
+          dataRichness: userData.dataRichness
+        };
+      } else {
+        console.log('📭 No significant patterns discovered in current dataset');
+        return {
+          success: false,
+          reason: 'Insufficient data or no significant patterns detected',
+          dataRichness: userData.dataRichness
+        };
+      }
+
+    } catch (error) {
+      console.error('❌ Hidden pattern discovery failed:', error);
+      return {
+        success: false,
+        error: error.message,
+        triggerType: analysisRequest.triggerContext?.triggerType
+      };
+    }
+  };
+
   return {
     makeLLMRequest,
     makeStreamingRequest,
     healthCheck,
     buildMultiModalMessage, // Export for direct use in routes
+    handleWindowQuery, // New Window Query orchestration
+    discoverHiddenPatterns, // Master Pattern Recognition Engine
   };
 };
 
@@ -417,3 +578,357 @@ const buildMultiModalMessage = (text, attachments = []) => {
   console.log(`🖼️ Built multi-modal message with ${imageAttachments.length} images`);
   return { role: 'user', content: content };
 };
+
+/**
+ * Build synthesis prompt for Window Query research
+ */
+function buildSynthesisPrompt(nodeContext, userQuery, results) {
+  let prompt = `# Research Synthesis Task
+
+## Context
+**Node Title:** ${nodeContext.title}
+**Node Content:** ${nodeContext.content}
+**Node Category:** ${nodeContext.category || 'General'}
+**User's Research Question:** ${userQuery}
+
+## Research Data Collected
+
+`;
+
+  // Add web search results
+  if (results.webSearchResults?.success && results.webSearchResults.results?.length > 0) {
+    prompt += `### Web Search Results (${results.webSearchResults.results.length} sources):\n`;
+    results.webSearchResults.results.slice(0, 5).forEach((result, index) => {
+      prompt += `${index + 1}. **${result.title}**\n   Source: ${result.displayLink}\n   ${result.snippet}\n\n`;
+    });
+  } else {
+    prompt += `### Web Search Results: No reliable web results found\n\n`;
+  }
+
+  // Add academic search results
+  if (results.academicSearchResults?.success && results.academicSearchResults.data?.papers?.length > 0) {
+    prompt += `### Academic Research (${results.academicSearchResults.data.papers.length} papers):\n`;
+    results.academicSearchResults.data.papers.slice(0, 3).forEach((paper, index) => {
+      prompt += `${index + 1}. **${paper.title}** (${paper.year})\n   ${paper.abstract}\n   Source: ${paper.source}\n\n`;
+    });
+  } else {
+    prompt += `### Academic Research: No academic papers found\n\n`;
+  }
+
+  prompt += `## Your Task
+
+Based on the research data above, provide a comprehensive synthesis that:
+
+1. **Directly answers the user's question**: "${userQuery}"
+2. **Connects to their node context**: How does this relate to "${nodeContext.title}"?
+3. **Highlights the most valuable insights** from the research
+4. **Identifies key facts, numbers, dates, or references** that could be attached to the node
+5. **Suggests connections** to other potential research areas
+
+## Output Format
+
+Provide your response in this structure:
+
+**DIRECT ANSWER:**
+[Clear, direct response to the user's question]
+
+**CONNECTION TO YOUR NODE:**
+[How this research enriches or expands their existing node]
+
+**KEY FINDINGS:**
+• [Specific fact/insight #1]
+• [Specific fact/insight #2] 
+• [Specific fact/insight #3]
+
+**RESEARCH EVIDENCE:**
+• [Source citation with key detail]
+• [Date/number/reference with context]
+• [Academic finding with implications]
+
+**NEXT RESEARCH DIRECTIONS:**
+• [Suggested follow-up question #1]
+• [Suggested follow-up question #2]
+
+Focus on actionable insights that can deepen their understanding and provide specific details they can attach to their node.`;
+
+  return prompt;
+}
+
+/**
+ * Extract tid-bits from synthesis response
+ */
+function extractTidBits(synthesisContent) {
+  const tidBits = [];
+  
+  try {
+    // Extract key findings
+    const keyFindingsMatch = synthesisContent.match(/\*\*KEY FINDINGS:\*\*(.*?)(?=\*\*[A-Z\s]+:|$)/s);
+    if (keyFindingsMatch) {
+      const findings = keyFindingsMatch[1].split('•').filter(item => item.trim());
+      findings.forEach(finding => {
+        const cleanFinding = finding.trim();
+        if (cleanFinding) {
+          tidBits.push({
+            type: 'key_finding',
+            content: cleanFinding,
+            attachable: true
+          });
+        }
+      });
+    }
+
+    // Extract research evidence
+    const evidenceMatch = synthesisContent.match(/\*\*RESEARCH EVIDENCE:\*\*(.*?)(?=\*\*[A-Z\s]+:|$)/s);
+    if (evidenceMatch) {
+      const evidence = evidenceMatch[1].split('•').filter(item => item.trim());
+      evidence.forEach(item => {
+        const cleanEvidence = item.trim();
+        if (cleanEvidence) {
+          tidBits.push({
+            type: 'research_evidence',
+            content: cleanEvidence,
+            attachable: true
+          });
+        }
+      });
+    }
+
+    // Extract numbers, dates, and specific references
+    const numberMatches = synthesisContent.match(/\b(\d{4}|\d+%|\$[\d,]+|\d+[.,]\d+)\b/g);
+    if (numberMatches) {
+      numberMatches.slice(0, 3).forEach(number => {
+        tidBits.push({
+          type: 'data_point',
+          content: number,
+          attachable: true
+        });
+      });
+    }
+
+  } catch (error) {
+    console.warn('⚠️ Failed to extract tid-bits:', error.message);
+  }
+
+  return tidBits.slice(0, 8); // Limit to 8 tid-bits
+}
+
+/**
+ * Build comprehensive pattern analysis prompt for the Master Pattern Engine
+ */
+function buildPatternAnalysisPrompt(userData, triggerContext) {
+  let prompt = `# MASTER PATTERN ANALYSIS REQUEST
+
+## TRIGGER CONTEXT
+**Trigger Type:** ${triggerContext.triggerType}
+**Trigger Time:** ${triggerContext.timestamp}
+
+`;
+
+  // Add trigger-specific context
+  if (triggerContext.triggerType === 'category_clustering') {
+    prompt += `**Pattern Trigger:** User has locked 3+ nodes in the "${triggerContext.triggerContext.category}" category, suggesting deep focus on this domain.\n\n`;
+  } else if (triggerContext.triggerType === 'semantic_resonance') {
+    prompt += `**Pattern Trigger:** User's current exploration shows high similarity (${(triggerContext.triggerContext.similarity * 100).toFixed(1)}%) to a node from ${triggerContext.triggerContext.monthsApart} months ago.\n\n`;
+  } else if (triggerContext.triggerType === 'significant_date') {
+    prompt += `**Pattern Trigger:** Approaching significant date (${triggerContext.triggerContext.dateType}) in ${triggerContext.triggerContext.daysUntil} days.\n\n`;
+  }
+
+  // Add user profile data
+  prompt += `## USER PROFILE DATA\n`;
+  if (userData.user) {
+    prompt += `**Email:** ${userData.user.email}\n`;
+    prompt += `**Account Created:** ${userData.user.createdAt}\n`;
+    if (userData.user.profile && Object.keys(userData.user.profile).length > 0) {
+      prompt += `**Profile Data:** ${JSON.stringify(userData.user.profile, null, 2)}\n`;
+    }
+  }
+
+  // Add locked nodes (critical for pattern recognition)
+  prompt += `\n## LOCKED NODES (Persistent Discoveries)\n`;
+  if (userData.lockedNodes && userData.lockedNodes.length > 0) {
+    userData.lockedNodes.forEach((node, index) => {
+      prompt += `### Node ${index + 1}: "${node.title}" (${node.category})\n`;
+      prompt += `**Created:** ${node.createdAt}\n`;
+      prompt += `**Content:** ${node.content}\n`;
+      if (node.personalHook) prompt += `**Personal Hook:** ${node.personalHook}\n`;
+      if (node.lockData?.reason) prompt += `**Lock Reason:** ${node.lockData.reason}\n`;
+      prompt += `\n`;
+    });
+  } else {
+    prompt += `No locked nodes available.\n\n`;
+  }
+
+  // Add sandbox exploration history
+  prompt += `## SANDBOX EXPLORATION HISTORY\n`;
+  if (userData.sandboxSessions && userData.sandboxSessions.length > 0) {
+    userData.sandboxSessions.forEach((session, index) => {
+      prompt += `### Session ${index + 1}: "${session.userQuery}"\n`;
+      prompt += `**Timestamp:** ${session.timestamp}\n`;
+      prompt += `**Node Count:** ${session.nodes?.length || 0}\n`;
+      if (session.metadata) prompt += `**Metadata:** ${JSON.stringify(session.metadata)}\n`;
+      prompt += `\n`;
+    });
+  } else {
+    prompt += `No sandbox sessions available.\n\n`;
+  }
+
+  // Add behavioral data (UBPM)
+  prompt += `## BEHAVIORAL ANALYSIS (UBPM)\n`;
+  if (userData.ubpmProfile) {
+    prompt += `**Behavioral Patterns:** ${JSON.stringify(userData.ubpmProfile.behaviorPatterns || [], null, 2)}\n`;
+    prompt += `**Preferences:** ${JSON.stringify(userData.ubpmProfile.preferences || {}, null, 2)}\n`;
+    prompt += `**Behavior Metrics:** ${JSON.stringify(userData.ubpmProfile.behaviorMetrics || {}, null, 2)}\n`;
+  } else {
+    prompt += `No behavioral profile data available.\n`;
+  }
+
+  // Add emotional/memory context
+  prompt += `\n## EMOTIONAL & MEMORY CONTEXT\n`;
+  if (userData.emotionalHistory && userData.emotionalHistory.length > 0) {
+    userData.emotionalHistory.slice(0, 5).forEach((memory, index) => {
+      prompt += `**Memory ${index + 1}:** ${memory.content} (${memory.timestamp})\n`;
+      if (memory.emotionalContext) prompt += `  Emotional Context: ${memory.emotionalContext}\n`;
+    });
+  } else {
+    prompt += `No emotional/memory data available.\n`;
+  }
+
+  // Add data richness assessment
+  prompt += `\n## DATA RICHNESS ASSESSMENT\n`;
+  prompt += `**Overall Score:** ${(userData.dataRichness.total * 100).toFixed(1)}%\n`;
+  prompt += `**Locked Nodes:** ${userData.dataRichness.lockedNodes}\n`;
+  prompt += `**Sessions:** ${userData.dataRichness.sessions}\n`;
+  prompt += `**Behavioral Data:** ${userData.dataRichness.behavioralDataPoints}\n`;
+  prompt += `**Emotional Data Points:** ${userData.dataRichness.emotionalDataPoints}\n`;
+
+  // Core analysis instructions
+  prompt += `\n## YOUR PATTERN ANALYSIS MISSION
+
+Analyze ALL the data above for hidden patterns, synchronicities, and meaningful connections that the user might have missed. Look for:
+
+1. **TEMPORAL PATTERNS**: Dates, numbers, time intervals that repeat or form sequences
+2. **THEMATIC CONVERGENCES**: Similar concepts appearing across different contexts/times  
+3. **NUMERICAL SYNCHRONICITIES**: Recurring numbers, mathematical relationships
+4. **CATEGORICAL CLUSTERING**: Hidden connections between seemingly unrelated locked nodes
+5. **BEHAVIORAL ECHOES**: Past exploration patterns that mirror current interests
+6. **LIFE CYCLE CORRELATIONS**: How timing of discoveries relates to personal growth phases
+7. **SEMANTIC RESONANCE**: Deep conceptual connections across time periods
+
+## CRITICAL REQUIREMENTS
+
+- Focus on NON-OBVIOUS connections (not surface-level similarities)
+- Present patterns as intriguing POSSIBILITIES, not definitive facts
+- Include specific data points and dates as evidence
+- Suggest what deeper meaning these patterns might reveal
+- Connect to universal human experiences and archetypal patterns
+- Be specific about numbers, dates, time intervals, and sequences
+
+## OUTPUT FORMAT
+
+For each pattern you discover, provide:
+
+**PATTERN:** [One-line description]
+**EVIDENCE:** [Specific data points, dates, numbers that support this pattern]
+**SIGNIFICANCE:** [What this might mean for the user's journey]
+**ARCHETYPE:** [Universal human pattern this connects to]
+**EXPLORATION:** [Questions for the user to consider]
+
+Only present patterns that genuinely emerge from the data. If insufficient data exists for meaningful pattern recognition, state this clearly.`;
+
+  return prompt;
+}
+
+/**
+ * Parse pattern response into structured format
+ */
+function parsePatternResponse(responseContent, triggerContext) {
+  const patterns = [];
+  
+  try {
+    // Split response into pattern blocks
+    const patternBlocks = responseContent.split(/\*\*PATTERN:\*\*/);
+    
+    for (let i = 1; i < patternBlocks.length; i++) {
+      const block = patternBlocks[i];
+      
+      // Extract pattern components
+      const patternMatch = block.match(/^([^\n]+)/);
+      const evidenceMatch = block.match(/\*\*EVIDENCE:\*\*(.*?)(?=\*\*[A-Z]+:|$)/s);
+      const significanceMatch = block.match(/\*\*SIGNIFICANCE:\*\*(.*?)(?=\*\*[A-Z]+:|$)/s);
+      const archetypeMatch = block.match(/\*\*ARCHETYPE:\*\*(.*?)(?=\*\*[A-Z]+:|$)/s);
+      const explorationMatch = block.match(/\*\*EXPLORATION:\*\*(.*?)(?=\*\*[A-Z]+:|$)/s);
+      
+      if (patternMatch) {
+        patterns.push({
+          id: `pattern_${Date.now()}_${i}`,
+          title: patternMatch[1].trim(),
+          evidence: evidenceMatch ? evidenceMatch[1].trim() : '',
+          significance: significanceMatch ? significanceMatch[1].trim() : '',
+          archetype: archetypeMatch ? archetypeMatch[1].trim() : '',
+          exploration: explorationMatch ? explorationMatch[1].trim() : '',
+          triggerType: triggerContext.triggerType,
+          discoveryTimestamp: new Date().toISOString(),
+          confidence: calculatePatternConfidence(patternMatch[1], evidenceMatch?.[1] || ''),
+          type: classifyPatternType(patternMatch[1])
+        });
+      }
+    }
+    
+  } catch (error) {
+    console.warn('⚠️ Failed to parse pattern response:', error.message);
+    
+    // Fallback: create a single pattern from the entire response
+    if (responseContent && responseContent.length > 50) {
+      patterns.push({
+        id: `pattern_${Date.now()}_fallback`,
+        title: 'Hidden Pattern Detected',
+        evidence: responseContent.substring(0, 200) + '...',
+        significance: 'This pattern requires further exploration to understand its full meaning.',
+        archetype: 'Unknown',
+        exploration: 'Consider what connections might exist between your recent discoveries.',
+        triggerType: triggerContext.triggerType,
+        discoveryTimestamp: new Date().toISOString(),
+        confidence: 0.5,
+        type: 'general'
+      });
+    }
+  }
+  
+  return patterns.slice(0, 3); // Limit to 3 patterns per analysis
+}
+
+/**
+ * Calculate confidence score for discovered pattern
+ */
+function calculatePatternConfidence(title, evidence) {
+  let confidence = 0.5; // Base confidence
+  
+  // Boost confidence for specific evidence
+  if (evidence) {
+    if (evidence.includes('date') || evidence.includes('number')) confidence += 0.2;
+    if (evidence.includes('months') || evidence.includes('years')) confidence += 0.1;
+    if (evidence.includes('locked') || evidence.includes('session')) confidence += 0.1;
+    if (evidence.length > 100) confidence += 0.1;
+  }
+  
+  // Boost confidence for specific pattern types
+  if (title.toLowerCase().includes('temporal') || title.toLowerCase().includes('timing')) confidence += 0.1;
+  if (title.toLowerCase().includes('numerical') || title.toLowerCase().includes('sequence')) confidence += 0.1;
+  
+  return Math.min(0.95, confidence);
+}
+
+/**
+ * Classify pattern type for organization
+ */
+function classifyPatternType(title) {
+  const titleLower = title.toLowerCase();
+  
+  if (titleLower.includes('temporal') || titleLower.includes('time') || titleLower.includes('date')) return 'temporal';
+  if (titleLower.includes('numerical') || titleLower.includes('number') || titleLower.includes('sequence')) return 'numerical';
+  if (titleLower.includes('thematic') || titleLower.includes('concept') || titleLower.includes('theme')) return 'thematic';
+  if (titleLower.includes('behavioral') || titleLower.includes('pattern') || titleLower.includes('habit')) return 'behavioral';
+  if (titleLower.includes('emotional') || titleLower.includes('feeling') || titleLower.includes('mood')) return 'emotional';
+  
+  return 'general';
+}

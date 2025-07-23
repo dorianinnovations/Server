@@ -7,6 +7,41 @@ import { HTTP_STATUS } from '../config/constants.js';
 const router = express.Router();
 
 /**
+ * Get recent conversations for user
+ */
+router.get('/recent', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const recentMessages = await ShortTermMemory.find({ userId })
+      .sort({ timestamp: -1 })
+      .limit(limit)
+      .lean();
+
+    const conversations = recentMessages.map(msg => ({
+      id: msg._id,
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp,
+      metadata: msg.metadata
+    }));
+
+    res.json({
+      success: true,
+      data: conversations
+    });
+
+  } catch (error) {
+    console.error('Error fetching recent conversations:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: 'Failed to fetch recent conversations'
+    });
+  }
+});
+
+/**
  * Sync conversations from mobile app to server
  * Called on login to restore conversation context
  */

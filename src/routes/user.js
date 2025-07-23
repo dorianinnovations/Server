@@ -4,6 +4,10 @@ import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
+import SandboxSession from "../models/SandboxSession.js";
+import LockedNode from "../models/LockedNode.js";
+import AnalyticsInsight from "../models/AnalyticsInsight.js";
+import Event from "../models/Event.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
 import { getUserTier, getTierLimits } from "../config/tiers.js";
@@ -193,5 +197,151 @@ router.delete("/delete/:userId?", protect, async (req, res) => {
     });
   }
 });
+
+// Get comprehensive user data from MongoDB collections
+router.get("/mongo-data", protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Fetch all relevant user data collections in parallel
+    const [
+      userData,
+      behaviorProfile,
+      shortTermMemory,
+      tasks,
+      sandboxSessions,
+      lockedNodes,
+      analyticsInsights,
+      recentEvents
+    ] = await Promise.all([
+      User.findById(userId).select("-password -__v"),
+      UserBehaviorProfile.findOne({ userId }),
+      ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(15).lean(),
+      Task.find({ userId }).sort({ createdAt: -1 }).limit(25).lean(),
+      SandboxSession.find({ userId, isActive: true }).sort({ lastAccessed: -1 }).limit(10).lean(),
+      LockedNode.find({ userId, isActive: true }).sort({ 'usageStats.lastUsed': -1 }).limit(15).lean(),
+      AnalyticsInsight.find({ userId }).sort({ createdAt: -1 }).limit(10).lean(),
+      Event.find({ userId }).sort({ timestamp: -1 }).limit(20).lean()
+    ]);
+
+    // Compile comprehensive data response
+    const comprehensiveData = {
+      user: userData,
+      ubpmCollection: behaviorProfile ? {
+        preferences: behaviorProfile.preferences,
+        behaviorMetrics: behaviorProfile.behaviorMetrics,
+        emotionalProfile: behaviorProfile.emotionalProfile,
+        temporalPatterns: behaviorProfile.temporalPatterns,
+        lastUpdated: behaviorProfile.updatedAt
+      } : null,
+      emotionalCollection: userData?.emotionalLogs ? {
+        logs: userData.emotionalLogs.slice(-15), // Last 15 emotional logs
+        patterns: userData.emotionalState,
+        currentMood: userData.currentMood,
+        moodHistory: userData.moodHistory?.slice(-10) || [],
+        lastUpdated: userData.updatedAt
+      } : null,
+      toolUsageCollection: userData?.toolUsage || null,
+      insightsCollection: {
+        recentMemory: shortTermMemory,
+        tasks: tasks,
+        analyticsInsights: analyticsInsights,
+        sessionCount: userData?.sessionCount || 0,
+        totalInteractions: userData?.totalInteractions || 0
+      },
+      sandboxCollection: {
+        sessions: sandboxSessions.map(session => ({
+          sessionId: session.sessionId,
+          userQuery: session.userQuery,
+          nodeCount: session.nodes?.length || 0,
+          connectionCount: session.connections?.length || 0,
+          metadata: session.metadata,
+          lastAccessed: session.lastAccessed,
+          createdAt: session.createdAt
+        })),
+        lockedNodes: lockedNodes.map(node => ({
+          nodeId: node.nodeId,
+          title: node.title,
+          category: node.category,
+          confidence: node.confidence,
+          usageStats: node.usageStats,
+          lockData: node.lockData,
+          createdAt: node.createdAt
+        })),
+        totalSessions: sandboxSessions.length,
+        totalLockedNodes: lockedNodes.length
+      },
+      activityCollection: {
+        recentEvents: recentEvents,
+        eventCount: recentEvents.length
+      },
+      lastUpdated: new Date().toISOString()
+    };
+
+    res.json({
+      success: true,
+      data: comprehensiveData,
+      metadata: {
+        completenessScore: calculateDataCompletenessScore(comprehensiveData),
+        dataQuality: assessDataQuality(comprehensiveData),
+        collections: ['user', 'ubpm', 'emotional', 'tools', 'insights']
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching comprehensive user data', { 
+      userId: req.user?._id,
+      error: error.message,
+      stack: error.stack
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user data'
+    });
+  }
+});
+
+// Helper functions for data assessment
+function calculateDataCompletenessScore(data) {
+  let score = 0;
+  const weights = {
+    user: 0.25,
+    ubpmCollection: 0.2,
+    emotionalCollection: 0.15,
+    toolUsageCollection: 0.1,
+    insightsCollection: 0.15,
+    sandboxCollection: 0.1,
+    activityCollection: 0.05
+  };
+
+  if (data.user) score += weights.user;
+  if (data.ubpmCollection) score += weights.ubpmCollection;
+  if (data.emotionalCollection) score += weights.emotionalCollection;
+  if (data.toolUsageCollection) score += weights.toolUsageCollection;
+  if (data.insightsCollection) score += weights.insightsCollection;
+  if (data.sandboxCollection?.totalSessions > 0) score += weights.sandboxCollection;
+  if (data.activityCollection?.eventCount > 0) score += weights.activityCollection;
+
+  return Math.round(score * 100) / 100;
+}
+
+function assessDataQuality(data) {
+  if (!data.user) return 'poor';
+  
+  const hasUBPM = !!data.ubpmCollection;
+  const hasEmotional = !!data.emotionalCollection;
+  const hasInsights = data.insightsCollection?.recentMemory?.length > 0;
+  const hasSandbox = data.sandboxCollection?.totalSessions > 0;
+  const hasActivity = data.activityCollection?.eventCount > 0;
+
+  const qualityScore = [hasUBPM, hasEmotional, hasInsights, hasSandbox, hasActivity].filter(Boolean).length;
+
+  if (qualityScore >= 4) return 'excellent';
+  if (qualityScore === 3) return 'good';
+  if (qualityScore === 2) return 'fair';
+  if (qualityScore === 1) return 'basic';
+  return 'poor';
+}
 
 export default router; 

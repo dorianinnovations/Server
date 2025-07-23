@@ -37,6 +37,8 @@ import mobileRoutes from "./routes/mobile.js";
 import personalInsightsRoutes from "./routes/personalInsights.js";
 import syncRoutes from "./routes/sync.js";
 import conversationSyncRoutes from "./routes/conversationSync.js";
+import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
+import ubpmRoutes from "./routes/ubpm.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
 import personalizedAIRoutes from "./routes/personalizedAI.js";
 import toolsRoutes from "./routes/tools.js";
@@ -52,6 +54,8 @@ import analyticsRateStatusRoutes from "./routes/analyticsRateStatus.js";
 import intelligenceDebugRoutes from "./routes/intelligenceDebug.js";
 import compressionDashboardRoutes from "./routes/compressionDashboard.js";
 import tierTestRoutes from "./routes/tierTest.js";
+import sandboxRoutes from "./routes/sandbox.js";
+import authTestRoutes from "./routes/authTest.js";
 
 log.debug("Route modules imported");
 
@@ -93,6 +97,8 @@ import "./models/Event.js";
 import "./models/UserBehaviorProfile.js";
 import "./models/AnalyticsInsight.js";
 import "./models/InsightCooldown.js";
+import "./models/SandboxSession.js";
+import "./models/LockedNode.js";
 
 log.debug("Database models loaded");
 
@@ -191,6 +197,8 @@ const initializeServer = async () => {
   app.use("/intelligence-debug", intelligenceDebugRoutes);
   app.use("/compression-dashboard", compressionDashboardRoutes);
   app.use("/tier-test", tierTestRoutes);
+  app.use("/sandbox", sandboxRoutes);
+  app.use("/", authTestRoutes);
   app.use("/ai", aiRoutes);
   app.use("/personalized-ai", personalizedAIRoutes);
   app.use("/tools", toolsRoutes);
@@ -208,6 +216,9 @@ const initializeServer = async () => {
   app.use("/", mobileRoutes);
   app.use("/", syncRoutes);
   app.use("/conversation", conversationSyncRoutes);
+  app.use("/conversations", conversationSyncRoutes); // Alias for plural form
+  app.use("/emotional-analytics", emotionalAnalyticsRoutes);
+  app.use("/test-ubpm", ubpmRoutes);
   app.use("/", apiDocsRoutes);
 
   log.success("API routes registered");
@@ -315,6 +326,8 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/intelligence-debug", intelligenceDebugRoutes);
       app.use("/compression-dashboard", compressionDashboardRoutes);
       app.use("/tier-test", tierTestRoutes);
+      app.use("/sandbox", sandboxRoutes);
+      app.use("/", authTestRoutes);
       app.use("/ai", aiRoutes);
       app.use("/personalized-ai", personalizedAIRoutes);
           app.use("/tools", toolsRoutes);
@@ -329,6 +342,9 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/", mobileRoutes);
       app.use("/", syncRoutes);
       app.use("/conversation", conversationSyncRoutes);
+      app.use("/conversations", conversationSyncRoutes); // Alias for plural form
+      app.use("/emotional-analytics", emotionalAnalyticsRoutes);
+      app.use("/test-ubpm", ubpmRoutes);
       app.use("/", apiDocsRoutes);
       
       // Test endpoint
