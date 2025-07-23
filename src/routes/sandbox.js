@@ -1032,6 +1032,7 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
       message: 'Chain of thought process starting...',
       sessionId: sessionId || `cot_${Date.now()}`
     })}\n\n`);
+    res.flush(); // FORCE IMMEDIATE TRANSMISSION
 
     // Set up streaming callbacks
     const streamCallbacks = {
@@ -1140,8 +1141,9 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
           };
 
           res.write(`data: ${JSON.stringify(frontendFormat)}\n\n`);
+          res.flush(); // FORCE IMMEDIATE TRANSMISSION TO CLIENT
           
-          logger.debug('Enhanced step update sent', { 
+          logger.debug('Enhanced step update sent and flushed', { 
             userId, 
             stepId: stepData.id,
             hasMessage: !!progressMessage,
@@ -1166,7 +1168,9 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
           };
 
           res.write(`data: ${JSON.stringify(completionData)}\n\n`);
+          res.flush(); // FORCE IMMEDIATE TRANSMISSION
           res.write('data: [DONE]\n\n');
+          res.flush(); // FORCE IMMEDIATE TRANSMISSION
           
           logger.info('Chain of thought completed with AI transparency', { 
             userId, 
