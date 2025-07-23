@@ -27,9 +27,9 @@ setInterval(() => {
  */
 export const createAnalyticsRateLimiter = (endpointName, options = {}) => {
   const {
-    windowMs = 60 * 60 * 1000, // 1 hour default
-    maxCalls = 1, // 1 call per hour default
-    message = `Analytics endpoint '${endpointName}' is rate limited to ${maxCalls} call per hour to prevent excessive costs.`,
+    windowMs = 10 * 60 * 1000, // 10 minutes default (was 1 hour - too restrictive for testing)
+    maxCalls = 5, // 5 calls per 10 minutes default (was 1 per hour - too restrictive for testing)
+    message = `Analytics endpoint '${endpointName}' is rate limited to ${maxCalls} calls per ${Math.round(windowMs/60000)} minutes to prevent excessive costs.`,
     skipSuccessfulResponses = false
   } = options;
 
@@ -148,9 +148,9 @@ export const analyticsRateLimiters = {
   
   // Personal growth insights (very expensive)
   personalGrowthInsights: createAnalyticsRateLimiter('personal-growth-insights', {
-    maxCalls: 1,
-    windowMs: 60 * 60 * 1000,
-    message: 'Personal growth insights are limited to 1 call per hour per user'
+    maxCalls: 3,
+    windowMs: 10 * 60 * 1000, // 10 minutes instead of 1 hour
+    message: 'Personal growth insights are limited to 3 calls per 10 minutes per user'
   }),
   
   // LLM analytics processing (very expensive)

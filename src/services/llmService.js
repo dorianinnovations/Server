@@ -112,7 +112,29 @@ export const createLLMService = () => {
         `OpenRouter API Response Status: ${response.status} (${responseTime}ms)`
       );
 
+      // Debug: Log the full response structure to trace empty content issues
+      console.log('🔍 LLM Response Debug:', {
+        status: response.status,
+        hasData: !!response.data,
+        hasChoices: !!response.data?.choices,
+        choicesLength: response.data?.choices?.length,
+        firstChoice: response.data?.choices?.[0] ? {
+          hasMessage: !!response.data.choices[0].message,
+          messageContent: response.data.choices[0].message?.content || '[EMPTY]',
+          contentLength: response.data.choices[0].message?.content?.length || 0,
+          finishReason: response.data.choices[0].finish_reason
+        } : null
+      });
+
       const choice = response.data.choices[0];
+      
+      // Check for empty content and log warning
+      if (!choice.message.content || choice.message.content.trim() === '') {
+        console.warn('⚠️ LLM returned empty content!', {
+          finishReason: choice.finish_reason,
+          fullChoice: JSON.stringify(choice, null, 2)
+        });
+      }
       
       // Return response in consistent format with tool calls support
       return {
