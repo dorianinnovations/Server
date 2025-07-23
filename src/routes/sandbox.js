@@ -1122,44 +1122,115 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
       logger.info('Chain of thought request aborted', { userId, sessionId });
     });
 
-    // Start AI activity monitoring
+    // Start AI activity monitoring for transparency
     const processId = `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     aiActivityMonitor.startProcess(userId.toString(), processId, query);
 
-    // Start real AI processing with monitoring
-    const aiProcessingPromise = processRealAIQuery(userId.toString(), query, options, processId);
-    
-    // Monitor AI progress in real-time
-    const monitorInterval = setInterval(async () => {
-      try {
-        const status = aiActivityMonitor.getCurrentStatus(userId.toString());
-        if (status) {
-          const activityDescription = await aiActivityMonitor.describeActivity(status);
-          
-          streamCallbacks.onStepUpdate({
-            id: status.currentStep,
-            allSteps: [{
-              id: status.currentStep,
-              title: status.currentActivity,
-              status: 'active'
-            }]
-          }, activityDescription);
-        }
-      } catch (monitorError) {
-        logger.warn('Monitoring error', { userId, error: monitorError.message });
-      }
-    }, 800); // Check every 800ms to avoid spam
+    // Enhanced callbacks that integrate monitoring with real AI processing
+    const enhancedCallbacks = {
+      onStepUpdate: (stepData, progressMessage) => {
+        try {
+          // Convert chainOfThoughtEngine format to frontend expected format
+          const frontendFormat = {
+            type: 'step_update',
+            currentStep: stepData.id,
+            steps: stepData.allSteps || [],
+            message: progressMessage || '',
+            timestamp: new Date().toISOString()
+          };
 
-    try {
-      const result = await aiProcessingPromise;
-      clearInterval(monitorInterval);
-      aiActivityMonitor.completeProcess(userId.toString());
-      streamCallbacks.onComplete(result);
-    } catch (processingError) {
-      clearInterval(monitorInterval);
-      aiActivityMonitor.handleProcessError(userId.toString(), processingError);
-      streamCallbacks.onError(processingError);
-    }
+          res.write(`data: ${JSON.stringify(frontendFormat)}\n\n`);
+          
+          logger.debug('Enhanced step update sent', { 
+            userId, 
+            stepId: stepData.id,
+            hasMessage: !!progressMessage,
+            stepsCount: stepData.allSteps?.length || 0
+          });
+        } catch (writeError) {
+          logger.error('Error writing step update', { 
+            userId, 
+            error: writeError.message 
+          });
+        }
+      },
+
+      onComplete: (result) => {
+        try {
+          aiActivityMonitor.completeProcess(userId.toString());
+          
+          const completionData = {
+            type: 'final_result',
+            data: result,
+            timestamp: new Date().toISOString()
+          };
+
+          res.write(`data: ${JSON.stringify(completionData)}\n\n`);
+          res.write('data: [DONE]\n\n');
+          
+          logger.info('Chain of thought completed with AI transparency', { 
+            userId, 
+            nodesCount: result.nodes?.length || 0,
+            sessionId: result.sessionId 
+          });
+          
+          res.end();
+        } catch (writeError) {
+          logger.error('Error writing completion data', { 
+            userId, 
+            error: writeError.message 
+          });
+          res.end();
+        }
+      },
+
+      onError: (error) => {
+        try {
+          aiActivityMonitor.handleProcessError(userId.toString(), error);
+          
+          const errorData = {
+            type: 'error',
+            message: error.message || 'An unexpected error occurred',
+            timestamp: new Date().toISOString()
+          };
+
+          res.write(`data: ${JSON.stringify(errorData)}\n\n`);
+          
+          logger.error('Chain of thought error with monitoring cleanup', { 
+            userId, 
+            error: error.message 
+          });
+          
+          res.end();
+        } catch (writeError) {
+          logger.error('Error writing error data', { 
+            userId, 
+            error: writeError.message 
+          });
+          res.end();
+        }
+      }
+    };
+
+    // Start the REAL chain of thought process with AI transparency
+    await chainOfThoughtEngine.processQuery(
+      userId.toString(),
+      query,
+      {
+        ...options,
+        fastModel: 'meta-llama/llama-3.1-8b-instruct', // Llama for intelligent narration
+        mainModel: 'openai/gpt-4o', // GPT-4o for heavy reasoning
+        context: {
+          actions: options.actions || [],
+          useUBPM: options.useUBPM || false,
+          includeUserData: options.includeUserData || true,
+          sessionId: sessionId || `cot_${Date.now()}`,
+          enableTransparency: true, // Enable AI transparency features
+          aiActivityMonitor // Pass monitor for integration
+        }
+      },
+      enhancedCallbacks
+    );
 
   } catch (error) {
     logger.error('Chain of thought endpoint error', { 
@@ -1192,78 +1263,5 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
   }
 });
 
-/**
- * Process real AI query with activity monitoring
- * This is where the actual AI work happens that we want to monitor
- */
-async function processRealAIQuery(userId, query, options, processId) {
-  try {
-    // Update activity: Starting AI processing
-    aiActivityMonitor.updateActivity(userId, 'initializing', { step: 'startup' });
-    
-    // Simulate real AI processing steps with actual activity updates
-    aiActivityMonitor.updateActivity(userId, 'analyzing input', { step: 'input_analysis' });
-    
-    // Log LLM call for user data retrieval
-    aiActivityMonitor.logLLMCall(userId, {
-      model: 'internal',
-      purpose: 'user_data_retrieval',
-      tokens: 50
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Update: Processing with main LLM
-    aiActivityMonitor.updateActivity(userId, 'reasoning with AI', { step: 'llm_processing' });
-    
-    // Log the main LLM call
-    aiActivityMonitor.logLLMCall(userId, {
-      model: options.mainModel || 'openai/gpt-4o',
-      purpose: 'node_generation',
-      tokens: 2000
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Update: Formatting results
-    aiActivityMonitor.updateActivity(userId, 'formatting results', { step: 'output_formatting' });
-    
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Update: Finalizing
-    aiActivityMonitor.updateActivity(userId, 'finalizing output', { step: 'completion' });
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Return mock results (in real implementation, this would be actual AI results)
-    return {
-      nodes: [
-        {
-          id: `node_${Date.now()}_1`,
-          title: 'AI-Generated Insight',
-          content: `Real-time analysis of "${query}"`,
-          category: 'insight',
-          confidence: 0.9,
-          personalHook: `This insight was generated through monitored AI processing`,
-          deepInsights: {
-            summary: 'Generated through monitored AI processing',
-            keyPatterns: ['real_time_monitoring', 'ai_activity_tracking'],
-            personalizedContext: `Based on monitored AI processing of "${query}"`,
-            dataConnections: [],
-            relevanceScore: 0.85
-          }
-        }
-      ],
-      insights: ['Generated through real-time AI monitoring'],
-      sessionId: processId,
-      completed: true,
-      timestamp: new Date().toISOString()
-    };
-    
-  } catch (error) {
-    aiActivityMonitor.handleProcessError(userId, error);
-    throw error;
-  }
-}
 
 export default router;

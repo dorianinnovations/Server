@@ -7,10 +7,10 @@ class ChainOfThoughtEngine {
   }
 
   /**
-   * Process a query through chain of thought reasoning with real-time updates
+   * Process a query through chain of thought reasoning with AI transparency
    * @param {string} userId - User ID for personalization
    * @param {string} query - User's query/prompt
-   * @param {Object} options - Processing options
+   * @param {Object} options - Processing options (includes aiActivityMonitor)
    * @param {Object} callbacks - Event callbacks for streaming
    */
   async processQuery(userId, query, options, callbacks) {
@@ -29,30 +29,60 @@ class ChainOfThoughtEngine {
     });
 
     try {
-      // Process each step with real-time updates
+      // Get AI activity monitor if provided for transparency
+      const aiMonitor = options.context?.aiActivityMonitor;
+      
+      // Process each step with real-time updates and AI transparency
       for (let i = 0; i < steps.length; i++) {
         steps[i].status = 'active';
         
-        // Get contextual progress message using cheap model
+        // Update AI activity monitor for transparency
+        if (aiMonitor) {
+          aiMonitor.updateActivity(userId, `executing step: ${steps[i].title.toLowerCase()}`, {
+            step: `chain_step_${i + 1}`,
+            totalSteps: steps.length,
+            currentStepTitle: steps[i].title
+          });
+        }
+        
+        // Get intelligent contextual progress message using Llama
         const progressMessage = await this.getProgressInsight(
           steps[i].title, 
           query,
           options.context || {},
-          options.fastModel || 'openai/gpt-3.5-turbo'
+          options.fastModel || 'meta-llama/llama-3.1-8b-instruct'
         );
 
+        // Log the Llama narration call for transparency
+        if (aiMonitor) {
+          aiMonitor.logLLMCall(userId, {
+            model: options.fastModel || 'meta-llama/llama-3.1-8b-instruct',
+            purpose: 'progress_narration',
+            tokens: 12,
+            step: steps[i].title
+          });
+        }
 
-        // Send step update to client
+        // Send step update to client with AI transparency
         callbacks.onStepUpdate({
           id: steps[i].id,
           allSteps: [...steps]
         }, progressMessage);
 
-        // Simulate processing time with some variation
-        const processingTime = 1500 + Math.random() * 2000;
+        // Realistic processing time with variation (AI models take time)
+        const processingTime = 1800 + Math.random() * 2200;
         await new Promise(resolve => setTimeout(resolve, processingTime));
         
         steps[i].status = 'completed';
+        
+        // Update AI monitor for step completion
+        if (aiMonitor) {
+          aiMonitor.updateActivity(userId, `completed: ${steps[i].title.toLowerCase()}`, {
+            step: `chain_step_${i + 1}_complete`,
+            completedSteps: i + 1,
+            totalSteps: steps.length
+          });
+        }
         
         // Send completion update
         callbacks.onStepUpdate({
@@ -60,12 +90,21 @@ class ChainOfThoughtEngine {
           allSteps: [...steps]
         }, '');
         
-        // Brief pause between steps
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Brief pause between steps for UX pacing
+        await new Promise(resolve => setTimeout(resolve, 400));
       }
 
-      // Final synthesis with main model
-      logger.info('Starting final synthesis', { userId });
+      // Final synthesis with main model and AI transparency
+      logger.info('Starting final synthesis with AI transparency', { userId });
+      
+      // Update AI monitor for final synthesis phase
+      if (aiMonitor) {
+        aiMonitor.updateActivity(userId, 'synthesizing final insights', {
+          step: 'final_synthesis',
+          phase: 'gpt4_processing'
+        });
+      }
+      
       const finalResult = await this.synthesizeResults(userId, query, options);
       
       logger.info('Chain of thought completed successfully', { 
@@ -95,22 +134,27 @@ class ChainOfThoughtEngine {
    */
   async getProgressInsight(stepTitle, query, context = {}, model = 'meta-llama/llama-3.1-8b-instruct') {
     try {
-      // Use Llama 3.1 8B - much cheaper and better at following instructions
-      const systemPrompt = `Output exactly 4-6 words describing what the AI is currently doing. Be specific and technical. No punctuation.`;
+      // Use Llama 3.1 8B for intelligent AI transparency narration
+      const systemPrompt = `You are an AI transparency narrator. Describe what a premium AI model is currently doing in exactly 4-6 words. Be technical and specific. Focus on the AI's internal reasoning process. No punctuation or articles.`;
       
-      const userPrompt = `Task: ${stepTitle}
-Topic: ${query.substring(0, 40)}
-Current AI activity (4-6 words):`;
+      const contextInfo = context.useUBPM ? ' with behavioral profile' : '';
+      const actionsInfo = context.actions ? ` focusing on ${context.actions.slice(0, 2).join(' and ')}` : '';
+      
+      const userPrompt = `Premium AI Model Task: ${stepTitle}
+User Query: "${query.substring(0, 50)}"
+Context: AI reasoning${contextInfo}${actionsInfo}
+
+What is the AI internally doing? (4-6 words):`;
 
       const response = await this.llmService.makeLLMRequest([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ], {
         model,
-        max_tokens: 12, // Allow for 4-6 words
-        temperature: 0.1, // Slight variation for natural language
+        max_tokens: 15, // Allow for 4-6 words plus safety margin
+        temperature: 0.2, // Slight creativity for varied descriptions
         stream: false,
-        stop: ['\n', '.', '!', '?'] // Stop on major punctuation
+        stop: ['\n', '.', '!', '?', ','] // Stop on punctuation
       });
 
       let message = response.content || this.getFallbackInsight(stepTitle);
@@ -308,8 +352,8 @@ Current AI activity (4-6 words):`;
       // Update activity: Starting real AI processing
       aiActivityMonitor.updateActivity(userId, 'analyzing user context', { step: 'context_analysis' });
       
-      // Simulate selected actions (in real app, this would come from user input)
-      const selectedActions = ['explore patterns', 'find connections', 'discover insights'];
+      // Get selected actions from options context
+      const selectedActions = options.context?.actions || ['explore', 'discover', 'connect'];
       
       // Update activity: Building AI prompt  
       aiActivityMonitor.updateActivity(userId, 'building ai prompt', { step: 'prompt_construction' });
@@ -341,22 +385,26 @@ Return ONLY valid JSON array:
       // Update activity: Processing with main LLM
       aiActivityMonitor.updateActivity(userId, 'processing with main ai', { step: 'llm_generation' });
       
-      // Log the main LLM call
+      // Log the main LLM call for transparency
       aiActivityMonitor.logLLMCall(userId, {
-        model: 'openai/gpt-4o',
+        model: options.mainModel || 'openai/gpt-4o',
         purpose: 'node_generation',
-        tokens: 1500
+        tokens: 1500,
+        step: 'primary_reasoning'
       });
 
-      // Make the real LLM request
+      // Make the real LLM request with premium model
       const response = await this.llmService.makeLLMRequest([
-        { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate insightful, accurate discovery nodes in valid JSON format.' },
+        { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate insightful, accurate discovery nodes in valid JSON format. Always respond with valid JSON array.' },
         { role: 'user', content: aiPrompt }
       ], {
+        model: options.mainModel || 'openai/gpt-4o',
         n_predict: 1500,
         temperature: 0.7,
         stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
-        max_tokens: 1500
+        max_tokens: 1500,
+        presence_penalty: 0.1,
+        frequency_penalty: 0.1
       });
 
       // Update activity: Parsing AI response
