@@ -2580,29 +2580,35 @@ router.post('/quick-insight', protect, async (req, res) => {
     }
 
     // Create a focused prompt for progress updates
-    const systemPrompt = `You are a concise progress reporter. Provide brief, encouraging updates in 8-12 words about analysis steps. Be informative and engaging without revealing internal processes.`;
+    const systemPrompt = `You are a concise progress reporter. Respond with ONLY 2-4 words that accurately describe the current step. Be precise and factual.`;
     
-    const userPrompt = `Current step: "${step}"
-Context: ${JSON.stringify(context || {}).substring(0, 200)}
+    const userPrompt = `Step: "${step}"
+Context: ${JSON.stringify(context || {}).substring(0, 100)}
 
-Provide a brief progress update that explains what's happening.`;
+Respond with exactly 2-4 words:`;
 
     const response = await llmService.makeLLMRequest([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {
       model,
-      max_tokens: maxTokens,
-      temperature: 0.7,
+      max_tokens: 10, // Very short for 2-4 words
+      temperature: 0.2, // Lower temperature for more accurate responses
       stream: false
     });
 
     // Extract and sanitize the response
-    let insight = response.content || `Processing ${step.toLowerCase()}...`;
+    let insight = response.content || `processing ${step.toLowerCase()}`;
     
-    // Ensure appropriate length
-    if (insight.length > 80) {
-      insight = insight.substring(0, 77) + '...';
+    // Clean up the response - remove quotes, periods, extra spaces
+    insight = insight.trim()
+      .replace(/['".,!?]/g, '')
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+    
+    // Ensure it's brief (max 20 characters for 2-4 words)
+    if (insight.length > 20) {
+      insight = insight.substring(0, 17) + '...';
     }
 
     res.json({
@@ -2615,18 +2621,18 @@ Provide a brief progress update that explains what's happening.`;
     
     // Return a fallback insight instead of an error
     const fallbackInsights = {
-      'analyzing': 'Examining patterns in your data...',
-      'checking': 'Exploring alternative perspectives...',
-      'cross': 'Finding connections across domains...',
-      'synthesizing': 'Bringing insights together...',
-      'generating': 'Building your knowledge network...'
+      'analyzing': 'scanning data',
+      'checking': 'exploring options',
+      'cross': 'finding connections',
+      'synthesizing': 'combining insights',
+      'generating': 'creating nodes'
     };
     
     const stepKey = Object.keys(fallbackInsights).find(key => 
       req.body.step?.toLowerCase().includes(key)
     );
     
-    const fallbackInsight = fallbackInsights[stepKey] || 'Processing information...';
+    const fallbackInsight = fallbackInsights[stepKey] || 'processing';
     
     res.json({
       success: true,
