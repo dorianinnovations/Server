@@ -1525,6 +1525,26 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         });
       }
       
+      // STREAMING TIMEOUT PROTECTION: Prevent runaway connections (5 minute hard limit)
+      const streamingTimeout = setTimeout(() => {
+        console.warn('⚠️ STREAMING TIMEOUT: Force closing connection after 5 minutes for cost protection');
+        if (!res.destroyed) {
+          res.write(`data: ${JSON.stringify({ 
+            type: "timeout", 
+            error: "Response timeout - connection closed for cost protection" 
+          })}\n\n`);
+          res.end();
+        }
+      }, 5 * 60 * 1000); // 5 minute timeout
+
+      // Clean up timeout on response end
+      res.on('close', () => {
+        clearTimeout(streamingTimeout);
+      });
+      res.on('finish', () => {
+        clearTimeout(streamingTimeout);
+      });
+
       // ✅ SAFE HEADER SETTING - Check if headers already sent
       if (!res.headersSent) {
         res.setHeader("Content-Type", "text/event-stream");
@@ -1535,6 +1555,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         res.setHeader("X-Accel-Buffering", "no");
       } else {
         console.log("⚠️  Headers already sent, skipping streaming setup");
+        clearTimeout(streamingTimeout);
         return;
       }
 

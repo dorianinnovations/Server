@@ -43,7 +43,28 @@ export const checkTierLimits = async (req, res, next) => {
     const limits = getTierLimits(user);
     const now = Date.now();
 
-    // Check daily request limit
+    // Check monthly message limit for Core users (1500 messages/month hard cap)
+    if (userTier === 'CORE') {
+      const monthlyUsage = await getMonthlyUsage(user._id);
+      const monthlyLimit = 1500; // Hard cap for Core users
+      
+      if (monthlyUsage >= monthlyLimit) {
+        const resetTime = getNextMonthReset();
+        return res.status(429).json({
+          success: false,
+          error: 'Monthly message limit reached',
+          message: 'You have reached your 1500 message limit for this month. Upgrade to Pro or Aether for unlimited messaging.',
+          tier: userTier,
+          limit: monthlyLimit,
+          usage: monthlyUsage,
+          resetTime: resetTime.toISOString(),
+          upgradeRequired: true,
+          upgradeOptions: ['PRO', 'AETHER']
+        });
+      }
+    }
+
+    // Check daily request limit (keep existing daily limits for rate control)
     const dailyUsage = await getDailyUsage(user._id);
     if (limits.dailyRequests !== -1 && dailyUsage >= limits.dailyRequests) {
       const resetTime = getNextDayReset();
@@ -93,13 +114,23 @@ export const checkTierLimits = async (req, res, next) => {
 
     // Track daily usage
     await incrementDailyUsage(user._id);
+    
+    // Track monthly usage for Core users
+    if (userTier === 'CORE') {
+      await incrementMonthlyUsage(user._id);
+    }
 
+    // Get monthly usage for tier info
+    const monthlyUsage = userTier === 'CORE' ? await getMonthlyUsage(user._id) + 1 : null;
+    
     // Add tier info to request
     req.tierInfo = {
       tier: userTier,
       limits,
       dailyUsage: dailyUsage + 1,
-      remainingDaily: limits.dailyRequests === -1 ? -1 : limits.dailyRequests - dailyUsage - 1
+      remainingDaily: limits.dailyRequests === -1 ? -1 : limits.dailyRequests - dailyUsage - 1,
+      monthlyUsage: monthlyUsage,
+      remainingMonthly: userTier === 'CORE' ? Math.max(0, 1500 - monthlyUsage) : null
     };
 
     next();
@@ -193,6 +224,55 @@ function getNextDayReset() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
   return tomorrow;
+}
+
+/**
+ * Get monthly usage for a user
+ */
+async function getMonthlyUsage(userId) {
+  const thisMonth = new Date();
+  thisMonth.setDate(1);
+  thisMonth.setHours(0, 0, 0, 0);
+  
+  const user = await User.findById(userId);
+  const usageKey = 'usage.chat.monthly';
+  const resetKey = 'usage.chat.monthlyReset';
+  
+  const lastReset = user.get(resetKey) || new Date(0);
+  
+  if (lastReset < thisMonth) {
+    // Reset monthly usage
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        [usageKey]: 0,
+        [resetKey]: new Date()
+      }
+    });
+    return 0;
+  }
+  
+  return user.get(usageKey) || 0;
+}
+
+/**
+ * Increment monthly usage for a user
+ */
+async function incrementMonthlyUsage(userId) {
+  const usageKey = 'usage.chat.monthly';
+  await User.findByIdAndUpdate(userId, {
+    $inc: { [usageKey]: 1 }
+  });
+}
+
+/**
+ * Get next month reset time
+ */
+function getNextMonthReset() {
+  const nextMonth = new Date();
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  nextMonth.setDate(1);
+  nextMonth.setHours(0, 0, 0, 0);
+  return nextMonth;
 }
 
 /**

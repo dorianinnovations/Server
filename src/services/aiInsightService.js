@@ -15,6 +15,44 @@ class AIInsightService {
   constructor() {
     this.llmService = createLLMService();
     this.maxRetries = 3;
+    this.baseRetryDelay = 1000; // 1 second base delay
+  }
+
+  /**
+   * Exponential backoff retry wrapper for LLM calls
+   */
+  async retryWithBackoff(operation, context = '') {
+    let lastError;
+    
+    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        
+        if (attempt === this.maxRetries - 1) {
+          // Last attempt failed
+          logger.error(`AI operation failed after ${this.maxRetries} attempts: ${context}`, {
+            error: error.message,
+            attempts: this.maxRetries
+          });
+          throw error;
+        }
+        
+        // Calculate exponential backoff delay: 1s, 2s, 4s
+        const delay = this.baseRetryDelay * Math.pow(2, attempt);
+        
+        logger.warn(`AI operation failed, retrying in ${delay}ms: ${context}`, {
+          attempt: attempt + 1,
+          maxRetries: this.maxRetries,
+          error: error.message
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw lastError;
   }
 
   /**

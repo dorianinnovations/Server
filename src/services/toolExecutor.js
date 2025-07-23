@@ -13,7 +13,40 @@ class ToolExecutor {
   constructor() {
     this.llmService = createLLMService();
     this.toolCache = new Map();
+    this.toolRateLimits = new Map(); // Per-tool rate limiting
     // loadTools() will be called from toolRegistry.initialize()
+  }
+
+  /**
+   * Check per-tool rate limits (prevents rapid-fire expensive tool usage)
+   */
+  checkToolRateLimit(toolName, userId) {
+    const key = `${toolName}:${userId}`;
+    const now = Date.now();
+    const windowMs = 60 * 1000; // 1 minute window
+    const maxCallsPerTool = 5; // 5 calls per tool per minute per user
+    
+    const limitData = this.toolRateLimits.get(key) || {
+      count: 0,
+      resetTime: now + windowMs
+    };
+    
+    // Reset if window expired
+    if (now > limitData.resetTime) {
+      limitData.count = 0;
+      limitData.resetTime = now + windowMs;
+    }
+    
+    if (limitData.count >= maxCallsPerTool) {
+      const remainingMs = limitData.resetTime - now;
+      throw new Error(`Tool rate limit exceeded: ${toolName} limited to ${maxCallsPerTool} calls per minute. Try again in ${Math.ceil(remainingMs / 1000)} seconds.`);
+    }
+    
+    // Increment counter
+    limitData.count++;
+    this.toolRateLimits.set(key, limitData);
+    
+    console.log(`🔧 Tool rate limit: ${toolName} - ${limitData.count}/${maxCallsPerTool} calls used`);
   }
 
   async loadTools() {
@@ -95,6 +128,11 @@ class ToolExecutor {
     
     if (!tool) {
       throw new Error(`Tool ${name} not found`);
+    }
+
+    // COST PROTECTION: Check per-tool rate limits
+    if (userContext.userId) {
+      this.checkToolRateLimit(name, userContext.userId);
     }
 
     if (!this.isToolAvailable(tool, userContext)) {
