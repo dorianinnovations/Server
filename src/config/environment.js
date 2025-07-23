@@ -28,13 +28,18 @@ export const env = {
   AWS_REGION: process.env.AWS_REGION || 'us-east-2',
   S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'numina-user-content',
   
-  // RESEND Email Configuration
-  RESEND_API_KEY: process.env.RESEND_API_KEY,
+  // FREE EMAIL SERVICE CONFIGURATION (Resend replacement)
   FROM_EMAIL: process.env.FROM_EMAIL || 'noreply@aidorian.com',
   
-  // Fallback email configuration (Gmail SMTP)
+  // Primary: Gmail SMTP (500 emails/day free)
   EMAIL_USER: process.env.EMAIL_USER,
   EMAIL_APP_PASSWORD: process.env.EMAIL_APP_PASSWORD,
+  
+  // Secondary: Brevo/Sendinblue (300 emails/day free)
+  BREVO_API_KEY: process.env.BREVO_API_KEY,
+  
+  // Tertiary: SendGrid (100 emails/day free)
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
 };
 
 console.log('✓Environment configuration loaded successfully');

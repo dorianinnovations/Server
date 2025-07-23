@@ -1,60 +1,125 @@
 import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
 import { env } from '../config/environment.js';
+import axios from 'axios';
 
+/**
+ * ENHANCED FREE EMAIL SERVICE
+ * Replaces Resend with multiple free email providers
+ * 
+ * Services Priority:
+ * 1. Gmail SMTP (500 emails/day free) - PRIMARY
+ * 2. Brevo/Sendinblue (300 emails/day free) - SECONDARY  
+ * 3. SendGrid (100 emails/day free) - TERTIARY
+ * 4. Ethereal (test only) - FALLBACK
+ */
 class EmailService {
   constructor() {
-    this.transporter = null;
-    this.resend = null;
+    this.primaryTransporter = null;
+    this.fallbackTransporter = null;
+    this.brevoApi = null;
+    this.sendgridApi = null;
     this.isInitialized = false;
-    this.initPromise = this.initializeTransporter();
+    this.emailStats = { 
+      sent: 0, 
+      failed: 0, 
+      dailyCount: 0, 
+      lastReset: new Date(),
+      serviceUsage: { gmail: 0, brevo: 0, sendgrid: 0, ethereal: 0 }
+    };
+    this.initPromise = this.initializeEmailServices();
   }
 
-  async initializeTransporter() {
+  async initializeEmailServices() {
     try {
-      // Check if Resend API key is available for production use
-      if (process.env.RESEND_API_KEY) {
-        console.log('🚀 Using Resend for REAL email delivery');
-        this.resend = new Resend(process.env.RESEND_API_KEY);
-        this.isInitialized = true;
-        console.log('✅ Resend email service initialized');
-        return;
-      }
+      console.log('🚀 Initializing FREE email services (Resend replacement)...');
       
-      // Fallback to Gmail SMTP if configured
+      // PRIMARY: Gmail SMTP (500 emails/day free)
       if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
-        console.log('📧 Using Gmail SMTP for real delivery');
-        this.transporter = nodemailer.createTransport({
+        console.log('📧 Setting up Gmail SMTP as PRIMARY service');
+        this.primaryTransporter = nodemailer.createTransport({
           service: 'gmail',
           auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_APP_PASSWORD
-          }
+          },
+          pool: true,
+          maxConnections: 5,
+          maxMessages: 100,
+          rateDelta: 1000,
+          rateLimit: 5
         });
-        this.isInitialized = true;
-        console.log('✅ Gmail SMTP email service initialized');
-        return;
+        
+        // Test Gmail connection
+        await this.primaryTransporter.verify();
+        console.log('✅ Gmail SMTP verified and ready (PRIMARY)');
       }
       
-      // Development fallback: Ethereal Email
-      console.log('⚠️ No production email config found, using test service');
-      const testAccount = await nodemailer.createTestAccount();
-      this.transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass
-        }
-      });
-      console.log('📧 Using Ethereal test account:', testAccount.user);
+      // SECONDARY: Brevo (Sendinblue) API (300 emails/day free)
+      if (process.env.BREVO_API_KEY) {
+        console.log('📮 Setting up Brevo as SECONDARY service');
+        this.brevoApi = {
+          apiKey: process.env.BREVO_API_KEY,
+          baseUrl: 'https://api.brevo.com/v3/smtp/email'
+        };
+        console.log('✅ Brevo API configured (SECONDARY)');
+      }
+      
+      // TERTIARY: SendGrid API (100 emails/day free)
+      if (process.env.SENDGRID_API_KEY) {
+        console.log('📬 Setting up SendGrid as TERTIARY service');
+        this.sendgridApi = {
+          apiKey: process.env.SENDGRID_API_KEY,
+          baseUrl: 'https://api.sendgrid.com/v3/mail/send'
+        };
+        console.log('✅ SendGrid API configured (TERTIARY)');
+      }
+      
+      // FALLBACK: Ethereal test for development
+      if (!this.primaryTransporter && !this.brevoApi && !this.sendgridApi) {
+        console.log('⚠️ No production email services configured, using test service');
+        const testAccount = await nodemailer.createTestAccount();
+        this.fallbackTransporter = nodemailer.createTransport({
+          host: 'smtp.ethereal.email',
+          port: 587,
+          secure: false,
+          auth: {
+            user: testAccount.user,
+            pass: testAccount.pass
+          }
+        });
+        console.log('📧 Using Ethereal test account:', testAccount.user);
+      }
+      
       this.isInitialized = true;
-      console.log('✅ Test email service initialized');
+      console.log('✅ FREE email services initialized successfully!');
+      this.logServiceStatus();
       
     } catch (error) {
       console.error('❌ Email service initialization failed:', error);
       this.isInitialized = false;
+    }
+  }
+  
+  logServiceStatus() {
+    console.log('📊 Email Service Status:');
+    console.log(`  PRIMARY (Gmail): ${this.primaryTransporter ? '✅ Ready' : '❌ Not configured'}`);
+    console.log(`  SECONDARY (Brevo): ${this.brevoApi ? '✅ Ready' : '❌ Not configured'}`);
+    console.log(`  TERTIARY (SendGrid): ${this.sendgridApi ? '✅ Ready' : '❌ Not configured'}`);
+    console.log(`  FALLBACK (Test): ${this.fallbackTransporter ? '✅ Ready' : '❌ Not needed'}`);
+  }
+  
+  resetDailyCountIfNeeded() {
+    const now = new Date();
+    const lastReset = this.emailStats.lastReset;
+    
+    // Reset daily count if it's a new day
+    if (now.getDate() !== lastReset.getDate() || 
+        now.getMonth() !== lastReset.getMonth() || 
+        now.getFullYear() !== lastReset.getFullYear()) {
+      this.emailStats.dailyCount = 0;
+      this.emailStats.serviceUsage = { gmail: 0, brevo: 0, sendgrid: 0, ethereal: 0 };
+      this.emailStats.lastReset = now;
+      console.log('📅 Daily email count reset');
     }
   }
 
@@ -69,95 +134,262 @@ class EmailService {
       return { success: false, error: 'Email service not initialized' };
     }
 
+    this.resetDailyCountIfNeeded();
+    
+    const emailData = {
+      to: userEmail,
+      subject: '🎉 Welcome to Numina - Your AI Personal Assistant!',
+      html: this.getWelcomeEmailTemplate(userName),
+      text: this.getWelcomeEmailText(userName)
+    };
+
+    return await this.sendEmailWithFallback(emailData, 'welcome');
+  }
+  
+  async sendEmailWithFallback(emailData, emailType = 'general') {
+    const attempts = [];
+    
     try {
-      // Use Resend if available (real delivery)
-      if (this.resend) {
-        const { data, error } = await this.resend.emails.send({
-          from: process.env.FROM_EMAIL || 'Numina Team <noreply@aidorian.com>',
-          to: [userEmail],
-          subject: '🎉 Welcome to Numina - Your AI Personal Assistant!',
-          html: this.getWelcomeEmailTemplate(userName),
-          text: this.getWelcomeEmailText(userName)
-        });
-
-        if (error) {
-          console.error('❌ Resend email error:', error);
-          return { success: false, error: error.message };
+      // ATTEMPT 1: Gmail SMTP (Primary - 500 emails/day)
+      if (this.primaryTransporter && this.emailStats.serviceUsage.gmail < 450) { // Leave buffer
+        try {
+          const result = await this.sendViaGmail(emailData);
+          this.emailStats.sent++;
+          this.emailStats.dailyCount++;
+          this.emailStats.serviceUsage.gmail++;
+          console.log(`✅ Email sent via Gmail (${this.emailStats.serviceUsage.gmail}/450 today)`);
+          return { ...result, service: 'gmail', attempt: 1 };
+        } catch (error) {
+          attempts.push({ service: 'gmail', error: error.message });
+          console.warn('⚠️ Gmail failed, trying Brevo...', error.message);
         }
-
-        console.log('✅ REAL Welcome email sent via Resend:', {
-          to: userEmail,
-          messageId: data.id
-        });
-
-        return { 
-          success: true, 
-          messageId: data.id,
-          service: 'resend'
-        };
       }
-
-      // Fallback to nodemailer (Gmail SMTP or test)
-      const mailOptions = {
-        from: process.env.FROM_EMAIL || 'noreply@aidorian.com',
-        to: userEmail,
-        subject: '🎉 Welcome to Numina - Your AI Personal Assistant!',
-        html: this.getWelcomeEmailTemplate(userName),
-        text: this.getWelcomeEmailText(userName)
-      };
-
-      const info = await this.transporter.sendMail(mailOptions);
       
-      console.log('✅ Welcome email sent:', {
-        to: userEmail,
-        messageId: info.messageId,
-        preview: process.env.NODE_ENV !== 'production' ? nodemailer.getTestMessageUrl(info) : null
-      });
-
+      // ATTEMPT 2: Brevo API (Secondary - 300 emails/day)
+      if (this.brevoApi && this.emailStats.serviceUsage.brevo < 250) { // Leave buffer
+        try {
+          const result = await this.sendViaBrevo(emailData);
+          this.emailStats.sent++;
+          this.emailStats.dailyCount++;
+          this.emailStats.serviceUsage.brevo++;
+          console.log(`✅ Email sent via Brevo (${this.emailStats.serviceUsage.brevo}/250 today)`);
+          return { ...result, service: 'brevo', attempt: 2 };
+        } catch (error) {
+          attempts.push({ service: 'brevo', error: error.message });
+          console.warn('⚠️ Brevo failed, trying SendGrid...', error.message);
+        }
+      }
+      
+      // ATTEMPT 3: SendGrid API (Tertiary - 100 emails/day)
+      if (this.sendgridApi && this.emailStats.serviceUsage.sendgrid < 80) { // Leave buffer
+        try {
+          const result = await this.sendViaSendGrid(emailData);
+          this.emailStats.sent++;
+          this.emailStats.dailyCount++;
+          this.emailStats.serviceUsage.sendgrid++;
+          console.log(`✅ Email sent via SendGrid (${this.emailStats.serviceUsage.sendgrid}/80 today)`);
+          return { ...result, service: 'sendgrid', attempt: 3 };
+        } catch (error) {
+          attempts.push({ service: 'sendgrid', error: error.message });
+          console.warn('⚠️ SendGrid failed, using fallback...', error.message);
+        }
+      }
+      
+      // ATTEMPT 4: Ethereal test (Development fallback)
+      if (this.fallbackTransporter) {
+        try {
+          const result = await this.sendViaFallback(emailData);
+          this.emailStats.serviceUsage.ethereal++;
+          console.log('✅ Email sent via test service (development)');
+          return { ...result, service: 'ethereal-test', attempt: 4 };
+        } catch (error) {
+          attempts.push({ service: 'ethereal', error: error.message });
+        }
+      }
+      
+      // All services failed
+      this.emailStats.failed++;
+      console.error('❌ All email services failed:', attempts);
       return { 
-        success: true, 
-        messageId: info.messageId,
-        previewUrl: process.env.NODE_ENV !== 'production' ? nodemailer.getTestMessageUrl(info) : null,
-        service: 'nodemailer'
+        success: false, 
+        error: 'All email services failed',
+        attempts: attempts
       };
+      
     } catch (error) {
-      console.error('❌ Failed to send welcome email:', error);
+      this.emailStats.failed++;
+      console.error('❌ Email sending failed:', error);
       return { success: false, error: error.message };
     }
   }
 
   async sendNotificationEmail(toEmail, subject, message) {
     if (!this.isInitialized) {
+      await this.initPromise;
+    }
+    
+    if (!this.isInitialized) {
       console.warn('Email service not initialized, skipping email');
       return { success: false, error: 'Email service not initialized' };
     }
 
-    try {
-      const mailOptions = {
-        from: process.env.FROM_EMAIL || 'notifications@aidorian.com',
-        to: toEmail,
-        subject: subject,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #10b981;">Numina Notification</h2>
-            <p>${message}</p>
-            <hr style="border: 1px solid #e5e7eb; margin: 20px 0;">
-            <p style="color: #6b7280; font-size: 14px;">
-              This is an automated message from Numina AI.
-            </p>
-          </div>
-        `,
-        text: message
-      };
+    const emailData = {
+      to: toEmail,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #10b981;">Numina Notification</h2>
+          <p>${message}</p>
+          <hr style="border: 1px solid #e5e7eb; margin: 20px 0;">
+          <p style="color: #6b7280; font-size: 14px;">
+            This is an automated message from Numina AI.
+          </p>
+        </div>
+      `,
+      text: message
+    };
 
-      const info = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Notification email sent:', info.messageId);
-      
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      console.error('❌ Failed to send notification email:', error);
-      return { success: false, error: error.message };
+    return await this.sendEmailWithFallback(emailData, 'notification');
+  }
+  
+  async sendViaGmail(emailData) {
+    const mailOptions = {
+      from: process.env.FROM_EMAIL || 'Numina Team <noreply@aidorian.com>',
+      to: emailData.to,
+      subject: emailData.subject,
+      html: emailData.html,
+      text: emailData.text
+    };
+
+    const info = await this.primaryTransporter.sendMail(mailOptions);
+    
+    return {
+      success: true,
+      messageId: info.messageId,
+      previewUrl: process.env.NODE_ENV !== 'production' ? nodemailer.getTestMessageUrl(info) : null
+    };
+  }
+  
+  async sendViaBrevo(emailData) {
+    const brevoPayload = {
+      sender: {
+        name: 'Numina Team',
+        email: process.env.FROM_EMAIL || 'noreply@aidorian.com'
+      },
+      to: [{ email: emailData.to }],
+      subject: emailData.subject,
+      htmlContent: emailData.html,
+      textContent: emailData.text
+    };
+
+    const response = await axios.post(this.brevoApi.baseUrl, brevoPayload, {
+      headers: {
+        'api-key': this.brevoApi.apiKey,
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    });
+
+    return {
+      success: true,
+      messageId: response.data.messageId || response.data.id,
+      response: response.data
+    };
+  }
+  
+  async sendViaSendGrid(emailData) {
+    const sendgridPayload = {
+      personalizations: [{
+        to: [{ email: emailData.to }],
+        subject: emailData.subject
+      }],
+      from: {
+        email: process.env.FROM_EMAIL || 'noreply@aidorian.com',
+        name: 'Numina Team'
+      },
+      content: [
+        {
+          type: 'text/plain',
+          value: emailData.text
+        },
+        {
+          type: 'text/html',
+          value: emailData.html
+        }
+      ]
+    };
+
+    const response = await axios.post(this.sendgridApi.baseUrl, sendgridPayload, {
+      headers: {
+        'Authorization': `Bearer ${this.sendgridApi.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    });
+
+    return {
+      success: true,
+      messageId: response.headers['x-message-id'] || 'sendgrid-success',
+      response: response.status
+    };
+  }
+  
+  async sendViaFallback(emailData) {
+    const mailOptions = {
+      from: process.env.FROM_EMAIL || 'noreply@aidorian.com',
+      to: emailData.to,
+      subject: emailData.subject,
+      html: emailData.html,
+      text: emailData.text
+    };
+
+    const info = await this.fallbackTransporter.sendMail(mailOptions);
+    
+    return {
+      success: true,
+      messageId: info.messageId,
+      previewUrl: nodemailer.getTestMessageUrl(info)
+    };
+  }
+
+  async sendPaymentConfirmationEmail(userEmail, userName, subscriptionDetails) {
+    // Wait for initialization if needed
+    if (!this.isInitialized) {
+      await this.initPromise;
     }
+    
+    if (!this.isInitialized) {
+      console.warn('Email service not initialized, skipping payment confirmation email');
+      return { success: false, error: 'Email service not initialized' };
+    }
+
+    this.resetDailyCountIfNeeded();
+    
+    const emailData = {
+      to: userEmail,
+      subject: '🎉 Payment Confirmed - Welcome to Numina Premium!',
+      html: this.getPaymentConfirmationEmailTemplate(userName, subscriptionDetails),
+      text: this.getPaymentConfirmationEmailText(userName, subscriptionDetails)
+    };
+
+    return await this.sendEmailWithFallback(emailData, 'payment-confirmation');
+  }
+  
+  getEmailStats() {
+    return {
+      ...this.emailStats,
+      services: {
+        gmail: !!this.primaryTransporter,
+        brevo: !!this.brevoApi,
+        sendgrid: !!this.sendgridApi,
+        fallback: !!this.fallbackTransporter
+      },
+      dailyLimits: {
+        gmail: { used: this.emailStats.serviceUsage.gmail, limit: 450 },
+        brevo: { used: this.emailStats.serviceUsage.brevo, limit: 250 },
+        sendgrid: { used: this.emailStats.serviceUsage.sendgrid, limit: 80 }
+      }
+    };
   }
 
   getWelcomeEmailTemplate(userName) {
@@ -173,11 +405,13 @@ class EmailService {
           .feature { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 8px; }
           .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
           .button { background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 10px 0; }
+          .free-badge { background: #059669; color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
+            <div class="free-badge">✅ FREE EMAIL SERVICE</div>
             <h1>🎉 Welcome to Numina!</h1>
             <p>Your AI Personal Assistant is Ready</p>
           </div>
@@ -209,6 +443,7 @@ class EmailService {
           <div class="footer">
             <p>Welcome to the future of personal AI assistance!</p>
             <p>If you have any questions, just reply to this email.</p>
+            <p><small>✨ Powered by free email services (no more expensive Resend!)</small></p>
           </div>
         </div>
       </body>
@@ -233,79 +468,8 @@ Welcome to the future of personal AI assistance!
 If you have any questions, just reply to this email.
 
 - The Numina Team
+✨ Powered by free email services
     `;
-  }
-
-  async sendPaymentConfirmationEmail(userEmail, userName, subscriptionDetails) {
-    // Wait for initialization if needed
-    if (!this.isInitialized) {
-      await this.initPromise;
-    }
-    
-    if (!this.isInitialized) {
-      console.warn('Email service not initialized, skipping payment confirmation email');
-      return { success: false, error: 'Email service not initialized' };
-    }
-
-    try {
-      const { plan, price, currency, nextBillingDate } = subscriptionDetails;
-      
-      // Use Resend if available (real delivery)
-      if (this.resend) {
-        const { data, error } = await this.resend.emails.send({
-          from: process.env.FROM_EMAIL || 'Numina Team <noreply@aidorian.com>',
-          to: [userEmail],
-          subject: '🎉 Payment Confirmed - Welcome to Numina Premium!',
-          html: this.getPaymentConfirmationEmailTemplate(userName, subscriptionDetails),
-          text: this.getPaymentConfirmationEmailText(userName, subscriptionDetails)
-        });
-
-        if (error) {
-          console.error('❌ Resend payment confirmation email error:', error);
-          return { success: false, error: error.message };
-        }
-
-        console.log('✅ REAL Payment confirmation email sent via Resend:', {
-          to: userEmail,
-          messageId: data.id,
-          plan: plan
-        });
-
-        return { 
-          success: true, 
-          messageId: data.id,
-          service: 'resend'
-        };
-      }
-
-      // Fallback to nodemailer (Gmail SMTP or test)
-      const mailOptions = {
-        from: process.env.FROM_EMAIL || 'noreply@aidorian.com',
-        to: userEmail,
-        subject: '🎉 Payment Confirmed - Welcome to Numina Premium!',
-        html: this.getPaymentConfirmationEmailTemplate(userName, subscriptionDetails),
-        text: this.getPaymentConfirmationEmailText(userName, subscriptionDetails)
-      };
-
-      const info = await this.transporter.sendMail(mailOptions);
-      
-      console.log('✅ Payment confirmation email sent:', {
-        to: userEmail,
-        messageId: info.messageId,
-        preview: process.env.NODE_ENV !== 'production' ? nodemailer.getTestMessageUrl(info) : null,
-        plan: plan
-      });
-
-      return { 
-        success: true, 
-        messageId: info.messageId,
-        previewUrl: process.env.NODE_ENV !== 'production' ? nodemailer.getTestMessageUrl(info) : null,
-        service: 'nodemailer'
-      };
-    } catch (error) {
-      console.error('❌ Failed to send payment confirmation email:', error);
-      return { success: false, error: error.message };
-    }
   }
 
   getPaymentConfirmationEmailTemplate(userName, subscriptionDetails) {
@@ -377,7 +541,7 @@ If you have any questions, just reply to this email.
           <div class="footer">
             <p>🔒 Your payment was processed securely</p>
             <p>Need help? Just reply to this email - we're here to help!</p>
-            <p><small>This confirmation was sent from aidorian.com</small></p>
+            <p><small>✨ Delivered via free email services</small></p>
           </div>
         </div>
       </body>
@@ -425,6 +589,7 @@ Get started at: https://numina.ai
 Need help? Just reply to this email - we're here to help!
 
 - The Numina Team
+✨ Delivered via free email services
     `;
   }
 }

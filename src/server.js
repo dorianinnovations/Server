@@ -56,6 +56,7 @@ import compressionDashboardRoutes from "./routes/compressionDashboard.js";
 import tierTestRoutes from "./routes/tierTest.js";
 import sandboxRoutes from "./routes/sandbox.js";
 import authTestRoutes from "./routes/authTest.js";
+import emailRoutes from "./routes/email.js";
 
 log.debug("Route modules imported");
 
@@ -209,6 +210,7 @@ const initializeServer = async () => {
   app.use("/tier-test", tierTestRoutes);
   app.use("/sandbox", sandboxRoutes);
   app.use("/", authTestRoutes);
+  app.use("/email", emailRoutes);
   app.use("/ai", aiRoutes);
   app.use("/personalized-ai", personalizedAIRoutes);
   app.use("/tools", toolsRoutes);
