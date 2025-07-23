@@ -177,8 +177,8 @@ What is the AI internally doing? (4-6 words):`;
         return this.getContextualInsight(stepTitle, query) || this.getFallbackInsight(stepTitle);
       }
       
-      // Final validation - allow up to 35 characters for 4-6 words
-      if (message.length > 35 || words.length < 3) {
+      // Final validation - allow up to 50 characters for 4-6 words to prevent LLAMA override
+      if (message.length > 50 || words.length < 3) {
         return this.getContextualInsight(stepTitle, query) || this.getFallbackInsight(stepTitle);
       }
 
