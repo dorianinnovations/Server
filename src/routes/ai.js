@@ -20,6 +20,7 @@ import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import requestCacheService from '../services/requestCacheService.js';
 import ubpmService from '../services/ubpmService.js';
+import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
 import { getIncrementalMemory, optimizeContextSize } from '../utils/incrementalMemory.js';
 import { trackMemoryUsage, calculateOptimizationSavings } from '../utils/memoryAnalytics.js';
 import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from '../utils/imageCompressionBasic.js';
@@ -2469,6 +2470,168 @@ router.post('/upgrade-message', protect, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+/**
+ * POST /ai/quick-insights
+ * Chain of thought processing with real-time progress updates
+ */
+router.post('/quick-insights', protect, requireFeature('quickInsights'), async (req, res) => {
+  try {
+    const { query, context } = req.body;
+    const userId = req.user.id;
+    
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Query is required and must be a string'
+      });
+    }
+
+    // Set up SSE headers for real-time streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // SSE helper function
+    const sendSSE = (eventType, data) => {
+      res.write(`event: ${eventType}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Set up callbacks for the chain of thought engine
+    const callbacks = {
+      onStepUpdate: (stepData, progressMessage) => {
+        sendSSE('step_update', {
+          step: stepData,
+          progressMessage,
+          timestamp: new Date().toISOString()
+        });
+      },
+      
+      onComplete: (finalResult) => {
+        sendSSE('complete', {
+          result: finalResult,
+          timestamp: new Date().toISOString()
+        });
+        res.end();
+      },
+      
+      onError: (error) => {
+        sendSSE('error', {
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+        res.end();
+      }
+    };
+
+    // Start the chain of thought process
+    const options = {
+      context: context || {},
+      fastModel: 'openai/gpt-3.5-turbo', // Use cheap model for progress updates
+      mainModel: 'openai/gpt-4' // Use better model for final synthesis
+    };
+
+    // Send initial event
+    sendSSE('started', {
+      query: query.substring(0, 100),
+      userId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Process the query asynchronously
+    chainOfThoughtEngine.processQuery(userId, query, options, callbacks);
+
+    // Handle client disconnect
+    req.on('close', () => {
+      res.end();
+    });
+
+  } catch (error) {
+    console.error('Quick insights error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /ai/quick-insight
+ * Generate a single quick insight using a cheap model
+ * Used by chain of thought engine for progress updates
+ */
+router.post('/quick-insight', protect, async (req, res) => {
+  try {
+    const { step, context, model = 'openai/gpt-3.5-turbo', maxTokens = 50 } = req.body;
+    
+    if (!step) {
+      return res.status(400).json({
+        success: false,
+        error: 'Step parameter is required'
+      });
+    }
+
+    // Create a focused prompt for progress updates
+    const systemPrompt = `You are a concise progress reporter. Provide brief, encouraging updates in 8-12 words about analysis steps. Be informative and engaging without revealing internal processes.`;
+    
+    const userPrompt = `Current step: "${step}"
+Context: ${JSON.stringify(context || {}).substring(0, 200)}
+
+Provide a brief progress update that explains what's happening.`;
+
+    const response = await llmService.makeLLMRequest([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], {
+      model,
+      max_tokens: maxTokens,
+      temperature: 0.7,
+      stream: false
+    });
+
+    // Extract and sanitize the response
+    let insight = response.content || `Processing ${step.toLowerCase()}...`;
+    
+    // Ensure appropriate length
+    if (insight.length > 80) {
+      insight = insight.substring(0, 77) + '...';
+    }
+
+    res.json({
+      success: true,
+      insight: insight.trim()
+    });
+
+  } catch (error) {
+    console.error('Quick insight generation error:', error);
+    
+    // Return a fallback insight instead of an error
+    const fallbackInsights = {
+      'analyzing': 'Examining patterns in your data...',
+      'checking': 'Exploring alternative perspectives...',
+      'cross': 'Finding connections across domains...',
+      'synthesizing': 'Bringing insights together...',
+      'generating': 'Building your knowledge network...'
+    };
+    
+    const stepKey = Object.keys(fallbackInsights).find(key => 
+      req.body.step?.toLowerCase().includes(key)
+    );
+    
+    const fallbackInsight = fallbackInsights[stepKey] || 'Processing information...';
+    
+    res.json({
+      success: true,
+      insight: fallbackInsight,
+      fallback: true
     });
   }
 });

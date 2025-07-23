@@ -8,6 +8,7 @@ import LockedNode from '../models/LockedNode.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
 import logger from '../utils/logger.js';
+import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -121,12 +122,15 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
 
     // Generate nodes using LLM with optimized parameters
     const response = await llmService.makeLLMRequest([
-      { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate insightful, accurate discovery nodes in valid JSON format.' },
+      { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate insightful, accurate discovery nodes in valid JSON format. Always respond with valid JSON array.' },
       { role: 'user', content: aiPrompt }
     ], {
-      n_predict: 1200,
-      temperature: 0.6, // Lower temperature for more consistent JSON output
-      stop: ['\n\n\n', '```', 'Human:', 'Assistant:']
+      n_predict: 1500,
+      temperature: 0.7, // Slightly higher for more creative responses
+      stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
+      max_tokens: 1500,
+      presence_penalty: 0.1,
+      frequency_penalty: 0.1
     });
     
     const aiResponse = response.content;
@@ -346,10 +350,22 @@ router.post('/analyze-connections', protect, async (req, res) => {
       connectionCount: connections?.length
     });
 
-    if (!nodes || !Array.isArray(nodes) || nodes.length < 2) {
+    if (!nodes || !Array.isArray(nodes)) {
       return res.status(400).json({
         success: false,
-        error: 'At least 2 nodes are required for connection analysis'
+        error: 'Nodes array is required for connection analysis'
+      });
+    }
+    
+    if (nodes.length < 2) {
+      // Return a helpful response instead of error for single node
+      return res.json({
+        success: true,
+        data: {
+          connections: [],
+          insights: ['Add more nodes to discover meaningful connections between ideas.'],
+          message: 'Need at least 2 nodes for connection analysis'
+        }
       });
     }
 
@@ -967,6 +983,190 @@ router.post('/node/:nodeId/window-query', protect, async (req, res) => {
       success: false,
       error: 'Failed to perform window research'
     });
+  }
+});
+
+/**
+ * POST /sandbox/chain-of-thought
+ * Execute chain-of-thought reasoning with real-time streaming updates
+ */
+router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { query, options = {}, sessionId, stream = true } = req.body;
+
+    logger.info('Chain of thought request received', { 
+      userId, 
+      query: query?.substring(0, 100),
+      sessionId,
+      hasOptions: !!options,
+      stream 
+    });
+
+    // Validate required fields
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Query is required and must be a string'
+      });
+    }
+
+    if (!stream) {
+      return res.status(400).json({
+        success: false,
+        error: 'Only streaming mode is supported for chain of thought'
+      });
+    }
+
+    // Configure Server-Sent Events headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+
+    // Send initial connection confirmation
+    res.write(`data: ${JSON.stringify({
+      type: 'connection',
+      message: 'Chain of thought process starting...',
+      sessionId: sessionId || `cot_${Date.now()}`
+    })}\n\n`);
+
+    // Set up streaming callbacks
+    const streamCallbacks = {
+      onStepUpdate: (step, message) => {
+        try {
+          const updateData = {
+            type: 'step_update',
+            currentStep: step.id,
+            steps: step.allSteps,
+            message: message || '',
+            timestamp: new Date().toISOString()
+          };
+
+          res.write(`data: ${JSON.stringify(updateData)}\n\n`);
+          
+          logger.debug('Step update sent', { 
+            userId, 
+            stepId: step.id,
+            hasMessage: !!message 
+          });
+        } catch (writeError) {
+          logger.error('Error writing step update', { 
+            userId, 
+            error: writeError.message 
+          });
+        }
+      },
+
+      onComplete: (result) => {
+        try {
+          const completionData = {
+            type: 'final_result',
+            data: result,
+            timestamp: new Date().toISOString()
+          };
+
+          res.write(`data: ${JSON.stringify(completionData)}\n\n`);
+          res.write('data: [DONE]\n\n');
+          
+          logger.info('Chain of thought completed successfully', { 
+            userId, 
+            nodesCount: result.nodes?.length || 0,
+            sessionId: result.sessionId 
+          });
+          
+          res.end();
+        } catch (writeError) {
+          logger.error('Error writing completion data', { 
+            userId, 
+            error: writeError.message 
+          });
+          res.end();
+        }
+      },
+
+      onError: (error) => {
+        try {
+          const errorData = {
+            type: 'error',
+            message: error.message || 'An unexpected error occurred',
+            timestamp: new Date().toISOString()
+          };
+
+          res.write(`data: ${JSON.stringify(errorData)}\n\n`);
+          
+          logger.error('Chain of thought error sent to client', { 
+            userId, 
+            error: error.message 
+          });
+          
+          res.end();
+        } catch (writeError) {
+          logger.error('Error writing error data', { 
+            userId, 
+            error: writeError.message 
+          });
+          res.end();
+        }
+      }
+    };
+
+    // Handle client disconnect
+    req.on('close', () => {
+      logger.info('Chain of thought client disconnected', { userId, sessionId });
+    });
+
+    req.on('aborted', () => {
+      logger.info('Chain of thought request aborted', { userId, sessionId });
+    });
+
+    // Start the chain of thought process
+    await chainOfThoughtEngine.processQuery(
+      userId.toString(),
+      query,
+      {
+        ...options,
+        fastModel: options.fastModel || 'openai/gpt-3.5-turbo', // Use cheap model for progress
+        mainModel: options.mainModel || 'openai/gpt-4o', // Use premium model for synthesis
+        context: {
+          actions: options.actions || [],
+          useUBPM: options.useUBPM || false,
+          includeUserData: options.includeUserData || true,
+          sessionId: sessionId || `cot_${Date.now()}`
+        }
+      },
+      streamCallbacks
+    );
+
+  } catch (error) {
+    logger.error('Chain of thought endpoint error', { 
+      userId: req.user?.id || req.user?._id,
+      error: error.message,
+      stack: error.stack
+    });
+
+    // If response hasn't been sent yet, send error response
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process chain of thought request'
+      });
+    } else {
+      // If streaming has started, send error through stream
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: 'Internal server error during processing'
+        })}\n\n`);
+        res.end();
+      } catch (writeError) {
+        logger.error('Failed to send streaming error', { 
+          userId: req.user?.id || req.user?._id,
+          error: writeError.message 
+        });
+      }
+    }
   }
 });
 

@@ -148,9 +148,9 @@ export const analyticsRateLimiters = {
   
   // Personal growth insights (very expensive)
   personalGrowthInsights: createAnalyticsRateLimiter('personal-growth-insights', {
-    maxCalls: 3,
-    windowMs: 10 * 60 * 1000, // 10 minutes instead of 1 hour
-    message: 'Personal growth insights are limited to 3 calls per 10 minutes per user'
+    maxCalls: 10,
+    windowMs: 15 * 60 * 1000, // 15 minutes instead of 10 minutes
+    message: 'Personal growth insights are limited to 10 calls per 15 minutes per user'
   }),
   
   // LLM analytics processing (very expensive)

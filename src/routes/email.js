@@ -5,7 +5,7 @@
 
 import express from 'express';
 import emailService from '../services/emailService.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { protect } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -13,7 +13,7 @@ const router = express.Router();
  * GET /email/stats
  * Get email service statistics and status
  */
-router.get('/stats', authenticateToken, async (req, res) => {
+router.get('/stats', protect, async (req, res) => {
   try {
     const stats = emailService.getEmailStats();
     
@@ -39,7 +39,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
  * POST /email/test
  * Send a test email (admin only)
  */
-router.post('/test', authenticateToken, async (req, res) => {
+router.post('/test', protect, async (req, res) => {
   try {
     const { email, type = 'welcome', userName = 'Test User' } = req.body;
     
