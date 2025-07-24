@@ -6,23 +6,23 @@
 export const TIER_CONFIG = {
   CORE: {
     name: 'Core',
-    dailyRequests: 1500,
-    requestsPerMinute: 2,
-    maxTokensPerRequest: 2000,
+    dailyRequests: 10000,
+    requestsPerMinute: 50,
+    maxTokensPerRequest: 8000,
     features: {
       basicChat: true,
-      emotionalAnalysis: false,
-      personalizedInsights: false,
-      toolAccess: false,
-      memoryRetention: 7, // days
-      conversationHistory: 1500 // messages
+      emotionalAnalysis: true,
+      personalizedInsights: true,
+      toolAccess: true,
+      memoryRetention: 90, // days
+      conversationHistory: 10000 // messages
     }
   },
   PRO: {
     name: 'Pro', 
-    dailyRequests: 10000,
-    requestsPerMinute: 10,
-    maxTokensPerRequest: 8000,
+    dailyRequests: 50000,
+    requestsPerMinute: 100,
+    maxTokensPerRequest: 16000,
     features: {
       basicChat: true,
       emotionalAnalysis: true,
@@ -35,8 +35,8 @@ export const TIER_CONFIG = {
   AETHER: {
     name: 'Aether',
     dailyRequests: -1, // unlimited
-    requestsPerMinute: 30,
-    maxTokensPerRequest: 16000,
+    requestsPerMinute: 1000,
+    maxTokensPerRequest: 32000,
     features: {
       basicChat: true,
       emotionalAnalysis: true,

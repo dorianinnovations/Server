@@ -1,8 +1,20 @@
 export default async function academicSearch(args, userContext) {
   try {
-    const { query, field, yearRange } = args;
+    console.log('🎓 ACADEMIC SEARCH CALLED WITH:', JSON.stringify(args, null, 2));
+    console.log('🎓 ARGS TYPE:', typeof args);
+    console.log('🎓 ARGS KEYS:', Object.keys(args || {}));
+    
+    const { query, field, yearRange } = args || {};
+    
+    console.log('🎓 DESTRUCTURED VALUES:', { query, field, yearRange, queryType: typeof query });
     
     if (!query || typeof query !== 'string') {
+      console.error('🎓 ACADEMIC SEARCH ERROR: Invalid query:', { 
+        query, 
+        type: typeof query, 
+        args,
+        argsStringified: JSON.stringify(args)
+      });
       throw new Error('Query is required and must be a string');
     }
 

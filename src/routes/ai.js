@@ -829,7 +829,12 @@ function formatToolResultForUser(toolName, result) {
     // Format specific tool types with user-friendly output
     switch (toolName) {
       case 'web_search':
-        if (parsedResult.results && Array.isArray(parsedResult.results)) {
+        // Use the pre-formatted markdown results if available
+        if (parsedResult.formattedResults) {
+          return parsedResult.formattedResults;
+        }
+        // Fallback to old formatting for backward compatibility
+        else if (parsedResult.results && Array.isArray(parsedResult.results)) {
           const resultCount = parsedResult.results.length;
           
           // Security: Validate and sanitize URLs
