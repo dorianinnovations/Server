@@ -69,29 +69,49 @@ class ChainOfThoughtEngine {
           allSteps: [...steps]
         }, progressMessage);
 
-        // Realistic processing time with variation (AI models take time)
-        const processingTime = 1800 + Math.random() * 2200;
-        await new Promise(resolve => setTimeout(resolve, processingTime));
+        // Check if this is the final "Generating nodes" step
+        const isFinalStep = i === steps.length - 1 && steps[i].title.toLowerCase().includes('generating');
         
-        steps[i].status = 'completed';
-        
-        // Update AI monitor for step completion
-        if (aiMonitor) {
-          aiMonitor.updateActivity(userId, `completed: ${steps[i].title.toLowerCase()}`, {
-            step: `chain_step_${i + 1}_complete`,
-            completedSteps: i + 1,
-            totalSteps: steps.length
-          });
+        if (isFinalStep) {
+          // For the final step, don't complete it yet - let the actual synthesis complete it
+          logger.info('Deferring final step completion until actual node generation completes');
+          
+          // Add a callback reference for later completion
+          this.pendingStepCompletion = {
+            step: steps[i],
+            index: i,
+            callbacks,
+            aiMonitor,
+            allSteps: steps
+          };
+          
+          // Brief pause before starting synthesis
+          await new Promise(resolve => setTimeout(resolve, 800));
+        } else {
+          // For other steps, use normal timing
+          const processingTime = 1800 + Math.random() * 2200;
+          await new Promise(resolve => setTimeout(resolve, processingTime));
+          
+          steps[i].status = 'completed';
+          
+          // Update AI monitor for step completion
+          if (aiMonitor) {
+            aiMonitor.updateActivity(userId, `completed: ${steps[i].title.toLowerCase()}`, {
+              step: `chain_step_${i + 1}_complete`,
+              completedSteps: i + 1,
+              totalSteps: steps.length
+            });
+          }
+          
+          // Send completion update
+          callbacks.onStepUpdate({
+            id: steps[i].id,
+            allSteps: [...steps]
+          }, '');
+          
+          // Brief pause between steps for UX pacing
+          await new Promise(resolve => setTimeout(resolve, 400));
         }
-        
-        // Send completion update
-        callbacks.onStepUpdate({
-          id: steps[i].id,
-          allSteps: [...steps]
-        }, '');
-        
-        // Brief pause between steps for UX pacing
-        await new Promise(resolve => setTimeout(resolve, 400));
       }
 
       // Final synthesis with main model and AI transparency
@@ -323,6 +343,38 @@ Describe the AI's specific internal cognitive process for this step in one clear
       // Call the real node generation logic with monitoring
       const realNodes = await this.generateRealNodes(userId, query, options, aiActivityMonitor);
       
+      // Complete the pending final step if it exists
+      if (this.pendingStepCompletion) {
+        const { step, index, callbacks, aiMonitor, allSteps } = this.pendingStepCompletion;
+        
+        logger.info('Completing deferred final step after node generation');
+        
+        // Mark step as completed
+        step.status = 'completed';
+        
+        // Update AI monitor for step completion
+        if (aiMonitor) {
+          aiMonitor.updateActivity(userId, `completed: ${step.title.toLowerCase()}`, {
+            step: `chain_step_${index + 1}_complete`,
+            completedSteps: index + 1,
+            totalSteps: allSteps.length,
+            nodesGenerated: realNodes.length
+          });
+        }
+        
+        // Send completion update to client with all steps
+        callbacks.onStepUpdate({
+          id: step.id,
+          allSteps: [...allSteps]
+        }, '');
+        
+        // Clear the pending completion
+        this.pendingStepCompletion = null;
+        
+        // Brief pause for UI smoothness
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
       return {
         nodes: realNodes,
         insights: [
@@ -339,6 +391,17 @@ Describe the AI's specific internal cognitive process for this step in one clear
         userId, 
         error: error.message 
       });
+      
+      // Also complete the step in case of error
+      if (this.pendingStepCompletion) {
+        const { step, callbacks, allSteps } = this.pendingStepCompletion;
+        step.status = 'completed';
+        callbacks.onStepUpdate({
+          id: step.id,
+          allSteps: [...allSteps]
+        }, '');
+        this.pendingStepCompletion = null;
+      }
       
       throw new Error('Failed to generate final insights');
     }
