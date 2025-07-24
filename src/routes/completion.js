@@ -663,11 +663,12 @@ router.post("/completion", protect, checkTierLimits, async (req, res) => {
     // Tool detection and loading
     let tools = [];
     const shouldUseTools = isToolRequiredMessage(userPrompt);
+    console.log(`🔧 TOOL TRIGGER DEBUG: "${userPrompt}" -> shouldUseTools: ${shouldUseTools}`);
     
     if (shouldUseTools) {
       // Loading tool registry for request
       try {
-        const allTools = await toolRegistry.getAllTools();
+        const allTools = await toolRegistry.getToolsForOpenAI();
         // Limit to essential tools to avoid 400 errors
         const essentialTools = allTools.filter(tool => 
           ['web_search', 'weather_check', 'calculator', 'timezone_converter', 'currency_converter'].includes(tool.function?.name)
@@ -828,6 +829,78 @@ router.post("/completion", protect, checkTierLimits, async (req, res) => {
           return res.status(502).json({ status: "error", message: "LLM API error: " + err.message });
         }
       }
+      
+      // Debug response structure
+      console.log(`🔍 COMPLETION RESPONSE DEBUG:`, {
+        hasContent: !!response.content,
+        contentLength: response.content?.length || 0,
+        stopReason: response.stop_reason,
+        hasToolCalls: !!response.tool_calls,
+        toolCallsLength: response.tool_calls?.length || 0
+      });
+      
+      // Handle tool calls if present
+      if (response.stop_reason === 'tool_calls' && response.tool_calls) {
+        console.log(`🔧 Found ${response.tool_calls.length} tool calls to execute`);
+        
+        try {
+          const toolResults = [];
+          
+          // Execute each tool call
+          for (const toolCall of response.tool_calls) {
+            console.log(`🔧 RAW TOOL CALL FROM RESPONSE:`, JSON.stringify(toolCall, null, 2));
+            
+            const toolResult = await toolExecutor.executeToolCall(toolCall, { userId });
+            
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              role: 'tool',
+              content: JSON.stringify(toolResult)
+            });
+          }
+          
+          // Add tool results to conversation and get final response
+          const messagesWithTools = [
+            ...messages,
+            { 
+              role: 'assistant', 
+              content: '', 
+              tool_calls: response.tool_calls 
+            }, // Assistant's tool call message
+            ...toolResults // Tool results
+          ];
+          
+          console.log(`🔧 Getting final response after ${toolResults.length} tool executions`);
+          
+          // Get final response from GPT-4o
+          response = await llmService.makeLLMRequest(messagesWithTools, {
+            stop,
+            n_predict,
+            temperature,
+            tools: [], // No tools in follow-up to avoid loops
+          });
+          
+          console.log(`🔧 Final response after tools:`, {
+            hasContent: !!response.content,
+            contentLength: response.content?.length || 0,
+            contentPreview: response.content?.substring(0, 100) || '[EMPTY]'
+          });
+          
+        } catch (toolError) {
+          console.error('🔥 TOOL EXECUTION ERROR:', toolError.message);
+          console.error('🔥 FULL ERROR:', toolError.stack);
+          
+          // Continue with empty tool results - let LLM handle it
+          console.log('🔧 Continuing with empty tool results due to error');
+        }
+      }
+      
+      // Ensure response has content before processing
+      if (!response.content || response.content.trim() === '') {
+        console.warn('⚠️ Empty response content, providing fallback');
+        response.content = "I'm ready to help! Could you please provide more details about what you're looking for?";
+      }
+      
       let sanitizedContent;
       try {
         sanitizedContent = await processResponseAndSave(

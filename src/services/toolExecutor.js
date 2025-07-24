@@ -123,7 +123,16 @@ class ToolExecutor {
   }
 
   async executeToolCall(toolCall, userContext) {
-    const { name, arguments: args } = toolCall.function;
+    console.log(`🔧 TOOL EXECUTOR RECEIVED:`, JSON.stringify(toolCall, null, 2));
+    
+    if (!toolCall.function) {
+      throw new Error(`Tool call missing function property: ${JSON.stringify(toolCall)}`);
+    }
+    
+    const { name, arguments: argsString } = toolCall.function;
+    const args = typeof argsString === 'string' ? JSON.parse(argsString) : argsString;
+    
+    console.log(`🔧 PARSED TOOL ARGS:`, { name, args, argsType: typeof args });
     const tool = this.toolCache.get(name);
     
     if (!tool) {
@@ -155,6 +164,7 @@ class ToolExecutor {
       //   }
       // }
 
+      console.log(`🔧 CALLING runToolImplementation with args:`, { tool: tool.name, args, argsType: typeof args });
       const result = await this.runToolImplementation(tool, args, userContext);
       
       // TEMPORARILY DISABLED: Credit deduction for testing

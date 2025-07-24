@@ -64,6 +64,13 @@ export const createLLMService = () => {
         ...(options.frequency_penalty && { frequency_penalty: options.frequency_penalty }),
         ...(options.presence_penalty && { presence_penalty: options.presence_penalty }),
       };
+      
+      console.log(`🔧 Base request data:`, {
+        model: requestData.model,
+        messageCount: requestData.messages.length,
+        maxTokens: requestData.max_tokens,
+        temperature: requestData.temperature
+      });
 
       // Add tool calling parameters if tools are provided
       if (tools && tools.length > 0) {
@@ -92,6 +99,7 @@ export const createLLMService = () => {
         requestData.tool_choice = tool_choice;
         
         console.log(`🔧 Final tool count sent to OpenRouter: ${validTools.length}`);
+        console.log(`🔧 Sample tool structure:`, JSON.stringify(validTools[0], null, 2));
       }
       
       const response = await axios({
@@ -136,12 +144,18 @@ export const createLLMService = () => {
         });
       }
       
+      // Debug tool calls structure
+      if (choice.message.tool_calls) {
+        console.log(`🔧 LLM SERVICE - Raw tool calls:`, JSON.stringify(choice.message.tool_calls, null, 2));
+      }
+      
       // Return response in consistent format with tool calls support
       return {
         content: choice.message.content,
         stop_reason: choice.finish_reason,
         usage: response.data.usage,
         tool_calls: choice.message.tool_calls || null,
+        choice: choice, // Include full choice for tool call handling
       };
     } catch (error) {
       console.error("OpenRouter API Error:", {

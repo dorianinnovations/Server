@@ -134,56 +134,61 @@ class ChainOfThoughtEngine {
    */
   async getProgressInsight(stepTitle, query, context = {}, model = 'meta-llama/llama-3.1-8b-instruct') {
     try {
-      // Use Llama 3.1 8B for intelligent AI transparency narration
-      const systemPrompt = `You are an AI transparency narrator. Describe what a premium AI model is currently doing in exactly 4-6 words. Be technical and specific. Focus on the AI's internal reasoning process. No punctuation or articles.`;
-      
-      const contextInfo = context.useUBPM ? ' with behavioral profile' : '';
-      const actionsInfo = context.actions ? ` focusing on ${context.actions.slice(0, 2).join(' and ')}` : '';
-      
-      const userPrompt = `Premium AI Model Task: ${stepTitle}
-User Query: "${query.substring(0, 50)}"
-Context: AI reasoning${contextInfo}${actionsInfo}
+      // Enhanced LLAMA prompt for intelligent contextual narration
+      const systemPrompt = `You are an advanced AI transparency narrator providing real-time insights into GPT-4's internal reasoning processes. Generate contextual descriptions of what the AI is actively doing during each cognitive step.
 
-What is the AI internally doing? (4-6 words):`;
+REQUIREMENTS:
+- Write one clear sentence describing the AI's internal process
+- Be domain-specific and contextual to the user's query
+- Use natural language that flows well
+- Vary your descriptions to avoid repetition
+- Focus on the specific cognitive operation happening
+- Keep it conversational and informative
+
+EXAMPLES:
+Query "movies" → "Analyzing cinematic preference patterns and recommendation algorithms"
+Query "health" → "Processing medical knowledge databases for relevant insights" 
+Query "code" → "Parsing programming logic structures and best practices"
+Query "travel" → "Mapping geographical preference networks and travel patterns"`;
+      
+      const contextInfo = context.useUBPM ? ' using behavioral profiling' : '';
+      const actionsInfo = context.actions ? ` with ${context.actions.slice(0, 2).join(' and ')} focus` : '';
+      
+      const userPrompt = `AI COGNITIVE STEP: "${stepTitle}"
+USER QUERY DOMAIN: "${query.substring(0, 60)}"
+PROCESSING CONTEXT: Advanced reasoning${contextInfo}${actionsInfo}
+
+Describe the AI's specific internal cognitive process for this step in one clear sentence:`;
 
       const response = await this.llmService.makeLLMRequest([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ], {
         model,
-        max_tokens: 15, // Allow for 4-6 words plus safety margin
-        temperature: 0.2, // Slight creativity for varied descriptions
+        max_tokens: 150, // Much more room for full sentences
+        temperature: 0.6, // Higher creativity for varied, natural responses
         stream: false,
-        stop: ['\n', '.', '!', '?', ','] // Stop on punctuation
+        stop: ['\n\n', 'Human:', 'Assistant:'] // Only stop on major breaks, not punctuation
       });
 
       let message = response.content || this.getFallbackInsight(stepTitle);
       
-      // Aggressive cleanup
+      // Light cleanup - preserve natural sentence structure
       message = message.trim()
-        .replace(/[^a-zA-Z\s]/g, '') // Remove all non-letters except spaces
-        .replace(/\s+/g, ' ')
-        .toLowerCase()
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/^["']|["']$/g, '') // Remove surrounding quotes
         .trim();
       
-      // Ensure 4-6 words
-      const words = message.split(' ').filter(word => word.length > 1);
-      if (words.length >= 4 && words.length <= 6) {
-        message = words.join(' ');
-      } else if (words.length > 6) {
-        message = words.slice(0, 6).join(' ');
+      // Basic validation - ensure we have meaningful content
+      const words = message.split(' ').filter(word => word.length > 0);
+      if (words.length >= 3 && message.length <= 200) {
+        // Capitalize first letter for proper sentence format
+        message = message.charAt(0).toUpperCase() + message.slice(1);
+        return message;
       } else {
-        // Fallback to contextual insight if LLM fails
+        // Fallback to contextual insight if response is too short or too long
         return this.getContextualInsight(stepTitle, query) || this.getFallbackInsight(stepTitle);
       }
-      
-      // Final validation - allow up to 50 characters for 4-6 words to prevent LLAMA override
-      if (message.length > 50 || words.length < 3) {
-        return this.getContextualInsight(stepTitle, query) || this.getFallbackInsight(stepTitle);
-      }
-
-
-      return message;
 
     } catch (error) {
       logger.warn('LLM insight failed, using contextual fallback', { 
@@ -196,54 +201,54 @@ What is the AI internally doing? (4-6 words):`;
   }
 
   getContextualInsight(stepTitle, query) {
-    // Map specific query keywords to brief contextual messages
+    // Map specific query keywords to natural sentence contextual messages
     const queryKeywords = query.toLowerCase();
     
     const contextualMaps = {
       'Analyzing core sources': {
-        'sleep': 'scanning sleep pattern data',
-        'productivity': 'reading productivity metrics carefully',
-        'creativity': 'processing creative idea patterns',
-        'relationships': 'analyzing relationship behavior patterns',
-        'habits': 'examining habit formation data',
-        'emotions': 'processing emotional state indicators',
-        'default': 'scanning core data sources'
+        'sleep': 'Scanning through sleep pattern data and circadian rhythm indicators',
+        'productivity': 'Reading productivity metrics and workflow efficiency patterns carefully',
+        'creativity': 'Processing creative idea patterns and innovation frameworks',
+        'relationships': 'Analyzing relationship behavior patterns and social dynamics',
+        'habits': 'Examining habit formation data and behavioral consistency metrics',
+        'emotions': 'Processing emotional state indicators and mood pattern analysis',
+        'default': 'Scanning core data sources and foundational information patterns'
       },
       'Checking additional scenarios': {
-        'sleep': 'exploring sleep optimization scenarios',
-        'productivity': 'checking productivity improvement metrics',
-        'creativity': 'validating creative workflow ideas',
-        'relationships': 'exploring relationship dynamic scenarios',
-        'habits': 'checking alternative habit patterns',
-        'emotions': 'validating emotional response data',
-        'default': 'exploring additional scenario options'
+        'sleep': 'Exploring alternative sleep optimization scenarios and recovery patterns',
+        'productivity': 'Checking productivity improvement metrics across different contexts',
+        'creativity': 'Validating creative workflow ideas and alternative approaches',
+        'relationships': 'Exploring relationship dynamic scenarios and interaction patterns',
+        'habits': 'Checking alternative habit patterns and behavioral modification strategies',
+        'emotions': 'Validating emotional response data and psychological frameworks',
+        'default': 'Exploring additional scenario options and contextual variations'
       },
       'Cross-referencing patterns': {
-        'sleep': 'linking sleep behavior patterns',
-        'productivity': 'connecting productivity metrics together',
-        'creativity': 'linking creative idea networks',
-        'relationships': 'mapping relationship connection patterns',
-        'habits': 'finding behavioral habit connections',
-        'emotions': 'mapping emotional pattern links',
-        'default': 'finding cross pattern connections'
+        'sleep': 'Linking sleep behavior patterns with health and performance indicators',
+        'productivity': 'Connecting productivity metrics with environmental and personal factors',
+        'creativity': 'Linking creative idea networks and inspiration sources',
+        'relationships': 'Mapping relationship connection patterns and social influence networks',
+        'habits': 'Finding behavioral habit connections and trigger-response relationships',
+        'emotions': 'Mapping emotional pattern links and psychological state correlations',
+        'default': 'Finding cross-pattern connections and interdisciplinary relationships'
       },
       'Synthesizing insights': {
-        'sleep': 'combining sleep optimization insights',
-        'productivity': 'building comprehensive productivity insights',
-        'creativity': 'synthesizing creative workflow ideas',
-        'relationships': 'combining relationship dynamic insights',
-        'habits': 'creating habit optimization insights',
-        'emotions': 'building emotional intelligence insights',
-        'default': 'combining insights from analysis'
+        'sleep': 'Combining sleep optimization insights with holistic wellness approaches',
+        'productivity': 'Building comprehensive productivity insights from multiple data streams',
+        'creativity': 'Synthesizing creative workflow ideas into actionable frameworks',
+        'relationships': 'Combining relationship dynamic insights for better social connections',
+        'habits': 'Creating habit optimization insights based on behavioral science',
+        'emotions': 'Building emotional intelligence insights from psychological research',
+        'default': 'Combining insights from analysis into coherent understanding'
       },
       'Generating nodes': {
-        'sleep': 'creating sleep improvement nodes',
-        'productivity': 'building productivity optimization nodes',
-        'creativity': 'generating creative enhancement nodes',
-        'relationships': 'creating relationship insight nodes',
-        'habits': 'finalizing habit formation nodes',
-        'emotions': 'creating emotional wellness nodes',
-        'default': 'creating personalized insight nodes'
+        'sleep': 'Creating sleep improvement nodes with personalized recommendations',
+        'productivity': 'Building productivity optimization nodes tailored to your workflow',
+        'creativity': 'Generating creative enhancement nodes for innovation and inspiration',
+        'relationships': 'Creating relationship insight nodes for better social connections',
+        'habits': 'Finalizing habit formation nodes with practical implementation strategies',
+        'emotions': 'Creating emotional wellness nodes for mental health and balance',
+        'default': 'Creating personalized insight nodes based on your unique context'
       }
     };
 
@@ -268,36 +273,36 @@ What is the AI internally doing? (4-6 words):`;
   getFallbackInsight(stepTitle) {
     const fallbackMessages = {
       'Analyzing core sources': [
-        'scanning primary data sources',
-        'reading behavioral pattern data',
-        'processing user information thoroughly'
+        'Scanning primary data sources to understand your context and preferences',
+        'Reading behavioral pattern data to identify relevant insights',
+        'Processing user information thoroughly to build comprehensive understanding'
       ],
       'Checking additional scenarios': [
-        'exploring alternative scenario options',
-        'validating supplementary data sources',
-        'checking contextual information patterns'
+        'Exploring alternative scenario options to broaden the analysis scope',
+        'Validating supplementary data sources for comprehensive coverage',
+        'Checking contextual information patterns across different domains'
       ],
       'Cross-referencing patterns': [
-        'finding behavioral connection patterns',
-        'mapping data relationship networks',
-        'linking relevant information sources'
+        'Finding behavioral connection patterns that link different aspects together',
+        'Mapping data relationship networks to understand interconnections',
+        'Linking relevant information sources to create holistic insights'
       ],
       'Synthesizing insights': [
-        'combining analytical findings together',
-        'creating comprehensive insight summaries',
-        'building personalized recommendation systems'
+        'Combining analytical findings together into coherent recommendations',
+        'Creating comprehensive insight summaries from multiple data streams',
+        'Building personalized recommendation systems based on your unique profile'
       ],
       'Generating nodes': [
-        'creating personalized insight nodes',
-        'building interactive data visualizations',
-        'finalizing intelligent recommendation outputs'
+        'Creating personalized insight nodes tailored to your specific needs',
+        'Building interactive data visualizations for better understanding',
+        'Finalizing intelligent recommendation outputs with actionable guidance'
       ]
     };
 
     const messages = fallbackMessages[stepTitle] || [
-      'processing complex user data',
-      'analyzing behavioral information patterns',
-      'working on intelligent insights'
+      'Processing complex user data to generate meaningful insights',
+      'Analyzing behavioral information patterns for personalized recommendations',
+      'Working on intelligent insights that match your specific context'
     ];
 
     return messages[Math.floor(Math.random() * messages.length)];

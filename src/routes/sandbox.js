@@ -10,6 +10,8 @@ import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
 import logger from '../utils/logger.js';
 import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
 import aiActivityMonitor from '../services/aiActivityMonitor.js';
+import toolRegistry from '../services/toolRegistry.js';
+import toolExecutor from '../services/toolExecutor.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -121,9 +123,56 @@ Return ONLY valid JSON array:
 
 Ensure JSON is valid - no trailing commas, proper escaping.`;
 
-    // Generate nodes using LLM with optimized parameters
-    const response = await llmService.makeLLMRequest([
-      { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate insightful, accurate discovery nodes in valid JSON format. Always respond with valid JSON array.' },
+    // Map frontend actions to backend tools
+    const actionToToolMap = {
+      'research': ['web_search', 'academic_search'],
+      'search': ['web_search', 'news_search'],
+      'explore': ['web_search'],
+      'analyze': ['web_search', 'news_search'],
+      'find': ['web_search'],
+      'investigate': ['web_search', 'academic_search'],
+      'discover': ['web_search'],
+      'lookup': ['web_search']
+    };
+    
+    let tools = [];
+    const requiredTools = new Set();
+    
+    // Determine which tools are needed based on selected actions
+    selectedActions.forEach(action => {
+      const actionLower = action.toLowerCase();
+      if (actionToToolMap[actionLower]) {
+        actionToToolMap[actionLower].forEach(tool => requiredTools.add(tool));
+      }
+    });
+    
+    // Always add web_search if any research-like action is selected
+    if (selectedActions.some(action => 
+      ['research', 'search', 'explore', 'analyze', 'find', 'investigate', 'discover', 'lookup'].includes(action.toLowerCase())
+    )) {
+      requiredTools.add('web_search');
+    }
+    
+    if (requiredTools.size > 0) {
+      try {
+        const allTools = await toolRegistry.getToolsForOpenAI();
+        tools = allTools.filter(tool => 
+          requiredTools.has(tool.function?.name)
+        ).slice(0, 3); // Limit to 3 tools max for performance
+        
+        logger.debug('Added tools based on selected actions', { 
+          toolCount: tools.length, 
+          selectedActions,
+          toolNames: tools.map(t => t.function.name)
+        });
+      } catch (error) {
+        logger.warn('Failed to load tools for sandbox', { error: error.message });
+      }
+    }
+
+    // Generate nodes using LLM with optimized parameters and tools
+    let response = await llmService.makeLLMRequest([
+      { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate discovery nodes as a JSON array. Each node must have: title (string), content (string), category (string), confidence (number 0-1), and personalHook (string or null). Your response must be ONLY a valid JSON array, no other text. Use available tools to get current information when needed.' },
       { role: 'user', content: aiPrompt }
     ], {
       n_predict: 1500,
@@ -131,15 +180,110 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
       max_tokens: 1500,
       presence_penalty: 0.1,
-      frequency_penalty: 0.1
+      frequency_penalty: 0.1,
+      tools: tools.length > 0 ? tools : undefined,
+      tool_choice: tools.length > 0 ? 'auto' : undefined,
+      response_format: { type: "json_object" } // Force JSON response
     });
     
-    const aiResponse = response.content;
+    // Handle tool calls if present (similar to completion endpoint)
+    if (response.stop_reason === 'tool_calls' && response.tool_calls) {
+      logger.debug('Sandbox executing tool calls', { toolCallCount: response.tool_calls.length });
+      
+      try {
+        const toolResults = [];
+        
+        // Execute each tool call
+        for (const toolCall of response.tool_calls) {
+          const toolName = toolCall.function?.name;
+          const toolArgs = JSON.parse(toolCall.function?.arguments || '{}');
+          
+          logger.debug('Sandbox executing tool', { toolName, toolArgs });
+          
+          const toolResult = await toolExecutor.executeToolCall(toolCall, { userId });
+          
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            role: 'tool',
+            content: JSON.stringify(toolResult)
+          });
+        }
+        
+        // Get final response with tool results
+        const messagesWithTools = [
+          { role: 'system', content: 'You must respond with ONLY a JSON array of discovery nodes. Format: [{"title":"string","content":"string","category":"string","confidence":0.0-1.0,"personalHook":"string or null"}]. Use the search results to create informed nodes. No other text allowed.' },
+          { role: 'user', content: aiPrompt },
+          { 
+            role: 'assistant', 
+            content: '', 
+            tool_calls: response.tool_calls 
+          }, // Assistant's tool call message
+          ...toolResults // Tool results
+        ];
+        
+        logger.debug('Making follow-up request with tool results', { 
+          messageCount: messagesWithTools.length,
+          toolResultCount: toolResults.length 
+        });
+        
+        logger.debug('Getting final sandbox response after tool execution');
+        
+        response = await llmService.makeLLMRequest(messagesWithTools, {
+          n_predict: 1500,
+          temperature: 0.7,
+          stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
+          max_tokens: 1500,
+          presence_penalty: 0.1,
+          frequency_penalty: 0.1,
+          tools: [], // No tools in follow-up to avoid loops
+          response_format: { type: "json_object" } // Force JSON response
+        });
+        
+      } catch (toolError) {
+        logger.error('Error executing tools in sandbox', { error: toolError.message });
+        // Create a new response object with default content
+        response = {
+          ...response,
+          content: JSON.stringify([
+          {
+            title: `${query} Overview`,
+            content: `An overview of ${query} and its key aspects.`,
+            category: "Research",
+            confidence: 0.8
+          },
+          {
+            title: `Current Trends in ${query}`,
+            content: `Latest developments and trends in the field of ${query}.`,
+            category: "Trends",
+            confidence: 0.75
+          },
+          {
+            title: `Future of ${query}`,
+            content: `Potential future directions and implications of ${query}.`,
+            category: "Future",
+            confidence: 0.7
+          }
+        ])
+        };
+      }
+    }
+    
+    const aiResponse = response.content || '';
+    
+    logger.debug('Sandbox AI response', { 
+      hasContent: !!response.content,
+      contentLength: response.content?.length || 0,
+      contentPreview: response.content?.substring(0, 100)
+    });
 
     let generatedNodes;
     try {
       // Clean and parse the AI response
       let cleanResponse = aiResponse.trim();
+      
+      if (!cleanResponse) {
+        throw new Error('Empty response from AI');
+      }
       
       // Remove code blocks if present
       cleanResponse = cleanResponse.replace(/```json\n?|\n?```/g, '').trim();

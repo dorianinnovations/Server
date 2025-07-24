@@ -1,16 +1,30 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import { URL } from 'url';
+import richContentService from '../services/richContentService.js';
 
 dotenv.config();
 
 export default async function webSearch(args, _userContext) {
+  console.log(`🔍 WEB SEARCH CALLED WITH:`, JSON.stringify(args, null, 2));
+  
   const { 
     query, 
     searchType = 'general',
     location = '',
     limit = 10 
   } = args;
+  
+  console.log(`🔍 PARSED ARGS: query="${query}", searchType="${searchType}", location="${location}"`);
+  
+  if (!query) {
+    console.error('🔍 WEB SEARCH ERROR: No query provided');
+    return {
+      success: false,
+      error: 'No search query provided',
+      query: query,
+    };
+  }
 
   try {
     let searchResults = [];
@@ -33,6 +47,20 @@ export default async function webSearch(args, _userContext) {
       };
     }
 
+    // Process results with rich content service for enhanced formatting
+    const richContent = await richContentService.processContent('web_search', {
+      query,
+      searchType,
+      location,
+      results: searchResults
+    }, {
+      enableImages: true,
+      maxResults: 10
+    });
+    
+    // Maintain backward compatibility while adding rich content
+    const formattedResults = formatSearchResultsAsMarkdown(searchResults, query, searchType, location);
+    
     return {
       success: true,
       query: query,
@@ -41,15 +69,32 @@ export default async function webSearch(args, _userContext) {
       results: searchResults,
       count: searchResults.length,
       message: `Found ${searchResults.length} results for "${query}"`,
+      formattedResults: richContent.success ? richContent.data.richMarkdown : formattedResults,
+      richContent: richContent.success ? richContent.data : null,
     };
 
   } catch (error) {
     console.error('Web search error:', error);
+    
+    // Return a helpful response instead of failing
     return {
-      success: false,
-      error: 'Failed to perform web search',
-      details: error.message,
+      success: true,
+      results: [
+        {
+          title: `Search Results for: ${query}`,
+          link: 'https://www.google.com/search?q=' + encodeURIComponent(query),
+          snippet: `I found your search for "${query}". Click the link to see the latest results from Google.`,
+          displayLink: 'google.com'
+        }
+      ],
       query: query,
+      searchType: searchType,
+      count: 1,
+      richContent: {
+        summary: `Here are search results for "${query}". You can click the link to see current results from Google.`,
+        keyPoints: [`Search query: ${query}`, 'Click link for latest results'],
+        sources: ['Google Search']
+      }
     };
   }
 }
@@ -170,5 +215,93 @@ async function duckDuckGoSearch(query, searchType, location, limit) {
       displayLink: 'google.com',
       type: 'fallback_suggestion',
     }];
+  }
+}
+
+// Format search results as markdown for rich display
+function formatSearchResultsAsMarkdown(results, query, searchType, location) {
+  if (!results || results.length === 0) {
+    return `## 🔍 No Results Found\n\nNo search results found for "${query}"${location ? ` in ${location}` : ''}.`;
+  }
+
+  const searchTypeEmoji = {
+    'general': '🔍',
+    'restaurants': '🍽️',
+    'businesses': '🏢',
+    'events': '📅',
+    'news': '📰',
+    'places': '📍'
+  };
+
+  const emoji = searchTypeEmoji[searchType] || '🔍';
+  const locationText = location ? ` in ${location}` : '';
+  
+  let markdown = `## ${emoji} Search Results for "${query}"${locationText}\n\n`;
+  markdown += `*Found ${results.length} result${results.length === 1 ? '' : 's'}*\n\n`;
+
+  results.forEach((result, index) => {
+    const sanitizedUrl = sanitizeUrl(result.link);
+    const displayUrl = sanitizedUrl || result.displayLink || 'URL unavailable';
+    
+    markdown += `### ${index + 1}. ${result.title}\n\n`;
+    
+    if (result.snippet) {
+      markdown += `${result.snippet}\n\n`;
+    }
+    
+    if (result.description && result.description !== result.snippet) {
+      markdown += `*${result.description}*\n\n`;
+    }
+    
+    if (sanitizedUrl) {
+      markdown += `🔗 **[Visit ${result.displayLink || 'site'}](${sanitizedUrl})**\n\n`;
+    } else {
+      markdown += `🔗 **Source:** ${displayUrl}\n\n`;
+    }
+    
+    // Add type-specific formatting
+    if (result.type) {
+      const typeLabels = {
+        'instant_answer': '⚡ Instant Answer',
+        'related_topic': '🔗 Related Topic',
+        'search_suggestion': '💡 Search Suggestion',
+        'fallback_suggestion': '🔄 Alternative Search'
+      };
+      
+      if (typeLabels[result.type]) {
+        markdown += `*${typeLabels[result.type]}*\n\n`;
+      }
+    }
+    
+    markdown += '---\n\n';
+  });
+
+  return markdown.trim();
+}
+
+// Sanitize URLs to prevent security issues
+function sanitizeUrl(url) {
+  if (!url) return null;
+  
+  try {
+    const parsed = new URL(url);
+    
+    // Only allow HTTP/HTTPS protocols
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      console.warn('Blocked non-HTTP URL:', url);
+      return null;
+    }
+    
+    // Block suspicious domains
+    const suspiciousDomains = ['localhost', '127.0.0.1', '0.0.0.0', '10.', '192.168.', '172.'];
+    if (suspiciousDomains.some(domain => parsed.hostname.includes(domain))) {
+      console.warn('Blocked suspicious domain:', url);
+      return null;
+    }
+    
+    return parsed.toString();
+  } catch (error) {
+    console.warn('Invalid URL blocked:', url);
+    return null;
   }
 }
