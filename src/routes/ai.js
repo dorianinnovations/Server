@@ -1053,10 +1053,21 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
     }
     
     // CONTEXT INJECTION: Pre-process for ambiguous queries that need context
-    const recentMemoryForContext = await getRecentMemory(userId, userCache, { 
-      maxMessages: 10, 
-      contextType: 'standard' 
+    // Use a fresh, uncached query to get the most recent conversation
+    const recentMemoryForContext = await getRecentMemory(userId, null, { 
+      maxMessages: 5, // Limit to just the last few messages
+      contextType: 'focused', // Use focused mode for immediate context
+      limitMinutes: 30 // Only look at last 30 minutes
     });
+    
+    // DEBUG: Log what context we're actually retrieving
+    console.log(`🔍 DEBUG: Context retrieval for "${finalMessage}"`);
+    console.log(`🔍 DEBUG: Found ${recentMemoryForContext?.length || 0} messages in context`);
+    if (recentMemoryForContext && recentMemoryForContext.length > 0) {
+      recentMemoryForContext.forEach((msg, idx) => {
+        console.log(`🔍 DEBUG: [${idx}] ${msg.role}: "${msg.content?.substring(0, 100)}..."`);
+      });
+    }
     
     const contextInjection = processContextInjection(finalMessage, recentMemoryForContext);
     
@@ -1067,7 +1078,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
       processedMessage = contextInjection.enrichedMessage;
       forceGPT = contextInjection.forceGPT;
       
-      console.log(`🔄 CONTEXT INJECTION: "${finalMessage}" → enriched with previous response context`);
+      console.log(`🔄 CONTEXT INJECTION V3: "${finalMessage}" → subject: "${contextInjection.extractedSubject}"`);
     }
 
     // DIRECT DATA QUERIES: Handle specific metrics requests instantly (but skip if context injection forces GPT)
@@ -1078,10 +1089,15 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
         console.log(`🤖 BOT [${userId.slice(-8)}]: ${directDataResult}`);
         
         // IMPORTANT: Save direct query responses to conversation history for future context
-        await ShortTermMemory.insertMany([
-          { userId, content: finalMessage, role: "user" },
-          { userId, content: directDataResult, role: "assistant" }
-        ]).catch(err => console.error('Error saving direct query to memory:', err));
+        try {
+          await ShortTermMemory.insertMany([
+            { userId, content: finalMessage, role: "user", timestamp: new Date() },
+            { userId, content: directDataResult, role: "assistant", timestamp: new Date() }
+          ]);
+          console.log(`💾 SAVED: Direct query and response to conversation history`);
+        } catch (err) {
+          console.error('Error saving direct query to memory:', err);
+        }
         
         return res.json({
           success: true,

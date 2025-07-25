@@ -29,7 +29,16 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
 
   const limits = contextLimits[contextType] || contextLimits.standard;
   const effectiveLimit = Math.min(maxMessages, limits.messages);
-  const effectiveTimeWindow = Math.min(limitMinutes || limits.timeWindow, limits.timeWindow);
+  
+  // DEFENSIVE CACHE FIX: Ensure effectiveTimeWindow is always a valid number
+  const safeLimitMinutes = (typeof limitMinutes === 'number' && !isNaN(limitMinutes)) ? limitMinutes : limits.timeWindow;
+  let effectiveTimeWindow = Math.min(safeLimitMinutes, limits.timeWindow);
+  
+  // Additional safety check
+  if (isNaN(effectiveTimeWindow) || effectiveTimeWindow <= 0) {
+    console.error(`[CACHE ERROR] Invalid effectiveTimeWindow: ${effectiveTimeWindow}, using default 24 hours`);
+    effectiveTimeWindow = 24 * 60; // 24 hours in minutes
+  }
 
   try {
     const projection = includeImages 
@@ -86,8 +95,8 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
         conversationContext: memory.slice(0, 10) // Use top 10 for context
       });
       
-      // Sort back to chronological order for conversation flow
-      memory = prioritized.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      // Keep reverse chronological order (newest first) for context injection
+      memory = prioritized.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     }
 
     console.log(`🧠 CONTEXT WINDOW: Retrieved ${memory.length} messages (${contextType} mode, ${effectiveTimeWindow}min window${useImportanceScoring ? ', importance-scored' : ''})`);
