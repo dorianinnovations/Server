@@ -154,41 +154,32 @@ class ChainOfThoughtEngine {
    */
   async getProgressInsight(stepTitle, query, context = {}, model = 'meta-llama/llama-3.1-8b-instruct') {
     try {
-      // Enhanced LLAMA prompt for intelligent contextual narration
-      const systemPrompt = `You are an advanced AI transparency narrator providing real-time insights into GPT-4's internal reasoning processes. Generate contextual descriptions of what the AI is actively doing during each cognitive step.
+      // Concise LLAMA prompt for progress reporting
+      const systemPrompt = `Report what the AI is currently doing in one clear sentence. Be specific to the user's query domain and the current processing step.
 
-REQUIREMENTS:
-- Write one clear sentence describing the AI's internal process
-- Be domain-specific and contextual to the user's query
-- Use natural language that flows well
-- Vary your descriptions to avoid repetition
-- Focus on the specific cognitive operation happening
-- Keep it conversational and informative
-
-EXAMPLES:
-Query "movies" → "Analyzing cinematic preference patterns and recommendation algorithms"
-Query "health" → "Processing medical knowledge databases for relevant insights" 
-Query "code" → "Parsing programming logic structures and best practices"
-Query "travel" → "Mapping geographical preference networks and travel patterns"`;
+Examples:
+- "Analyzing data patterns"
+- "Processing domain knowledge" 
+- "Evaluating response options"
+- "Synthesizing findings"`;
       
       const contextInfo = context.useUBPM ? ' using behavioral profiling' : '';
       const actionsInfo = context.actions ? ` with ${context.actions.slice(0, 2).join(' and ')} focus` : '';
       
-      const userPrompt = `AI COGNITIVE STEP: "${stepTitle}"
-USER QUERY DOMAIN: "${query.substring(0, 60)}"
-PROCESSING CONTEXT: Advanced reasoning${contextInfo}${actionsInfo}
+      const userPrompt = `Step: "${stepTitle}"
+Query: "${query.substring(0, 60)}"${contextInfo}${actionsInfo}
 
-Describe the AI's specific internal cognitive process for this step in one clear sentence:`;
+What is the AI doing right now?`;
 
       const response = await this.llmService.makeLLMRequest([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ], {
         model,
-        max_tokens: 150, // Much more room for full sentences
-        temperature: 0.6, // Higher creativity for varied, natural responses
+        max_tokens: 80, // Concise responses
+        temperature: 0.4, // More focused, less verbose
         stream: false,
-        stop: ['\n\n', 'Human:', 'Assistant:'] // Only stop on major breaks, not punctuation
+        stop: ['\n', '.', 'Human:', 'Assistant:']
       });
 
       let message = response.content || this.getFallbackInsight(stepTitle);
