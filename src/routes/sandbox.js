@@ -12,6 +12,8 @@ import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
 import aiActivityMonitor from '../services/aiActivityMonitor.js';
 import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
+import enhancedMemoryService from '../services/enhancedMemoryService.js';
+import ubpmService from '../services/ubpmService.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -47,6 +49,7 @@ router.post('/generate-nodes', protect, async (req, res) => {
       useUBPM 
     });
 
+
     // Validate required fields
     if (!query || typeof query !== 'string') {
       return res.status(400).json({
@@ -62,47 +65,456 @@ router.post('/generate-nodes', protect, async (req, res) => {
       });
     }
 
-    // Get user data for personalization
+    // ========================================
+    // 💼 SUBSCRIPTION TIER LOGIC
+    // ========================================
+    // CORE: 3 dives, AETHER: infinite recursive sifts
+    
+    let userTier = 'CORE'; // Default tier
+    let remainingDives = 3; // CORE limit
+    let canUseRecursiveFuse = false;
+    
+    // Process locked context first
+    let processedLockedContext = lockedContext;
+    
+    // Check user's subscription status
+    try {
+      const user = await User.findById(userId).select('subscription profile');
+      if (user?.subscription?.tier === 'AETHER' && user?.subscription?.status === 'active') {
+        userTier = 'AETHER';
+        remainingDives = Infinity;
+        canUseRecursiveFuse = true;
+      } else {
+        // For CORE users, check dive count (simplified - could track in DB)
+        // This is a taste of the power to drive upgrades
+        const todaysDives = user?.profile?.dailyDives || 0;
+        remainingDives = Math.max(0, 3 - todaysDives);
+        canUseRecursiveFuse = lockedContext && lockedContext.length > 0 && remainingDives > 0;
+        
+        // Limit recursive fuse for CORE users as a taste of power
+        if (lockedContext && lockedContext.length > 0) {
+          processedLockedContext = lockedContext.slice(0, 2); // Limit locked context for CORE
+          logger.info('🎯 CORE Tier Limitation: Restricted locked context to 2 nodes as upgrade incentive');
+        }
+      }
+      
+      logger.info('🎯 Tier-based Access Control', { 
+        userId, 
+        tier: userTier, 
+        remainingDives, 
+        canUseRecursiveFuse 
+      });
+      
+    } catch (error) {
+      logger.warn('Failed to check subscription tier, defaulting to CORE', { userId, error: error.message });
+    }
+    
+    // If no dives remaining for CORE users, return upgrade prompt
+    if (userTier === 'CORE' && remainingDives <= 0) {
+      return res.status(402).json({
+        success: false,
+        error: 'DIVE_LIMIT_REACHED',
+        message: 'You\'ve reached your 3 daily discovery dives limit.',
+        upgrade: {
+          tier: 'AETHER',
+          benefits: [
+            'Unlimited recursive knowledge sifts',
+            'Enhanced predictive context fusion',
+            'Advanced UBPM personalization',
+            'Priority tool access'
+          ],
+          cta: 'Upgrade to AETHER for infinite exploration'
+        }
+      });
+    }
+
+    // Get comprehensive user context for personalization
     const user = await User.findById(userId);
     let userBehaviorProfile = null;
+    let compressedUserContext = null;
     
     if (useUBPM) {
       try {
+        // Get the user's complete behavioral profile
         userBehaviorProfile = await UserBehaviorProfile.findOne({ userId });
+        
+        // Get compressed, contextual user intelligence
+        compressedUserContext = await enhancedMemoryService.getUserContext(userId, 8);
+        
+        // Trigger UBPM analysis to ensure fresh insights
+        await ubpmService.analyzeUserBehaviorPatterns(userId, 'sandbox_generation');
+        
+        // ENHANCED DEBUGGING: Log detailed UBPM data
+        logger.info('🔍 UBPM DATA VERIFICATION', { 
+          userId, 
+          hasProfile: !!userBehaviorProfile,
+          hasContext: !!compressedUserContext,
+          profileDetails: userBehaviorProfile ? {
+            patternCount: userBehaviorProfile.behaviorPatterns?.length || 0,
+            patterns: userBehaviorProfile.behaviorPatterns?.map(p => ({
+              type: p.type,
+              pattern: p.pattern,
+              confidence: p.confidence,
+              description: p.description?.substring(0, 50)
+            })) || [],
+            personalityTraits: userBehaviorProfile.personalityTraits?.length || 0,
+            lastAnalysis: userBehaviorProfile.lastAnalysisDate
+          } : 'No profile found',
+          contextDetails: compressedUserContext ? {
+            hasConversation: !!compressedUserContext.conversation,
+            messageCount: compressedUserContext.conversation?.messageCount || 0,
+            hasUserConstants: !!compressedUserContext.userConstants,
+            recentEmotionsCount: compressedUserContext.recentEmotions?.length || 0
+          } : 'No context found'
+        });
+
       } catch (error) {
-        logger.warn('Failed to fetch user behavior profile', { userId, error: error.message });
+        logger.error('Failed to fetch comprehensive user context', { userId, error: error.message, stack: error.stack });
       }
     }
 
     // Build context for AI
     let contextPrompt = `User is exploring: "${query}"\n\nSelected actions: ${selectedActions.join(', ')}\n\n`;
     
-    if (lockedContext && lockedContext.length > 0) {
-      contextPrompt += `Locked context nodes:\n`;
-      lockedContext.forEach((node, index) => {
-        contextPrompt += `${index + 1}. ${node.title}: ${node.content}\n`;
-        if (node.personalHook) {
-          contextPrompt += `   Personal connection: ${node.personalHook}\n`;
+    // ========================================
+    // 🔥 THE FUSE: EXPONENTIAL PREDICTIVE CONTEXT
+    // ========================================
+    // Locked Nodes + UBPM = Exponentially more powerful than sum of parts
+    
+    if (processedLockedContext && processedLockedContext.length > 0) {
+      contextPrompt += `=== THE FUSE: PREDICTIVE KNOWLEDGE SYNTHESIS ===\n`;
+      
+      // Analyze locked context patterns for predictive insights
+      const lockedThemes = processedLockedContext.map(node => node.category).filter(Boolean);
+      const lockedTopics = processedLockedContext.map(node => 
+        node.title.split(' ').slice(0, 3).join(' ')
+      );
+      
+      // Generate UBPM-powered predictive bridges
+      let predictiveContext = '';
+      if (userBehaviorProfile?.behaviorPatterns) {
+        const userPatterns = userBehaviorProfile.behaviorPatterns;
+        const dominantPattern = userPatterns.sort((a, b) => b.confidence - a.confidence)[0];
+        
+        if (dominantPattern) {
+          predictiveContext = `Given your ${dominantPattern.pattern} behavioral pattern (${Math.round(dominantPattern.confidence * 100)}% confidence), you're likely to be interested in: `;
+          
+          // Predict next logical questions based on locked content + UBPM
+          if (dominantPattern.pattern.includes('analytical') || dominantPattern.pattern.includes('detail')) {
+            predictiveContext += `deeper data analysis, methodological approaches, quantitative insights, and systematic frameworks related to ${lockedTopics.join(' and ')}.`;
+          } else if (dominantPattern.pattern.includes('creative') || dominantPattern.pattern.includes('exploratory')) {
+            predictiveContext += `innovative applications, creative synthesis, interdisciplinary connections, and novel perspectives bridging ${lockedTopics.join(' with ')}.`;
+          } else if (dominantPattern.pattern.includes('collaborative') || dominantPattern.pattern.includes('social')) {
+            predictiveContext += `community applications, collaborative approaches, social impact, and human-centered implementations of ${lockedTopics.join(' and ')}.`;
+          } else {
+            predictiveContext += `practical applications, implementation strategies, and actionable insights connecting ${lockedTopics.join(' with ')}.`;
+          }
         }
+      }
+      
+      contextPrompt += `🧠 PREDICTIVE INTELLIGENCE: ${predictiveContext}\n\n`;
+      contextPrompt += `The user has locked ${processedLockedContext.length} nodes from previous explorations. Use THE FUSE to anticipate their next logical questions:\n\n`;
+      
+      processedLockedContext.forEach((node, index) => {
+        contextPrompt += `🔒 Node ${index + 1}: "${node.title}"\n`;
+        contextPrompt += `   Content: ${(node.content || '').substring(0, 200)}${node.content?.length > 200 ? '...' : ''}\n`;
+        contextPrompt += `   Category: ${node.category || 'Unknown'}\n`;
+        
+        // Enhanced personal relevance with predictive power
+        if (node.personalHook) {
+          contextPrompt += `   Personal Relevance: ${node.personalHook}\n`;
+        }
+        
+        // Deep insights integration
+        if (node.deepInsights?.personalizedContext) {
+          contextPrompt += `   User Insights: ${node.deepInsights.personalizedContext}\n`;
+        }
+        
+        contextPrompt += '\n';
       });
+      
+      contextPrompt += `⚡ THE FUSE MANDATE: Don't just connect to locked knowledge - ANTICIPATE the user's next logical question. Create nodes that feel like natural extensions of their thinking process. This is the prescient knowledge engine.\n\n`;
+      
+      // ========================================
+      // 🔮 FEATURE 2: PREDICTIVE INSIGHT - Quantified Prediction for Context Fusion
+      // ========================================
+      // Generate explicit prediction about user's intellectual trajectory
+      
+      if (userBehaviorProfile?.behaviorPatterns && processedLockedContext.length >= 2) {
+        let predictiveInsight = '';
+        let baseConfidence = 49; // Default from CEO directive
+        
+        // Analyze locked content themes for prediction
+        const lockedCategories = processedLockedContext.map(node => node.category).filter(Boolean);
+        const categoryFrequency = lockedCategories.reduce((acc, cat) => {
+          acc[cat] = (acc[cat] || 0) + 1;
+          return acc;
+        }, {});
+        
+        const dominantCategory = Object.entries(categoryFrequency)
+          .sort(([,a], [,b]) => b - a)[0]?.[0];
+        
+        // Enhance prediction confidence based on UBPM patterns
+        const analyticalPatterns = userBehaviorProfile.behaviorPatterns.filter(p => 
+          p.pattern?.includes('detailed_communicator') || 
+          p.pattern?.includes('inquisitive_learner') ||
+          p.pattern?.includes('analytical')
+        );
+        
+        const creativePatterns = userBehaviorProfile.behaviorPatterns.filter(p => 
+          p.pattern?.includes('emotionally_expressive') ||
+          p.pattern?.includes('creative') || 
+          p.pattern?.includes('exploratory')
+        );
+        
+        logger.info('🔮 PREDICTIVE INSIGHT ANALYSIS', {
+          userId,
+          lockedNodeCount: processedLockedContext.length,
+          analyticalPatternsFound: analyticalPatterns.length,
+          creativePatternsFound: creativePatterns.length,
+          totalPatterns: userBehaviorProfile.behaviorPatterns.length,
+          dominantCategory
+        });
+        
+        // Calculate enhanced confidence based on pattern strength
+        if (analyticalPatterns.length > 0) {
+          const avgAnalyticalConfidence = analyticalPatterns.reduce((sum, p) => sum + p.confidence, 0) / analyticalPatterns.length;
+          baseConfidence += Math.round(avgAnalyticalConfidence * 15); // Up to +15% boost
+        }
+        
+        if (creativePatterns.length > 0) {
+          const avgCreativeConfidence = creativePatterns.reduce((sum, p) => sum + p.confidence, 0) / creativePatterns.length;
+          baseConfidence += Math.round(avgCreativeConfidence * 10); // Up to +10% boost  
+        }
+        
+        // Generate specific prediction based on patterns and locked content
+        if (dominantCategory && analyticalPatterns.length > 0) {
+          predictiveInsight = `probabilistic modeling and quantitative analysis within ${dominantCategory.toLowerCase()}`;
+        } else if (dominantCategory && creativePatterns.length > 0) {
+          predictiveInsight = `innovative applications and creative synthesis opportunities in ${dominantCategory.toLowerCase()}`;
+        } else if (lockedTopics.length >= 2) {
+          predictiveInsight = `interdisciplinary connections between ${lockedTopics[0]} and ${lockedTopics[1]}`;
+        } else {
+          predictiveInsight = `advanced applications and deeper theoretical frameworks`;
+        }
+        
+        // Cap confidence at reasonable maximum
+        baseConfidence = Math.min(baseConfidence, 73);
+        
+        contextPrompt += `🔮 PREDICTIVE INSIGHT GENERATION: The combination of your last ${processedLockedContext.length} locked nodes and your UBPM analysis allows me to predict with ${baseConfidence}% base confidence that your next area of inquiry will be related to ${predictiveInsight}.\n\n`;
+        contextPrompt += `MANDATORY PREDICTIVE INSIGHT: Include this EXACT text in the "predictiveInsight" field for ALL nodes: "The combination of your last ${processedLockedContext.length} sifts and your UBPM allows me to predict with ${baseConfidence}% base confidence that your next area of inquiry will be related to ${predictiveInsight}."\n\n`;
+      }
+    }
+
+    // Add comprehensive UBPM intelligence for surgical personalization
+    if (compressedUserContext && userBehaviorProfile) {
+      contextPrompt += `=== PERSONALIZATION INTELLIGENCE ===\n`;
+      
+      // Core behavioral patterns
+      if (userBehaviorProfile.behaviorMetrics?.communicationStyle) {
+        contextPrompt += `Communication Style: ${userBehaviorProfile.behaviorMetrics.communicationStyle}\n`;
+      }
+      
+      if (userBehaviorProfile.behaviorMetrics?.learningStyle) {
+        contextPrompt += `Learning Preference: ${userBehaviorProfile.behaviorMetrics.learningStyle}\n`;
+      }
+      
+      // User interests and preferences
+      const userConstants = compressedUserContext.userConstants;
+      if (userConstants?.preferences?.interests) {
+        contextPrompt += `Core Interests: ${userConstants.preferences.interests.join(', ')}\n`;
+      }
+      
+      // Recent behavioral insights
+      if (userConstants?.insights && userConstants.insights.length > 0) {
+        const recentInsights = userConstants.insights.slice(0, 3);
+        contextPrompt += `Recent Patterns: ${recentInsights.map(i => i.pattern || i.content || i).join('; ')}\n`;
+      }
+      
+      // Emotional context for tone matching
+      if (compressedUserContext.recentEmotions && compressedUserContext.recentEmotions.length > 0) {
+        const primaryEmotion = compressedUserContext.recentEmotions[0];
+        contextPrompt += `Current Emotional Context: ${primaryEmotion.emotion || primaryEmotion.type || 'neutral'}\n`;
+      }
+      
+      // Conversation context for continuity
+      if (compressedUserContext.conversation?.hasHistory) {
+        contextPrompt += `Conversation Context: User has ${compressedUserContext.conversation.messageCount} recent interactions\n`;
+      }
+      
+      contextPrompt += `\n⚡ CRITICAL: Use this intelligence to craft personalHook insights that are surgically precise to this user's actual patterns, interests, and communication style. Avoid generic personalization.\n\n`;
+    }
+
+    // Fallback: Add basic UBPM data from mobile if no compressed context available
+    else if (userData && !compressedUserContext) {
+      contextPrompt += `Basic User Context:\n`;
+      
+      if (userData.interests && userData.interests.length > 0) {
+        contextPrompt += `- Interests: ${userData.interests.join(', ')}\n`;
+      }
+      
+      if (userData.learningStyle) {
+        contextPrompt += `- Learning Style: ${userData.learningStyle}\n`;
+      }
+      
+      if (userData.behavioralMetrics?.communicationStyle) {
+        contextPrompt += `- Communication Style: ${userData.behavioralMetrics.communicationStyle}\n`;
+      }
+      
       contextPrompt += '\n';
     }
 
-    // Add user behavior context if available
-    if (userBehaviorProfile) {
-      contextPrompt += `User preferences: ${userBehaviorProfile.preferences?.interests?.join(', ') || 'None specified'}\n`;
-      contextPrompt += `Learning style: ${userBehaviorProfile.behaviorMetrics?.learningStyle || 'Not determined'}\n\n`;
+    // ========================================
+    // 🧠 THE PLAN: UBPM-INFLUENCED RESEARCH PLANNING
+    // ========================================
+    // The UBPM guides every Synthesizer decision from the first moment
+    
+    let researchApproach = 'balanced';
+    let toolPriority = [];
+    let explorationDepth = 'standard';
+    
+    // Analyze user's behavioral patterns to shape research plan
+    if (userBehaviorProfile?.behaviorPatterns) {
+      const patterns = userBehaviorProfile.behaviorPatterns;
+      
+      // ENHANCED PATTERN MATCHING: Match actual UBPM service patterns
+      const analyticalPatterns = patterns.filter(p => 
+        p.pattern?.includes('detailed_communicator') || 
+        p.pattern?.includes('inquisitive_learner') ||
+        p.pattern?.includes('analytical') ||
+        p.pattern?.includes('systematic') || 
+        p.pattern?.includes('data')
+      );
+      
+      const creativePatterns = patterns.filter(p => 
+        p.pattern?.includes('emotionally_expressive') ||
+        p.pattern?.includes('exploratory') || 
+        p.pattern?.includes('creative') ||
+        p.pattern?.includes('innovative')
+      );
+      
+      // Determine research approach based on behavioral dominance
+      if (analyticalPatterns.length > creativePatterns.length) {
+        researchApproach = 'data_driven';
+        toolPriority = ['academic_search', 'web_search', 'news_search'];
+        explorationDepth = 'deep_analysis';
+      } else if (creativePatterns.length > analyticalPatterns.length) {
+        researchApproach = 'exploratory';
+        toolPriority = ['web_search', 'news_search', 'academic_search'];
+        explorationDepth = 'broad_synthesis';
+      } else {
+        researchApproach = 'hybrid';
+        toolPriority = ['web_search', 'academic_search', 'news_search'];
+        explorationDepth = 'balanced_depth';
+      }
+      
+      logger.info('🧠 UBPM Research Plan Generated', { 
+        userId, 
+        approach: researchApproach, 
+        depth: explorationDepth,
+        analyticalScore: analyticalPatterns.length,
+        creativeScore: creativePatterns.length,
+        totalPatterns: patterns.length,
+        patternDetails: patterns.map(p => `${p.pattern}(${Math.round(p.confidence * 100)}%)`)
+      });
     }
 
-    // Create enhanced AI prompt for node generation
-    const aiPrompt = `${contextPrompt}Generate 4-5 discovery nodes that help the user explore "${query}" in meaningful and interconnected ways. Focus on ${selectedActions.join(' and ')} aspects. Each node should offer a unique perspective that builds toward deeper understanding.
+    // Determine optimal node count based on query complexity and actions (extended range)
+    const baseNodeCount = 3;
+    const actionBonus = Math.min(selectedActions.length, 3); // Max +3 for multiple actions
+    const queryComplexityBonus = query.split(' ').length > 5 ? 2 : 0; // +2 for complex queries
+    const lockedContextBonus = processedLockedContext && processedLockedContext.length > 0 ? 1 : 0; // +1 for recursive building
+    const optimalNodeCount = Math.min(baseNodeCount + actionBonus + queryComplexityBonus + lockedContextBonus, 8); // Extended cap at 8
+    
+    // ========================================
+    // 🎨 THE CURATION: UBPM-GUIDED SYNTHESIS
+    // ========================================
+    // Final nodes synthesized through the behavioral lens
+    
+    // Build approach-specific instructions with UBPM-powered personalHook guidance
+    let curationInstructions = '';
+    let contentStyle = '';
+    let personalHookGuidance = '';
+    
+    // ========================================
+    // 🧠 FEATURE 1: UBPM LINK - Explicit Connection Statement
+    // ========================================
+    // Generate surgical precision personalHook based on actual UBPM patterns
+    
+    let ubpmLinkGuidance = '';
+    if (userBehaviorProfile?.behaviorPatterns && userBehaviorProfile.behaviorPatterns.length > 0) {
+      // Extract the most confident behavioral pattern
+      const dominantPattern = userBehaviorProfile.behaviorPatterns
+        .sort((a, b) => b.confidence - a.confidence)[0];
+      
+      if (dominantPattern && dominantPattern.confidence > 0.7) {
+        // Generate specific UBPM link statement
+        const patternType = dominantPattern.pattern;
+        const confidencePercent = Math.round(dominantPattern.confidence * 100);
+        const description = dominantPattern.description;
+        
+        ubpmLinkGuidance = `CRITICAL UBPM LINK MANDATE: Every personalHook must begin with "Your UBPM shows ${description.toLowerCase()}" and then explain why this specific node is relevant. Use the exact pattern "${patternType}" (${confidencePercent}% confidence) to create surgically precise connections. This is NOT generic personalization - this is explicit behavioral analysis application.`;
+      } else {
+        ubpmLinkGuidance = `UBPM LINK: Every personalHook must begin with "Your UBPM shows [behavioral pattern]" based on their documented interaction style, then explain the connection.`;
+      }
+    } else {
+      // Even for new users, enforce the "Your UBPM shows" format as per CEO directive
+      ubpmLinkGuidance = `CRITICAL UBPM LINK MANDATE: Every personalHook must begin with "Your UBPM shows a developing pattern of [observed behavior]" since we are actively building their behavioral profile. Then explain why this node connects to their emerging interaction style. This demonstrates transparent intelligence in action.`;
+    }
+    
+    switch (researchApproach) {
+      case 'data_driven':
+        curationInstructions = 'Prioritize factual accuracy, statistical evidence, and systematic analysis. Include quantitative insights where possible.';
+        contentStyle = 'structured, evidence-based content with clear methodologies and data points';
+        personalHookGuidance = `${ubpmLinkGuidance} Focus on analytical frameworks and data-driven connections.`;
+        break;
+      case 'exploratory':
+        curationInstructions = 'Emphasize creative connections, innovative perspectives, and interdisciplinary synthesis. Inspire curiosity and discovery.';
+        contentStyle = 'narrative-rich content with creative examples and novel connections';
+        personalHookGuidance = `${ubpmLinkGuidance} Emphasize creative exploration and innovative thinking patterns.`;
+        break;
+      case 'hybrid':
+        curationInstructions = 'Balance analytical rigor with creative insights. Combine data-driven evidence with innovative perspectives.';
+        contentStyle = 'balanced content mixing factual grounding with creative applications';
+        personalHookGuidance = `${ubpmLinkGuidance} Balance analytical and creative elements in the connection.`;
+        break;
+      default:
+        curationInstructions = 'Provide comprehensive, balanced insights that serve multiple learning styles.';
+        contentStyle = 'well-rounded content with practical applications';
+        personalHookGuidance = `${ubpmLinkGuidance} Create relevant connections to their documented patterns.`;
+    }
+    
+    // Build exploration depth guidance
+    let depthGuidance = '';
+    switch (explorationDepth) {
+      case 'deep_analysis':
+        depthGuidance = 'Provide comprehensive analysis with detailed explanations, multiple perspectives, and thorough context.';
+        break;
+      case 'broad_synthesis':
+        depthGuidance = 'Create expansive connections across domains, emphasizing interdisciplinary links and creative applications.';
+        break;
+      case 'balanced_depth':
+        depthGuidance = 'Balance depth and breadth, providing sufficient detail while maintaining accessibility and connection to broader themes.';
+        break;
+      default:
+        depthGuidance = 'Maintain appropriate depth for the topic while ensuring practical applicability.';
+    }
+
+    const aiPrompt = `${contextPrompt}🧠 UBPM-GUIDED SYNTHESIS MANDATE:
+Research Approach: ${researchApproach.toUpperCase()}
+Exploration Depth: ${explorationDepth.replace('_', ' ').toUpperCase()}
+
+${curationInstructions}
+${depthGuidance}
+
+Generate exactly ${optimalNodeCount} discovery nodes that help the user explore "${query}" in meaningful and interconnected ways. Focus on ${selectedActions.join(' and ')} aspects. Each node should offer a unique perspective that builds toward deeper understanding.
 
 REQUIREMENTS:
 - Title: Compelling, specific, max 60 chars
-- Content: 2-3 informative sentences with actionable insights
+- Content: Rich markdown-formatted ${contentStyle} (2-3 paragraphs) with actionable insights, bullet points, and web search findings
 - Category: Relevant domain (Technology, Science, Philosophy, Art, etc.)
 - Confidence: 0.7-0.95 based on factual accuracy
-- PersonalHook: Connection to user interests/learning style (when applicable)
+- PersonalHook: ${personalHookGuidance} - make it surgically precise to their behavioral patterns
 
 FOCUS ON:
 - Practical applications and real-world impact
@@ -115,30 +527,31 @@ Return ONLY valid JSON array:
   {
     "title": "Specific, Compelling Title",
     "content": "Rich, informative content with concrete examples and actionable insights that inspire further exploration.",
-    "category": "Relevant Category",
+    "category": "Relevant Category", 
     "confidence": 0.85,
-    "personalHook": "How this connects to your exploration style and interests"
+    "personalHook": "Your UBPM shows [specific behavioral pattern] - explain precise connection",
+    "predictiveInsight": "REQUIRED for context fusion: Use exact text provided above when locked nodes present, null otherwise"
   }
 ]
 
 Ensure JSON is valid - no trailing commas, proper escaping.`;
 
-    // Map frontend actions to backend tools
+    // Map frontend actions to backend tools (UBPM-influenced)
     const actionToToolMap = {
-      'research': ['web_search', 'academic_search'],
+      'research': researchApproach === 'data_driven' ? ['academic_search', 'web_search'] : ['web_search', 'academic_search'],
       'search': ['web_search', 'news_search'],
-      'explore': ['web_search'],
-      'analyze': ['web_search', 'news_search'],
+      'explore': researchApproach === 'exploratory' ? ['web_search', 'news_search'] : ['web_search'],
+      'analyze': ['academic_search', 'web_search', 'news_search'],
       'find': ['web_search'],
       'investigate': ['web_search', 'academic_search'],
-      'discover': ['web_search'],
+      'discover': researchApproach === 'exploratory' ? ['web_search', 'news_search'] : ['web_search'],
       'lookup': ['web_search']
     };
     
     let tools = [];
     const requiredTools = new Set();
     
-    // Determine which tools are needed based on selected actions
+    // Determine tools based on UBPM-guided plan and selected actions
     selectedActions.forEach(action => {
       const actionLower = action.toLowerCase();
       if (actionToToolMap[actionLower]) {
@@ -146,11 +559,22 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       }
     });
     
-    // Always add web_search if any research-like action is selected
+    // Apply UBPM-influenced tool priority ordering
+    toolPriority.forEach(tool => {
+      if (requiredTools.has(tool)) {
+        requiredTools.delete(tool);
+        requiredTools.add(tool); // Re-add to maintain priority order
+      }
+    });
+    
+    // Always ensure web_search for factual grounding
+    requiredTools.add('web_search');
+    
+    // Additional tools based on selected actions
     if (selectedActions.some(action => 
       ['research', 'search', 'explore', 'analyze', 'find', 'investigate', 'discover', 'lookup'].includes(action.toLowerCase())
     )) {
-      requiredTools.add('web_search');
+      // Already added web_search above, but could add other research tools here
     }
     
     if (requiredTools.size > 0) {
@@ -170,15 +594,115 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       }
     }
 
-    // Generate nodes using LLM with optimized parameters and tools
+
+    // ========================================
+    // 🎯 THE PLANNER: Research Strategy & Tool Coordination
+    // ========================================
+    // Specialized model outlines research approach and coordinates tools
+    
+    const plannerPrompt = `You are the Planner - a specialized AI that creates research strategies and coordinates tool execution.
+
+TASK: Create a research plan for "${query}" using ${selectedActions.join(' and ')} approaches.
+
+UBPM CONTEXT:
+- Research Approach: ${researchApproach.toUpperCase()}
+- Exploration Depth: ${explorationDepth.replace('_', ' ').toUpperCase()}
+- Target Nodes: ${optimalNodeCount}
+
+${processedLockedContext && processedLockedContext.length > 0 ? 
+  `LOCKED CONTEXT: Build upon ${processedLockedContext.length} locked nodes: ${processedLockedContext.map(n => n.title).join(', ')}`
+  : ''}
+
+OUTPUT: Return ONLY a JSON object with your research plan:
+{
+  "strategy": "Brief strategy description",
+  "toolSequence": ["tool1", "tool2", "tool3"],
+  "researchFoci": ["focus1", "focus2", "focus3"],
+  "expectedInsights": ["insight1", "insight2"],
+  "contextualHappenings": [
+    {"phase": "planning", "action": "strategy_formulated", "details": "..."},
+    {"phase": "tool_coordination", "action": "tools_prioritized", "details": "..."}
+  ]
+}`;
+
+    logger.info('🎯 Invoking THE PLANNER for research strategy', { userId, researchApproach });
+    
+    const plannerResponse = await llmService.makeLLMRequest([
+      { role: 'system', content: 'You are the Planner - create research strategies and coordinate tool execution. Respond with ONLY valid JSON.' },
+      { role: 'user', content: plannerPrompt }
+    ], {
+      model: 'openai/gpt-4o-mini', // Fast, cost-effective for planning
+      max_tokens: 800,
+      temperature: 0.3, // More focused planning
+      response_format: { type: "json_object" }
+    });
+    
+    // ========================================
+    // 🛠️ JSON SANITIZATION UTILITY
+    // ========================================
+    /**
+     * Extracts clean JSON from LLM response that might contain Markdown fences
+     * @param {string} text - Raw response from LLM
+     * @returns {string} - Clean JSON string
+     */
+    const extractJsonFromResponse = (text) => {
+      if (!text || typeof text !== 'string') return text;
+      
+      // Remove markdown code fences (```json ... ```)
+      const jsonFenceMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonFenceMatch && jsonFenceMatch[1]) {
+        return jsonFenceMatch[1].trim();
+      }
+      
+      // Remove any remaining code fences (``` ... ```)
+      const codeFenceMatch = text.match(/```\s*([\s\S]*?)\s*```/);
+      if (codeFenceMatch && codeFenceMatch[1]) {
+        return codeFenceMatch[1].trim();
+      }
+      
+      // Return as-is if no fences found
+      return text.trim();
+    };
+
+    let researchPlan;
+    try {
+      const cleanPlannerContent = extractJsonFromResponse(plannerResponse.content);
+      researchPlan = JSON.parse(cleanPlannerContent);
+      logger.info('🎯 THE PLANNER strategy generated', { 
+        userId, 
+        strategy: researchPlan.strategy?.substring(0, 100),
+        toolCount: researchPlan.toolSequence?.length 
+      });
+    } catch (error) {
+      logger.warn('Planner response parsing failed, using fallback', { 
+        error: error.message,
+        rawContent: plannerResponse.content?.substring(0, 200)
+      });
+      researchPlan = {
+        strategy: `${researchApproach} research approach for ${query}`,
+        toolSequence: tools.map(t => t.function?.name).filter(Boolean),
+        researchFoci: selectedActions,
+        expectedInsights: ['comprehensive coverage', 'actionable insights'],
+        contextualHappenings: [
+          {"phase": "planning", "action": "fallback_strategy", "details": "Using default research plan"}
+        ]
+      };
+    }
+
+    // ========================================
+    // 🔧 TOOL EXECUTION: Coordinated Research
+    // ========================================
+    // Execute tools based on Planner's strategy
+    
+    // Generate nodes using LLM with Planner-coordinated tools (OPTIMIZED FOR PREDICTIVE INSIGHT)
     let response = await llmService.makeLLMRequest([
-      { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate discovery nodes as a JSON array. Each node must have: title (string), content (string), category (string), confidence (number 0-1), and personalHook (string or null). Your response must be ONLY a valid JSON array, no other text. Use available tools to get current information when needed.' },
+      { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate discovery nodes as a JSON array. Each node must have: title (string), content (concise markdown-formatted string), category (string), confidence (number 0-1), personalHook (string), and predictiveInsight (string or null). Keep content concise but informative. Your response must be ONLY a valid JSON array, no other text.' },
       { role: 'user', content: aiPrompt }
     ], {
-      n_predict: 1500,
-      temperature: 0.7, // Slightly higher for more creative responses
+      n_predict: 2000, // Increased for predictive insights
+      temperature: 0.7,
       stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
-      max_tokens: 1500,
+      max_tokens: 2000, // Increased to prevent truncation
       presence_penalty: 0.1,
       frequency_penalty: 0.1,
       tools: tools.length > 0 ? tools : undefined,
@@ -189,6 +713,7 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
     // Handle tool calls if present (similar to completion endpoint)
     if (response.stop_reason === 'tool_calls' && response.tool_calls) {
       logger.debug('Sandbox executing tool calls', { toolCallCount: response.tool_calls.length });
+      
       
       try {
         const toolResults = [];
@@ -211,7 +736,7 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
         
         // Get final response with tool results
         const messagesWithTools = [
-          { role: 'system', content: 'You must respond with ONLY a JSON array of discovery nodes. Format: [{"title":"string","content":"string","category":"string","confidence":0.0-1.0,"personalHook":"string or null"}]. Use the search results to create informed nodes. No other text allowed.' },
+          { role: 'system', content: 'You must respond with ONLY a JSON array of discovery nodes. Format: [{"title":"string","content":"markdown-formatted string with search findings","category":"string","confidence":0.0-1.0,"personalHook":"string or null"}]. Use web search results to create rich, factual content formatted as markdown with headings, bullet points, and links. No other text allowed.' },
           { role: 'user', content: aiPrompt },
           { 
             role: 'assistant', 
@@ -228,11 +753,12 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
         
         logger.debug('Getting final sandbox response after tool execution');
         
+        
         response = await llmService.makeLLMRequest(messagesWithTools, {
-          n_predict: 1500,
+          n_predict: 2000, // Increased for predictive insights
           temperature: 0.7,
           stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
-          max_tokens: 1500,
+          max_tokens: 2000, // Increased to prevent truncation
           presence_penalty: 0.1,
           frequency_penalty: 0.1,
           tools: [], // No tools in follow-up to avoid loops
@@ -276,32 +802,125 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       contentPreview: response.content?.substring(0, 100)
     });
 
-    let generatedNodes;
+    // ========================================
+    // 🎨 THE CURATOR: Final Synthesis & Enhancement
+    // ========================================
+    // Specialized model handles final node synthesis and quality enhancement
+    
+    let curatedNodes;
     try {
-      // Clean and parse the AI response
-      let cleanResponse = aiResponse.trim();
-      
-      if (!cleanResponse) {
-        throw new Error('Empty response from AI');
-      }
-      
-      // Remove code blocks if present
-      cleanResponse = cleanResponse.replace(/```json\n?|\n?```/g, '').trim();
-      
-      // Try to extract JSON array if wrapped in other text
+      // First parse the raw nodes
+      let rawNodes;
+      let cleanResponse = aiResponse.trim().replace(/```json\n?|\n?```/g, '').trim();
       const jsonMatch = cleanResponse.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        cleanResponse = jsonMatch[0];
+        rawNodes = JSON.parse(jsonMatch[0]);
+      } else {
+        rawNodes = JSON.parse(cleanResponse);
       }
       
-      generatedNodes = JSON.parse(cleanResponse);
-      
-      // Validate it's an array
-      if (!Array.isArray(generatedNodes)) {
-        throw new Error('Response is not an array');
+      if (!Array.isArray(rawNodes)) {
+        throw new Error('Raw nodes not an array');
       }
       
-      logger.debug('Successfully parsed AI response', { nodeCount: generatedNodes.length });
+      logger.info('🎨 Invoking THE CURATOR for final synthesis', { 
+        userId, 
+        rawNodeCount: rawNodes.length,
+        plannerStrategy: researchPlan.strategy?.substring(0, 50)
+      });
+      
+      // Enhanced curation with Planner's strategy context and new transparency features
+      const curatorPrompt = `You are the Curator - enhance research findings into polished discovery nodes with transparent intelligence.
+
+PLANNER'S STRATEGY: ${researchPlan.strategy}  
+RESEARCH APPROACH: ${researchApproach} with ${explorationDepth.replace('_', ' ')} depth
+
+RAW FINDINGS: ${JSON.stringify(rawNodes)}
+
+ENHANCEMENT MANDATE:
+1. Refine titles for maximum impact
+2. Enrich content with factual depth
+3. Perfect personalHook with UBPM transparency - start with "Your UBPM shows..." when behavioral data exists
+4. Include predictiveInsight field for context fusion scenarios (when multiple locked nodes are present)
+
+CRITICAL: Maintain all fields including personalHook and predictiveInsight. The response must demonstrate transparent intelligence.
+
+Return enhanced JSON array:`;
+
+      const curatorResponse = await llmService.makeLLMRequest([
+        { role: 'system', content: 'You are the Curator. Enhance nodes and respond with ONLY a valid JSON array. Keep content concise to prevent truncation.' },
+        { role: 'user', content: curatorPrompt }
+      ], {
+        model: 'openai/gpt-4o-mini', // Cost-effective for enhancement  
+        max_tokens: 2000, // Increased to prevent truncation
+        temperature: 0.4,
+        response_format: { type: "json_object" }
+      });
+      
+      // Parse curator response with sanitization
+      const cleanCuratorContent = extractJsonFromResponse(curatorResponse.content);
+      const curatorJsonMatch = cleanCuratorContent.match(/\[[\s\S]*\]/);
+      
+      if (curatorJsonMatch) {
+        curatedNodes = JSON.parse(curatorJsonMatch[0]);
+        
+        // Add contextual happenings from Planner
+        curatedNodes = curatedNodes.map(node => ({
+          ...node,
+          contextualHappenings: [
+            ...(researchPlan.contextualHappenings || []),
+            {"phase": "curation", "action": "enhanced_synthesis", "details": `Curated via ${researchApproach} approach`}
+          ]
+        }));
+        
+        logger.info('🎨 THE CURATOR enhancement complete', { 
+          userId, 
+          curatedNodeCount: curatedNodes.length 
+        });
+      } else {
+        throw new Error('Could not parse curator response');
+      }
+      
+    } catch (curatorError) {
+      logger.warn('Curator process failed, using standard parsing', { 
+        userId, 
+        error: curatorError.message 
+      });
+      curatedNodes = null; // Will use standard parsing
+    }
+
+    let generatedNodes;
+    try {
+      // Use curated nodes if available, otherwise fall back to standard parsing
+      if (curatedNodes && Array.isArray(curatedNodes)) {
+        generatedNodes = curatedNodes;
+        logger.info('Using Curator-enhanced nodes', { nodeCount: generatedNodes.length });
+      } else {
+        // Standard parsing fallback
+        let cleanResponse = aiResponse.trim();
+        
+        if (!cleanResponse) {
+          throw new Error('Empty response from AI');
+        }
+        
+        // Remove code blocks if present
+        cleanResponse = cleanResponse.replace(/```json\n?|\n?```/g, '').trim();
+        
+        // Try to extract JSON array if wrapped in other text
+        const jsonMatch = cleanResponse.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          cleanResponse = jsonMatch[0];
+        }
+        
+        generatedNodes = JSON.parse(cleanResponse);
+        
+        // Validate it's an array
+        if (!Array.isArray(generatedNodes)) {
+          throw new Error('Response is not an array');
+        }
+        
+        logger.debug('Using standard parsed nodes', { nodeCount: generatedNodes.length });
+      }
       
     } catch (parseError) {
       logger.warn('Failed to parse AI response as JSON', { 
@@ -320,16 +939,18 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       }));
     }
 
-    // Validate and sanitize generated nodes
+    // Validate and sanitize generated nodes with dynamic limits including new predictiveInsight field
+    const maxNodes = Math.min(optimalNodeCount + 2, 10); // Allow up to +2 extra, hard cap at 10
     const validNodes = (Array.isArray(generatedNodes) ? generatedNodes : [generatedNodes])
       .filter(node => node && typeof node.title === 'string' && typeof node.content === 'string')
-      .slice(0, 5) // Limit to 5 nodes max
+      .slice(0, maxNodes) // Dynamic limit with hard cap
       .map(node => ({
         title: String(node.title).substring(0, 100),
-        content: String(node.content).substring(0, 500),
+        content: String(node.content).substring(0, 1500), // Increased for rich markdown content
         category: String(node.category || 'Discovery').substring(0, 50),
         confidence: Math.min(1.0, Math.max(0.0, parseFloat(node.confidence) || 0.7)),
-        personalHook: node.personalHook ? String(node.personalHook).substring(0, 200) : null
+        personalHook: node.personalHook ? String(node.personalHook).substring(0, 200) : null,
+        predictiveInsight: node.predictiveInsight ? String(node.predictiveInsight).substring(0, 300) : null
       }));
 
     if (validNodes.length === 0) {
@@ -345,6 +966,7 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       query: query.substring(0, 50)
     });
 
+
     res.json({
       success: true,
       data: {
@@ -359,9 +981,15 @@ Ensure JSON is valid - no trailing commas, proper escaping.`;
       stack: error.stack
     });
 
+    // More detailed error for debugging
+    console.error('SANDBOX DEBUG - Full error:', error);
+    console.error('SANDBOX DEBUG - Error name:', error.name);
+    console.error('SANDBOX DEBUG - Error message:', error.message);
+
     res.status(500).json({
       success: false,
-      error: 'Failed to generate nodes'
+      error: 'Failed to generate nodes',
+      debug: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
