@@ -21,8 +21,10 @@ import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import requestCacheService from '../services/requestCacheService.js';
 import ubpmService from '../services/ubpmService.js';
 import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
+import { processContextInjection } from '../services/contextInjectionService.js';
 import { getIncrementalMemory, optimizeContextSize } from '../utils/incrementalMemory.js';
 import { trackMemoryUsage, calculateOptimizationSavings } from '../utils/memoryAnalytics.js';
+import { getRecentMemory } from '../utils/memory.js';
 import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForStorage, deduplicateImagesInMemory } from '../utils/imageCompressionBasic.js';
 import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
 import { getUserTier } from '../config/tiers.js';
@@ -44,6 +46,7 @@ const detectSimpleEmotion = (message) => {
   
   return 'neutral';
 };
+
 
 // INTELLIGENT SUMMARY FUNCTIONS for adaptive context sizing
 function generateTopicSummary(topicEvolution) {
@@ -81,7 +84,57 @@ function generateEmotionalSummary(emotionalShifts) {
 async function handleDirectDataQuery(userId, message) {
   const lowerMessage = message.toLowerCase();
   
-  // Import memory analytics utility
+  // First check for individual metric queries with precise data access
+  try {
+    const profile = await UserBehaviorProfile.findOne({ userId });
+    const intelligenceData = profile?.intelligenceData;
+    
+    if (intelligenceData) {
+      // Message complexity queries
+      if (lowerMessage.includes('message complexity') || (lowerMessage.includes('complexity') && !lowerMessage.includes('temporal'))) {
+        const complexity = intelligenceData?.micro?.messageComplexity?.current;
+        if (complexity !== undefined) {
+          return `Your current message complexity is ${complexity.toFixed(2)}. This metric reflects the intricacy of your language and the depth of the concepts you're exploring in our conversation. If you have any specific questions about how this complexity is determined or how it might relate to your communication style, feel free to ask!`;
+        }
+      }
+      
+      // Primary emotion queries
+      if (lowerMessage.includes('primary emotion') || lowerMessage.includes('emotion right now')) {
+        const emotion = intelligenceData?.micro?.currentState?.primaryEmotion;
+        if (emotion) {
+          return `Based on the analysis of your recent messages, your primary emotion appears to be ${emotion}. This reflects your current emotional state as detected through your communication patterns. Is there anything specific you'd like to explore or discuss about this?`;
+        }
+      }
+      
+      // Cognitive load queries
+      if (lowerMessage.includes('cognitive load')) {
+        const cognitiveLoad = intelligenceData?.micro?.currentState?.cognitiveLoad;
+        if (cognitiveLoad) {
+          return `Your cognitive load is currently ${cognitiveLoad}, as indicated by the complexity of your inquiries and the level of detail you're engaging with. This suggests you're processing information ${cognitiveLoad === 'high' ? 'intensively' : cognitiveLoad === 'low' ? 'efficiently without strain' : 'effectively without being overwhelmed'}. If you'd like to delve deeper into any topic or need assistance managing your cognitive load, feel free to ask!`;
+        }
+      }
+      
+      // Engagement level queries
+      if (lowerMessage.includes('engagement level')) {
+        const engagement = intelligenceData?.micro?.currentState?.engagementLevel;
+        if (engagement) {
+          return `Your current engagement level is ${engagement}. This indicates you're actively ${engagement === 'sharing' ? 'sharing information and participating in the conversation' : engagement}. Would you like to explore this further or discuss anything specific?`;
+        }
+      }
+      
+      // Dominant topic queries
+      if (lowerMessage.includes('dominant topic') || lowerMessage.includes('main topic')) {
+        const dominantTopic = intelligenceData?.micro?.topicEvolution?.dominantTopic;
+        if (dominantTopic) {
+          return `Your dominant topic in our conversation is ${dominantTopic}. This represents the primary theme you've been focusing on based on your message patterns. Feel free to continue exploring this or shift to any other topic you're interested in!`;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error accessing intelligence data:', error);
+  }
+  
+  // Import memory analytics utility for fallback queries
   const { getUserMemoryAnalytics } = await import('../utils/memoryAnalytics.js');
   
   try {
@@ -302,49 +355,7 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory, str
         intelligenceStreamCallback
       );
       
-      console.log(`🧠 Intelligence context generated:`, {
-        hasMicro: !!intelligenceContext?.micro,
-        hasMedium: !!intelligenceContext?.medium,
-        hasMacro: !!intelligenceContext?.macro,
-        hasSynthesis: !!intelligenceContext?.synthesis,
-        microComplexity: intelligenceContext?.micro?.messageComplexity?.current,
-        fullContext: intelligenceContext
-      });
-      
-      // 🔍 DETAILED INTELLIGENCE BREAKDOWN - Show actual data instead of [Object]
-      if (intelligenceContext) {
-        console.log(`📊 MICRO ANALYSIS:`, JSON.stringify(intelligenceContext.micro, null, 2));
-        console.log(`📈 MEDIUM ANALYSIS:`, JSON.stringify(intelligenceContext.medium, null, 2));
-        console.log(`🎯 MACRO ANALYSIS:`, JSON.stringify(intelligenceContext.macro, null, 2));
-        console.log(`🧬 SYNTHESIS:`, JSON.stringify(intelligenceContext.synthesis, null, 2));
-        
-        // 🚨 DATA COMPLETENESS CHECK - Verify nothing is missing
-        const dataCheck = {
-          microFields: Object.keys(intelligenceContext.micro || {}),
-          mediumFields: Object.keys(intelligenceContext.medium || {}),
-          macroFields: Object.keys(intelligenceContext.macro || {}),
-          synthesisFields: Object.keys(intelligenceContext.synthesis || {}),
-          totalDataPoints: 0
-        };
-        
-        // Count all data points to track completeness
-        const countDataPoints = (obj) => {
-          let count = 0;
-          for (const key in obj) {
-            if (obj[key] !== null && obj[key] !== undefined) {
-              count++;
-              if (typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-                count += countDataPoints(obj[key]);
-              }
-            }
-          }
-          return count;
-        };
-        
-        dataCheck.totalDataPoints = countDataPoints(intelligenceContext);
-        console.log(`🔍 INTELLIGENCE COMPLETENESS CHECK:`, dataCheck);
-        
-        // 🗜️ ULTRA-INTELLIGENT COMPRESSION V2 - Advanced optimization
+      // 🗜️ ULTRA-INTELLIGENT COMPRESSION V2 - Advanced optimization
         const messageType = detectMessageType(userMessage);
         const messageComplexity = intelligenceContext?.micro?.messageComplexity?.current || 5;
         
@@ -400,19 +411,13 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory, str
           compressionAnalytics.recordABTestResult('compression_optimization', abTestStrategy, compressionResult.metadata);
         }
         
-        console.log(`🚀 ULTRA-COMPRESSION V2:`, {
+        // Business-critical compression metrics only
+        console.log(`🚀 COMPRESSION:`, {
+          ratio: compressionResult.metadata.compressionRatio + '%',
+          tokens: `${compressionResult.metadata.actualTokens}/${compressionResult.metadata.tokenBudget}`,
           strategy: compressionResult.metadata.strategy,
-          compressionRatio: compressionResult.metadata.compressionRatio + '%',
-          tokenBudget: compressionResult.metadata.tokenBudget,
-          actualTokens: compressionResult.metadata.actualTokens,
-          qualityScore: compressionResult.metadata.qualityScore,
-          processingTime: compressionResult.metadata.processingTime + 'ms',
-          clusters: compressionResult.metadata.intelligenceClusters,
-          originalDataPoints: dataCheck.totalDataPoints
+          time: compressionResult.metadata.processingTime + 'ms'
         });
-        
-        console.log(`🎯 OPTIMIZED INTELLIGENCE PROMPT:`, compressionResult.compressedPrompt);
-      }
     } catch (error) {
       console.error(`❌ Intelligence engine error:`, error);
       // Create fallback intelligence context
@@ -1028,6 +1033,9 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
       });
     }
 
+    // Always log user messages for conversation tracking
+    console.log(`👤 USER [${userId.slice(-8)}]: ${userMessage}`);
+
     // Enhanced image handling - ensure images are visible in chat
     let finalMessage = userMessage;
     let hasImageWithoutText = false;
@@ -1044,19 +1052,48 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
       finalMessage = 'Please analyze the attached content.';
     }
     
-    // DIRECT DATA QUERIES: Handle specific metrics requests instantly
-    const directDataResult = await handleDirectDataQuery(userId, finalMessage);
-    if (directDataResult) {
-      return res.json({
-        success: true,
-        data: {
-          response: directDataResult,
-          tone: 'data',
-          suggestedFollowUps: [],
-          emotionalSupport: '',
-          adaptationReason: 'Direct data query response'
-        }
-      });
+    // CONTEXT INJECTION: Pre-process for ambiguous queries that need context
+    const recentMemoryForContext = await getRecentMemory(userId, userCache, { 
+      maxMessages: 10, 
+      contextType: 'standard' 
+    });
+    
+    const contextInjection = processContextInjection(finalMessage, recentMemoryForContext);
+    
+    let processedMessage = finalMessage;
+    let forceGPT = false;
+    
+    if (contextInjection.isProcessed) {
+      processedMessage = contextInjection.enrichedMessage;
+      forceGPT = contextInjection.forceGPT;
+      
+      console.log(`🔄 CONTEXT INJECTION: "${finalMessage}" → enriched with previous response context`);
+    }
+
+    // DIRECT DATA QUERIES: Handle specific metrics requests instantly (but skip if context injection forces GPT)
+    if (!forceGPT) {
+      const directDataResult = await handleDirectDataQuery(userId, processedMessage);
+      if (directDataResult) {
+        // Log direct data query responses
+        console.log(`🤖 BOT [${userId.slice(-8)}]: ${directDataResult}`);
+        
+        // IMPORTANT: Save direct query responses to conversation history for future context
+        await ShortTermMemory.insertMany([
+          { userId, content: finalMessage, role: "user" },
+          { userId, content: directDataResult, role: "assistant" }
+        ]).catch(err => console.error('Error saving direct query to memory:', err));
+        
+        return res.json({
+          success: true,
+          data: {
+            response: directDataResult,
+            tone: 'data',
+            suggestedFollowUps: [],
+            emotionalSupport: '',
+            adaptationReason: 'Direct data query response'
+          }
+        });
+      }
     }
     
     // COST OPTIMIZATION: Smart context window management based on request type
@@ -1141,6 +1178,10 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
 
     // Build enhanced system prompt with persistent user knowledge
     const baseSystemPrompt = `You are Numina. Your responses reveal an almost unsettling accuracy about who people really are.
+
+NUMINA AETHER:
+• When asked "what is numina aether" respond: "Numina Aether is a higher tier of Numina that can be purchased in your wallet and unlocks advanced features"
+• Do NOT explain it as philosophical concepts - it is our premium service tier
 
 BEHAVIORAL ANALYSIS:
 • Detect personality type from word choice, sentence structure, and question patterns
@@ -1383,7 +1424,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
     // Add conversation history to messages
     messages.push(...conversationHistory);
 
-    // Add user message with potential image attachments
+    // Add user message with potential image attachments (use processed message for context injection)
     if (attachments && attachments.length > 0) {
       // Use multi-modal message format for images
       const imageAttachments = attachments.filter(att => 
@@ -1392,7 +1433,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
       
       if (imageAttachments.length > 0) {
         console.log(`🖼️ GPT-4o VISION: Processing ${imageAttachments.length} image attachments for user ${userId}`);
-        console.log(`🖼️ GPT-4o VISION: Message text: "${finalMessage}"`);
+        console.log(`🖼️ GPT-4o VISION: Message text: "${processedMessage}"`);
         console.log(`🖼️ GPT-4o VISION: Total attachment data size:`, 
           imageAttachments.reduce((sum, img) => sum + (img.url?.length || 0), 0), 'characters');
         // Enhanced content for image-only messages
@@ -1401,7 +1442,7 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             type: 'text', 
             text: hasImageWithoutText ? 
               `The user has shared an image without any text. Please analyze the image and provide insights about what you see, connecting it to their personality and interests.` :
-              finalMessage
+              processedMessage
           }
         ];
         
@@ -1421,12 +1462,12 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
           content: content
         });
       } else {
-        // No valid images, use text-only
-        messages.push({ role: 'user', content: finalMessage });
+        // No valid images, use text-only (with processed message for context injection)
+        messages.push({ role: 'user', content: processedMessage });
       }
     } else {
-      // No attachments, use text-only
-      messages.push({ role: 'user', content: finalMessage });
+      // No attachments, use text-only (with processed message for context injection)
+      messages.push({ role: 'user', content: processedMessage });
     }
 
     if (stream === true) {
@@ -2247,6 +2288,9 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
           console.error(`❌ Error saving enhanced adaptive chat conversation:`, err);
         }
       }
+
+      // Always log bot responses for conversation tracking
+      console.log(`🤖 BOT [${userId.slice(-8)}]: ${finalContent}`);
 
       res.json({
         success: true,

@@ -29,7 +29,7 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
 
   const limits = contextLimits[contextType] || contextLimits.standard;
   const effectiveLimit = Math.min(maxMessages, limits.messages);
-  const effectiveTimeWindow = Math.min(limitMinutes, limits.timeWindow);
+  const effectiveTimeWindow = Math.min(limitMinutes || limits.timeWindow, limits.timeWindow);
 
   try {
     const projection = includeImages 
@@ -38,6 +38,13 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
 
     // Fetch more than needed for importance scoring
     const fetchLimit = useImportanceScoring ? effectiveLimit * 2 : effectiveLimit;
+    
+    // Ensure we have a valid timestamp for queries
+    let timeThreshold = new Date(Date.now() - effectiveTimeWindow * 60 * 1000);
+    if (isNaN(timeThreshold.getTime())) {
+      console.error('Invalid time threshold calculated, using default 24 hours');
+      timeThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    }
 
     let memory;
     // Use cache if available, otherwise fetch from database
@@ -47,7 +54,8 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
         ShortTermMemory.find({ 
           userId,
           timestamp: { 
-            $gte: new Date(Date.now() - effectiveTimeWindow * 60 * 1000) 
+            $gte: timeThreshold,
+            $type: "date" // Ensure timestamp is a valid date
           }
         }, projection)
           .sort({ timestamp: -1 })
@@ -59,7 +67,8 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
       memory = await ShortTermMemory.find({ 
         userId,
         timestamp: { 
-          $gte: new Date(Date.now() - effectiveTimeWindow * 60 * 1000) 
+          $gte: timeThreshold,
+          $type: "date" // Ensure timestamp is a valid date
         }
       }, projection)
         .sort({ timestamp: -1 })
