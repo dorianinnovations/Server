@@ -79,7 +79,7 @@ const sandboxSessionSchema = new mongoose.Schema({
 
 // Indexes for better performance
 sandboxSessionSchema.index({ userId: 1, createdAt: -1 });
-sandboxSessionSchema.index({ sessionId: 1 });
+// sessionId index already defined in schema with 'index: true'
 sandboxSessionSchema.index({ 'metadata.dataQuality': 1 });
 sandboxSessionSchema.index({ isActive: 1 });
 

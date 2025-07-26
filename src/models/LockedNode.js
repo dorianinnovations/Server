@@ -52,7 +52,7 @@ const lockedNodeSchema = new mongoose.Schema({
 
 // Compound index for efficient queries
 lockedNodeSchema.index({ userId: 1, isActive: 1, createdAt: -1 });
-lockedNodeSchema.index({ nodeId: 1, userId: 1 });
+// nodeId and userId indexes already defined in schema with 'index: true'
 
 // Update usage stats when accessed
 lockedNodeSchema.methods.updateUsage = function(sessionId) {
