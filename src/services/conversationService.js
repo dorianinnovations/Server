@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Conversation from '../models/Conversation.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import { log } from '../utils/logger.js';
@@ -32,7 +33,13 @@ class ConversationService {
       let conversation;
       
       if (conversationId) {
-        conversation = await Conversation.findOne({ _id: conversationId, userId });
+        // Skip temporary IDs and invalid ObjectIds - treat as new conversation
+        if (conversationId.startsWith('temp_') || !mongoose.Types.ObjectId.isValid(conversationId)) {
+          log.info(`Temporary or invalid conversationId: ${conversationId}, creating new conversation`);
+          conversationId = null; // Force creation of new conversation
+        } else {
+          conversation = await Conversation.findOne({ _id: conversationId, userId });
+        }
       }
       
       // Create new conversation if none exists

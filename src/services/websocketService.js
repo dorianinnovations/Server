@@ -41,6 +41,10 @@ class WebSocketService {
         const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
         
         if (!token) {
+          log.warn('WebSocket connection attempt without token', {
+            ip: socket.request.connection.remoteAddress,
+            userAgent: socket.request.headers['user-agent']
+          });
           return next(new Error('No token provided'));
         }
 
@@ -48,6 +52,10 @@ class WebSocketService {
         const user = await User.findById(decoded.userId);
         
         if (!user) {
+          log.warn('WebSocket connection attempt with invalid user', {
+            userId: decoded.userId,
+            ip: socket.request.connection.remoteAddress
+          });
           return next(new Error('User not found'));
         }
 
@@ -58,16 +66,35 @@ class WebSocketService {
           username: user.username || user.email.split('@')[0]
         };
         
+        log.debug('WebSocket authentication successful', { userId: socket.userId });
         next();
       } catch (error) {
-        log.error('WebSocket authentication error', error);
+        log.error('WebSocket authentication error', error, {
+          ip: socket.request.connection.remoteAddress,
+          userAgent: socket.request.headers['user-agent']
+        });
         next(new Error('Authentication failed'));
       }
     });
 
     // Connection handling
     this.io.on('connection', (socket) => {
+      log.system(`WebSocket connection established for user: ${socket.userId}`);
       this.handleConnection(socket);
+    });
+
+    // Error handling
+    this.io.on('connect_error', (error) => {
+      log.error('WebSocket connection error', error);
+    });
+
+    this.io.engine.on('connection_error', (err) => {
+      log.error('WebSocket engine connection error', err, {
+        req: err.req,
+        code: err.code,
+        message: err.message,
+        context: err.context
+      });
     });
 
     // WebSocket service initialized successfully
@@ -452,10 +479,21 @@ class WebSocketService {
   }
 
   /**
+   * Check if user is connected
+   */
+  isUserConnected(userId) {
+    return this.connectedUsers.has(userId);
+  }
+
+  /**
    * Send message to specific user
    */
   sendToUser(userId, event, data) {
-    this.io.to(`user:${userId}`).emit(event, data);
+    if (this.isUserConnected(userId)) {
+      this.io.to(`user:${userId}`).emit(event, data);
+      return true;
+    }
+    return false;
   }
 
   /**

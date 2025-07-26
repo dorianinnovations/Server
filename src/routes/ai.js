@@ -29,6 +29,7 @@ import { selectOptimalImagesForAPI, calculateMemoryUsage, processAttachmentsForS
 import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
 import { getUserTier } from '../config/tiers.js';
 import { analyticsRateLimiters } from '../middleware/analyticsRateLimiter.js';
+import WebSearchService from '../services/webSearchService.js';
 
 const router = express.Router();
 const llmService = createLLMService();
@@ -1202,8 +1203,6 @@ NUMINA AETHER:
 CREATOR:
 • Numina was created and developed entirely by Isaiah Pappas
 • Isaiah is the sole creator and developer of this application
-• He openly expresses his gratitude for Claude Code CLI for helping him create Numina
-• He was also extremely impressed with Gemini but at times it could prove to be tedious to work with
 
 BEHAVIORAL ANALYSIS:
 • Detect personality type from word choice, sentence structure, and question patterns
@@ -2709,6 +2708,65 @@ Respond with exactly 2-4 words:`;
       success: true,
       insight: fallbackInsight,
       fallback: true
+    });
+  }
+});
+
+// Web Search and Summarization Endpoint
+router.post('/web-search', protect, checkTierLimits, async (req, res) => {
+  try {
+    const { query, maxResults = 5, summaryStyle = 'comprehensive' } = req.body;
+    
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    // Rate limiting for web search
+    const userTier = await getUserTier(req.user.id);
+    const searchLimits = {
+      CORE: { daily: 10, hourly: 3 },
+      PREMIUM: { daily: 50, hourly: 15 },
+      ULTIMATE: { daily: 200, hourly: 50 }
+    };
+
+    const userLimit = searchLimits[userTier] || searchLimits.CORE;
+    
+    // Check if user has exceeded limits (implement your rate limiting logic here)
+    // For now, we'll proceed with the search
+
+    const webSearchService = new WebSearchService();
+    
+    const result = await webSearchService.searchAndSummarize(query, {
+      maxResults: Math.min(maxResults, userTier === 'ULTIMATE' ? 10 : 5),
+      summaryStyle,
+      userId: req.user.id
+    });
+
+    if (!result.success) {
+      return res.status(503).json({
+        success: false,
+        message: result.message || 'Search service temporarily unavailable'
+      });
+    }
+
+    res.json({
+      success: true,
+      query: result.query,
+      summary: result.summary,
+      sources: result.sources,
+      searchTimestamp: result.timestamp,
+      userTier
+    });
+
+  } catch (error) {
+    console.error('Web search endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during web search',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

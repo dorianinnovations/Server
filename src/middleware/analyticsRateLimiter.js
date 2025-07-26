@@ -83,7 +83,7 @@ export const createAnalyticsRateLimiter = (endpointName, options = {}) => {
         return res.status(429).json({
           success: false,
           error: 'Analytics rate limit exceeded',
-          message: `${message} Try again in ${minutesRemaining} minutes.`,
+          message: `Analytics insights are limited to once per hour to ensure quality responses. Try again in ${minutesRemaining} minutes.`,
           endpoint: endpointName,
           rateLimitInfo: {
             limit: maxCalls,
@@ -155,9 +155,9 @@ export const analyticsRateLimiters = {
   
   // LLM analytics processing (very expensive)
   llmAnalytics: createAnalyticsRateLimiter('llm-analytics', {
-    maxCalls: 1,
-    windowMs: 60 * 60 * 1000,
-    message: 'LLM analytics processing is limited to 1 call per hour per user'
+    maxCalls: process.env.NODE_ENV === 'development' ? 20 : 1,
+    windowMs: process.env.NODE_ENV === 'development' ? 5 * 60 * 1000 : 60 * 60 * 1000, // 5 min dev, 1 hour prod
+    message: `LLM analytics processing is limited to ${process.env.NODE_ENV === 'development' ? '20 calls per 5 minutes' : '1 call per hour'} per user`
   }),
   
   // Behavioral analysis (expensive)

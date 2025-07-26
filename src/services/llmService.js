@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import https from "https";
 import http from "http";
 import processingObserver from './processingObserver.js';
+import workflowObserver from './workflowObserver.js';
 
 dotenv.config();
 
@@ -47,23 +48,15 @@ export const createLLMService = () => {
       attachments = null,
       observerSessionId = null, // NEW: for observer bridge
       observerPurpose = 'default', // NEW: what this LLM call is for
+      workflowStepId = null, // NEW: for workflow progress
+      workflowProgress = null // NEW: progress within step
     } = options;
 
     const llmStartTime = Date.now();
 
-    // Notify observer that LLM request is starting
-    if (observerSessionId) {
-      // Extract query context from messages
-      const messages = Array.isArray(promptOrMessages) ? promptOrMessages : [{ content: promptOrMessages }];
-      const userMessage = messages.find(m => m.role === 'user')?.content || messages[messages.length - 1]?.content || '';
-      const queryContext = userMessage.length > 100 ? userMessage.substring(0, 100) : userMessage;
-      
-      processingObserver.observeLLMStart(observerSessionId, {
-        model: 'openai/gpt-4o',
-        purpose: observerPurpose,
-        messageCount: Array.isArray(promptOrMessages) ? promptOrMessages.length : 1,
-        query: queryContext
-      });
+    // Report workflow progress if workflow context provided
+    if (observerSessionId && workflowStepId && workflowProgress !== null) {
+      workflowObserver.updateStepProgress(observerSessionId, workflowStepId, workflowProgress);
     }
 
     try {

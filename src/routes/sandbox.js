@@ -11,6 +11,7 @@ import logger from '../utils/logger.js';
 import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
 import aiActivityMonitor from '../services/aiActivityMonitor.js';
 import processingObserver from '../services/processingObserver.js';
+import workflowObserver from '../services/workflowObserver.js';
 import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
@@ -22,6 +23,42 @@ const llmService = createLLMService();
 // Simple test route to verify sandbox routes are loading
 router.get('/test', (req, res) => {
   res.json({ success: true, message: 'Sandbox routes are working!' });
+});
+
+// Test streaming endpoint
+router.get('/test-stream', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  const sendSSE = (eventType, data) => {
+    res.write(`event: ${eventType}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  let counter = 0;
+  const interval = setInterval(() => {
+    counter++;
+    sendSSE('test_message', {
+      message: `Test narration ${counter}`,
+      timestamp: new Date().toISOString()
+    });
+
+    if (counter >= 5) {
+      sendSSE('completed', { message: 'Test completed' });
+      clearInterval(interval);
+      res.end();
+    }
+  }, 1000);
+
+  req.on('close', () => {
+    clearInterval(interval);
+    res.end();
+  });
 });
 
 // Test pill actions without authentication (for development only)
@@ -365,13 +402,325 @@ router.post('/pill-actions', protect, async (req, res) => {
 });
 
 /**
+ * POST /sandbox/generate-nodes-stream
+ * Generate AI-powered discovery nodes with real-time streaming narration
+ */
+router.post('/generate-nodes-stream', protect, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { query, selectedActions, lockedContext, useUBPM, userData, pillConfig } = req.body;
+
+    logger.debug('Sandbox generate-nodes-stream request', { 
+      userId, 
+      query: query?.substring(0, 100),
+      actionsCount: selectedActions?.length,
+      lockedNodesCount: lockedContext?.length,
+      useUBPM 
+    });
+
+    // Validate required fields
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Query is required and must be a string'
+      });
+    }
+
+    // Provide sensible defaults if no actions selected - don't punish users!
+    if (!selectedActions || !Array.isArray(selectedActions) || selectedActions.length === 0) {
+      selectedActions = ['explore']; // Default to explore mode
+      logger.info('No actions provided, defaulting to explore mode', { userId });
+    }
+
+    // Set up Server-Sent Events
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // SSE helper function
+    const sendSSE = (eventType, data) => {
+      res.write(`event: ${eventType}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Send initial event
+    sendSSE('started', {
+      message: 'Starting your discovery journey...',
+      query: query.substring(0, 100),
+      actions: selectedActions,
+      timestamp: new Date().toISOString()
+    });
+
+    // Continue with the original logic but add streaming updates
+    let userTier = 'CORE';
+    let remainingDives = 3;
+    let canUseRecursiveFuse = false;
+    let processedLockedContext = lockedContext;
+    
+    sendSSE('status', { message: 'Checking your subscription tier...' });
+    
+    try {
+      const user = await User.findById(userId).select('subscription profile');
+      if (user?.subscription?.tier === 'AETHER' && user?.subscription?.status === 'active') {
+        userTier = 'AETHER';
+        remainingDives = Infinity;
+        canUseRecursiveFuse = true;
+        sendSSE('tier_detected', { 
+          tier: 'AETHER', 
+          message: 'AETHER tier detected - unlimited exploration unlocked!' 
+        });
+      } else {
+        const todaysDives = user?.profile?.dailyDives || 0;
+        remainingDives = Math.max(0, 3 - todaysDives);
+        canUseRecursiveFuse = lockedContext && lockedContext.length > 0 && remainingDives > 0;
+        
+        if (lockedContext && lockedContext.length > 0) {
+          processedLockedContext = lockedContext.slice(0, 2);
+        }
+        sendSSE('tier_detected', { 
+          tier: 'CORE', 
+          remainingDives,
+          message: `CORE tier - ${remainingDives} dives remaining today` 
+        });
+      }
+    } catch (error) {
+      sendSSE('warning', { message: 'Unable to verify tier, proceeding with CORE limits' });
+    }
+    
+    if (userTier === 'CORE' && remainingDives <= 0) {
+      sendSSE('error', {
+        error: 'DIVE_LIMIT_REACHED',
+        message: 'You\'ve reached your 3 daily discovery dives limit.',
+        upgrade: {
+          tier: 'AETHER',
+          benefits: [
+            'Unlimited recursive knowledge sifts',
+            'Enhanced predictive context fusion', 
+            'Advanced UBPM personalization',
+            'Priority tool access'
+          ]
+        }
+      });
+      res.end();
+      return;
+    }
+
+    // Set up observer for real-time narration
+    const observerSessionId = `obs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    processingObserver.registerObserver(observerSessionId, {
+      onActivity: (message) => {
+        sendSSE('narration', { 
+          message: message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    sendSSE('status', { message: 'Gathering your behavioral insights...' });
+
+    // Get comprehensive user context for personalization
+    const user = await User.findById(userId);
+    let userBehaviorProfile = null;
+    let compressedUserContext = null;
+    
+    if (useUBPM) {
+      try {
+        sendSSE('status', { message: 'Analyzing your behavioral patterns...' });
+        
+        userBehaviorProfile = await UserBehaviorProfile.findOne({ userId });
+        compressedUserContext = await enhancedMemoryService.getUserContext(userId, 8);
+        await ubpmService.analyzeUserBehaviorPatterns(userId, 'sandbox_generation');
+        
+        if (userBehaviorProfile) {
+          sendSSE('ubpm_detected', { 
+            message: `Found ${userBehaviorProfile.behaviorPatterns?.length || 0} behavioral patterns`,
+            patterns: userBehaviorProfile.behaviorPatterns?.length || 0
+          });
+        }
+      } catch (error) {
+        sendSSE('warning', { message: 'Unable to load behavioral insights, using defaults' });
+      }
+    }
+
+    sendSSE('status', { message: 'Building discovery context...' });
+
+    // Build context for AI with pill configuration
+    let contextPrompt = `User is exploring: "${query}"\n\nSelected actions: ${selectedActions.join(', ')}\n\n`;
+    
+    if (pillConfig && pillConfig.focusAreas) {
+      contextPrompt += `Focus Areas: ${pillConfig.focusAreas.join(', ')}\n`;
+      contextPrompt += `Processing Approach: ${pillConfig.systemPrompts ? pillConfig.systemPrompts[0] : 'General assistance'}\n\n`;
+    }
+    
+    if (processedLockedContext && processedLockedContext.length > 0) {
+      sendSSE('status', { message: 'Activating THE FUSE - synthesizing locked knowledge...' });
+      
+      contextPrompt += `=== THE FUSE: PREDICTIVE KNOWLEDGE SYNTHESIS ===\n`;
+      
+      const lockedThemes = processedLockedContext.map(node => node.category).filter(Boolean);
+      const lockedTopics = processedLockedContext.map(node => 
+        node.title.split(' ').slice(0, 3).join(' ')
+      );
+      
+      let predictiveContext = '';
+      if (userBehaviorProfile?.behaviorPatterns) {
+        const userPatterns = userBehaviorProfile.behaviorPatterns;
+        const dominantPattern = userPatterns.sort((a, b) => b.confidence - a.confidence)[0];
+        
+        if (dominantPattern) {
+          sendSSE('fuse_activated', { 
+            message: `Fusing ${dominantPattern.pattern} pattern with locked knowledge`,
+            confidence: Math.round(dominantPattern.confidence * 100)
+          });
+          
+          predictiveContext = `Given your ${dominantPattern.pattern} behavioral pattern (${Math.round(dominantPattern.confidence * 100)}% confidence), you're likely to be interested in: `;
+        }
+      }
+      
+      contextPrompt += `Previously locked insights:\n${processedLockedContext.map(node => `- ${node.title}: ${node.content}`).join('\n')}\n\n`;
+      if (predictiveContext) {
+        contextPrompt += predictiveContext + '\n\n';
+      }
+    }
+
+    sendSSE('status', { message: 'Initializing AI discovery engine...' });
+
+    // Prepare tools if needed
+    let tools = [];
+    if (pillConfig?.tools && pillConfig.tools.length > 0) {
+      try {
+        sendSSE('status', { message: 'Loading specialized tools...' });
+        
+        const allTools = await toolRegistry.getToolsForOpenAI();
+        tools = allTools.filter(tool => 
+          pillConfig.tools.includes(tool.function.name)
+        );
+        
+        if (tools.length > 0) {
+          sendSSE('tools_loaded', { 
+            message: `Loaded ${tools.length} specialized tools`,
+            tools: tools.map(t => t.function.name)
+          });
+        }
+      } catch (error) {
+        sendSSE('warning', { message: 'Failed to load tools, proceeding without them' });
+      }
+    }
+
+    sendSSE('status', { message: 'Generating discovery nodes...' });
+
+    // Create the LLM request with real-time observer
+    const systemPrompt = pillConfig?.systemPrompts?.[0] || 'You are an AI discovery assistant that helps users explore ideas and generate insights.';
+    const userPrompt = `${contextPrompt}\n\nGenerate 4-6 diverse discovery nodes that help explore "${query}" from different angles. Each node should be a unique perspective or approach to understanding this topic.
+
+Return as JSON:
+{
+  "nodes": [
+    {
+      "id": "unique_id",
+      "title": "Compelling title",
+      "content": "Rich, detailed content (2-3 paragraphs)",
+      "category": "category_name",
+      "connections": ["related", "topics"],
+      "confidence": 0.9,
+      "reasoning": "Why this perspective matters"
+    }
+  ]
+}`;
+
+    try {
+      const response = await llmService.makeLLMRequest([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ], {
+        temperature: pillConfig?.temperature || 0.6,
+        max_tokens: pillConfig?.maxTokens || 1500,
+        tools: tools.length > 0 ? tools : undefined,
+        tool_choice: tools.length > 0 ? 'auto' : undefined,
+        observerSessionId: observerSessionId,
+        observerPurpose: 'sandbox_generation'
+      });
+
+      sendSSE('status', { message: 'Processing AI response...' });
+
+      let responseData;
+      try {
+        responseData = JSON.parse(response.content);
+      } catch (parseError) {
+        sendSSE('warning', { message: 'AI response not in JSON format, using fallback processing' });
+        responseData = {
+          nodes: [{
+            id: `node_${Date.now()}`,
+            title: "Discovery Insight",
+            content: response.content,
+            category: "general",
+            connections: [],
+            confidence: 0.8,
+            reasoning: "Generated from AI analysis"
+          }]
+        };
+      }
+
+      const validNodes = responseData.nodes || [];
+      
+      sendSSE('nodes_generated', { 
+        message: `Generated ${validNodes.length} discovery nodes`,
+        nodeCount: validNodes.length
+      });
+
+      // Send final results
+      sendSSE('completed', {
+        success: true,
+        data: {
+          nodes: validNodes,
+          userTier,
+          remainingDives: userTier === 'CORE' ? remainingDives - 1 : remainingDives,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+    } catch (error) {
+      sendSSE('error', {
+        error: 'AI_PROCESSING_FAILED',
+        message: 'Failed to generate discovery nodes',
+        details: error.message
+      });
+    }
+
+    // Cleanup and end
+    processingObserver.unregisterObserver(observerSessionId);
+    res.end();
+    
+  } catch (error) {
+    logger.error('Error in sandbox generate-nodes-stream', { 
+      userId: req.user?._id,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to generate nodes'
+      });
+    }
+  }
+});
+
+/**
  * POST /sandbox/generate-nodes
  * Generate AI-powered discovery nodes based on user query and context
  */
 router.post('/generate-nodes', protect, async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
-    const { query, selectedActions, lockedContext, useUBPM, userData, pillConfig } = req.body;
+    const { query, lockedContext, useUBPM, userData, pillConfig } = req.body;
+    let { selectedActions } = req.body; // Use let so we can reassign if empty
 
     logger.debug('Sandbox generate-nodes request', { 
       userId, 
@@ -379,6 +728,13 @@ router.post('/generate-nodes', protect, async (req, res) => {
       actionsCount: selectedActions?.length,
       lockedNodesCount: lockedContext?.length,
       useUBPM 
+    });
+
+    // Send immediate acknowledgment so user knows request was received
+    logger.info('🎯 Processing sandbox request', { 
+      userId, 
+      query: query.substring(0, 50) + '...',
+      actions: selectedActions.join(', ')
     });
 
 
@@ -390,11 +746,10 @@ router.post('/generate-nodes', protect, async (req, res) => {
       });
     }
 
+    // Provide sensible defaults if no actions selected - don't punish users!
     if (!selectedActions || !Array.isArray(selectedActions) || selectedActions.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Selected actions are required'
-      });
+      selectedActions = ['explore']; // Default to explore mode
+      logger.info('No actions provided, defaulting to explore mode', { userId });
     }
 
     // ========================================
@@ -465,13 +820,38 @@ router.post('/generate-nodes', protect, async (req, res) => {
     // ========================================
     const observerSessionId = `obs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    // Register observer to watch all LLM calls and tool executions
-    processingObserver.registerObserver(observerSessionId, {
-      onActivity: (message) => {
-        logger.info('🔍 Observer Bridge:', { userId, message });
-        // TODO: Stream this to frontend via WebSocket or SSE
+    // Register workflow observer for semantic progress tracking
+    workflowObserver.registerWorkflowObserver(observerSessionId, {
+      onWorkflowUpdate: (updateData) => {
+        logger.info('🎯 Workflow Progress:', { userId, type: updateData.type, message: updateData.message });
+        
+        // 🎭 LOG TRAP: Capture workflow messages for frontend debugging
+        console.log('🎭 WORKFLOW FRONTEND MESSAGE:', {
+          userId,
+          updateData,
+          timestamp: new Date().toISOString(),
+          sessionId: observerSessionId
+        });
+        
+        // Send workflow updates via WebSocket if connected
+        try {
+          const websocketService = require('../services/websocketService.js').default;
+          if (websocketService && websocketService.isUserConnected(userId)) {
+            websocketService.sendToUser(userId, 'sandbox_workflow', {
+              ...updateData,
+              timestamp: new Date().toISOString(),
+              sessionId: observerSessionId
+            });
+          }
+        } catch (error) {
+          // WebSocket not available or user not connected, continue silently
+        }
       }
     });
+
+    // Auto-detect and start appropriate workflow
+    const detectedWorkflow = workflowObserver.detectWorkflowFromQuery(query);
+    workflowObserver.startWorkflow(observerSessionId, detectedWorkflow, query);
 
     logger.info('🎯 Observer bridge registered for real-time transparency', { 
       userId, 
@@ -983,6 +1363,9 @@ OUTPUT: Return ONLY a JSON object with your research plan:
 
     logger.info('🎯 Invoking THE PLANNER for research strategy', { userId, researchApproach });
     
+    // Report workflow progress: Starting planning phase
+    workflowObserver.updateStepProgress(observerSessionId, 'learning_assessment', 20, 'Understanding your request and planning approach...');
+    
     const plannerResponse = await llmService.makeLLMRequest([
       { role: 'system', content: 'You are the Planner - create research strategies and coordinate tool execution. Respond with ONLY valid JSON.' },
       { role: 'user', content: plannerPrompt }
@@ -992,6 +1375,8 @@ OUTPUT: Return ONLY a JSON object with your research plan:
       temperature: 0.3, // More focused planning
       response_format: { type: "json_object" },
       observerSessionId,
+      workflowStepId: 'learning_assessment',
+      workflowProgress: 60,
       observerPurpose: 'planning'
     });
     
@@ -1052,7 +1437,10 @@ OUTPUT: Return ONLY a JSON object with your research plan:
     // ========================================
     // Execute tools based on Planner's strategy
     
-    // Generate nodes using LLM with Planner-coordinated tools (OPTIMIZED FOR PREDICTIVE INSIGHT)
+    // Complete assessment phase and move to research
+    workflowObserver.updateStepProgress(observerSessionId, 'learning_assessment', 100, 'Analysis complete!');
+    workflowObserver.updateStepProgress(observerSessionId, 'method_research', 30, 'Gathering information from multiple sources...');
+    
     let response = await llmService.makeLLMRequest([
       { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate discovery nodes as a JSON array. Each node must have: title (string), content (concise markdown-formatted string), category (string), confidence (number 0-1), personalHook (string), and predictiveInsight (string or null). Keep content concise but informative. Your response must be ONLY a valid JSON array, no other text.' },
       { role: 'user', content: aiPrompt }
@@ -1066,6 +1454,8 @@ OUTPUT: Return ONLY a JSON object with your research plan:
       tools: tools.length > 0 ? tools : undefined,
       observerSessionId,
       observerPurpose: 'generation',
+      workflowStepId: 'method_research',
+      workflowProgress: 70,
       tool_choice: tools.length > 0 ? 'auto' : undefined,
       response_format: { type: "json_object" } // Force JSON response
     });
@@ -1217,7 +1607,7 @@ Return enhanced JSON array:`;
         { role: 'user', content: curatorPrompt }
       ], {
         model: 'openai/gpt-4o-mini', // Cost-effective for enhancement  
-        max_tokens: 2000, // Increased to prevent truncation
+        max_tokens: 3500, // Increased significantly to prevent JSON truncation
         temperature: 0.4,
         observerSessionId,
         observerPurpose: 'curation',
@@ -1333,9 +1723,13 @@ Return enhanced JSON array:`;
       query: query.substring(0, 50)
     });
 
+    // Complete the workflow
+    workflowObserver.updateStepProgress(observerSessionId, 'method_research', 100, 'Research complete!');
+    workflowObserver.updateStepProgress(observerSessionId, 'personalized_strategy', 100, 'Your personalized insights are ready!');
+    workflowObserver.completeWorkflow(observerSessionId, `Generated ${validNodes.length} insights for you!`);
 
-    // Unregister observer before response
-    processingObserver.unregisterObserver(observerSessionId);
+    // Unregister workflow observer before response
+    workflowObserver.unregisterWorkflowObserver(observerSessionId);
 
     res.json({
       success: true,
@@ -1345,8 +1739,14 @@ Return enhanced JSON array:`;
     });
 
   } catch (error) {
-    // Cleanup observer on error
-    processingObserver.unregisterObserver(observerSessionId);
+    // Cleanup workflow observer on error - only if observerSessionId was created
+    try {
+      if (typeof observerSessionId !== 'undefined') {
+        workflowObserver.unregisterWorkflowObserver(observerSessionId);
+      }
+    } catch (cleanupError) {
+      logger.warn('Failed to cleanup workflow observer on error', { cleanupError: cleanupError.message });
+    }
 
     logger.error('Error in sandbox generate-nodes', { 
       userId: req.user?._id,
@@ -2306,291 +2706,12 @@ router.post('/node/:nodeId/window-query', protect, async (req, res) => {
   }
 });
 
-/**
- * POST /sandbox/chain-of-thought
- * Execute chain-of-thought reasoning with real-time streaming updates
- */
-router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
-  try {
-    const userId = req.user.id || req.user._id;
-    const { query, options = {}, sessionId, stream = true } = req.body;
-
-    logger.info('Chain of thought request received', { 
-      userId, 
-      query: query?.substring(0, 100),
-      sessionId,
-      hasOptions: !!options,
-      stream 
-    });
-
-    // Validate required fields
-    if (!query || typeof query !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Query is required and must be a string'
-      });
-    }
-
-    if (!stream) {
-      return res.status(400).json({
-        success: false,
-        error: 'Only streaming mode is supported for chain of thought'
-      });
-    }
-
-    // Configure Server-Sent Events headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
-
-    // Send initial connection confirmation
-    res.write(`data: ${JSON.stringify({
-      type: 'connection',
-      message: 'Chain of thought process starting...',
-      sessionId: sessionId || `cot_${Date.now()}`
-    })}\n\n`);
-    res.flush(); // FORCE IMMEDIATE TRANSMISSION
-
-    // Set up streaming callbacks
-    const streamCallbacks = {
-      onStepUpdate: (step, message) => {
-        try {
-          const updateData = {
-            type: 'step_update',
-            currentStep: step.id,
-            steps: step.allSteps,
-            message: message || '',
-            timestamp: new Date().toISOString()
-          };
-
-          res.write(`data: ${JSON.stringify(updateData)}\n\n`);
-          
-          logger.debug('Step update sent', { 
-            userId, 
-            stepId: step.id,
-            hasMessage: !!message 
-          });
-        } catch (writeError) {
-          logger.error('Error writing step update', { 
-            userId, 
-            error: writeError.message 
-          });
-        }
-      },
-
-      onComplete: (result) => {
-        try {
-          const completionData = {
-            type: 'final_result',
-            data: result,
-            timestamp: new Date().toISOString()
-          };
-
-          res.write(`data: ${JSON.stringify(completionData)}\n\n`);
-          res.write('data: [DONE]\n\n');
-          
-          logger.info('Chain of thought completed successfully', { 
-            userId, 
-            nodesCount: result.nodes?.length || 0,
-            sessionId: result.sessionId 
-          });
-          
-          res.end();
-        } catch (writeError) {
-          logger.error('Error writing completion data', { 
-            userId, 
-            error: writeError.message 
-          });
-          res.end();
-        }
-      },
-
-      onError: (error) => {
-        try {
-          const errorData = {
-            type: 'error',
-            message: error.message || 'An unexpected error occurred',
-            timestamp: new Date().toISOString()
-          };
-
-          res.write(`data: ${JSON.stringify(errorData)}\n\n`);
-          
-          logger.error('Chain of thought error sent to client', { 
-            userId, 
-            error: error.message 
-          });
-          
-          res.end();
-        } catch (writeError) {
-          logger.error('Error writing error data', { 
-            userId, 
-            error: writeError.message 
-          });
-          res.end();
-        }
-      }
-    };
-
-    // Handle client disconnect
-    req.on('close', () => {
-      logger.info('Chain of thought client disconnected', { userId, sessionId });
-    });
-
-    req.on('aborted', () => {
-      logger.info('Chain of thought request aborted', { userId, sessionId });
-    });
-
-    // Start AI activity monitoring for transparency
-    const processId = `ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    aiActivityMonitor.startProcess(userId.toString(), processId, query);
-
-    // Enhanced callbacks that integrate monitoring with real AI processing
-    const enhancedCallbacks = {
-      onStepUpdate: (stepData, progressMessage) => {
-        try {
-          // Convert chainOfThoughtEngine format to frontend expected format
-          const frontendFormat = {
-            type: 'step_update',
-            currentStep: stepData.id,
-            steps: stepData.allSteps || [],
-            message: progressMessage || '',
-            timestamp: new Date().toISOString()
-          };
-
-          res.write(`data: ${JSON.stringify(frontendFormat)}\n\n`);
-          res.flush(); // FORCE IMMEDIATE TRANSMISSION TO CLIENT
-          
-          logger.debug('Enhanced step update sent and flushed', { 
-            userId, 
-            stepId: stepData.id,
-            hasMessage: !!progressMessage,
-            stepsCount: stepData.allSteps?.length || 0
-          });
-        } catch (writeError) {
-          logger.error('Error writing step update', { 
-            userId, 
-            error: writeError.message 
-          });
-        }
-      },
-
-      onComplete: (result) => {
-        try {
-          aiActivityMonitor.completeProcess(userId.toString());
-          
-          // Handle the new simplified narration result format
-          const completionData = {
-            type: 'narration_complete',
-            data: {
-              narrationComplete: result.narrationComplete || true,
-              message: result.message || 'LLAMA narration finished',
-              sessionId: result.sessionId,
-              originalQuery: result.originalQuery,
-              timestamp: new Date().toISOString()
-            }
-          };
-
-          res.write(`data: ${JSON.stringify(completionData)}\n\n`);
-          res.flush(); // FORCE IMMEDIATE TRANSMISSION
-          res.write('data: [DONE]\n\n');
-          res.flush(); // FORCE IMMEDIATE TRANSMISSION
-          
-          logger.info('Chain of thought narration completed', { 
-            userId, 
-            sessionId: result.sessionId,
-            message: result.message 
-          });
-          
-          res.end();
-        } catch (writeError) {
-          logger.error('Error writing narration completion data', { 
-            userId, 
-            error: writeError.message 
-          });
-          res.end();
-        }
-      },
-
-      onError: (error) => {
-        try {
-          aiActivityMonitor.handleProcessError(userId.toString(), error);
-          
-          const errorData = {
-            type: 'error',
-            message: error.message || 'An unexpected error occurred',
-            timestamp: new Date().toISOString()
-          };
-
-          res.write(`data: ${JSON.stringify(errorData)}\n\n`);
-          
-          logger.error('Chain of thought error with monitoring cleanup', { 
-            userId, 
-            error: error.message 
-          });
-          
-          res.end();
-        } catch (writeError) {
-          logger.error('Error writing error data', { 
-            userId, 
-            error: writeError.message 
-          });
-          res.end();
-        }
-      }
-    };
-
-    // Start the REAL chain of thought process with AI transparency
-    await chainOfThoughtEngine.processQuery(
-      userId.toString(),
-      query,
-      {
-        ...options,
-        fastModel: 'meta-llama/llama-3.1-8b-instruct', // Llama for intelligent narration
-        mainModel: 'openai/gpt-4o', // GPT-4o for heavy reasoning
-        context: {
-          actions: options.actions || [],
-          useUBPM: options.useUBPM || false,
-          includeUserData: options.includeUserData || true,
-          sessionId: sessionId || `cot_${Date.now()}`,
-          enableTransparency: true, // Enable AI transparency features
-          aiActivityMonitor // Pass monitor for integration
-        }
-      },
-      enhancedCallbacks
-    );
-
-  } catch (error) {
-    logger.error('Chain of thought endpoint error', { 
-      userId: req.user?.id || req.user?._id,
-      error: error.message,
-      stack: error.stack
-    });
-
-    // If response hasn't been sent yet, send error response
-    if (!res.headersSent) {
-      res.status(500).json({
-        success: false,
-        error: 'Failed to process chain of thought request'
-      });
-    } else {
-      // If streaming has started, send error through stream
-      try {
-        res.write(`data: ${JSON.stringify({
-          type: 'error',
-          message: 'Internal server error during processing'
-        })}\n\n`);
-        res.end();
-      } catch (writeError) {
-        logger.error('Failed to send streaming error', { 
-          userId: req.user?.id || req.user?._id,
-          error: writeError.message 
-        });
-      }
-    }
-  }
-});
-
+// REMOVED: /sandbox/chain-of-thought endpoint
+// 
+// This complex streaming endpoint was causing "Generate 2-3 nodes" prompts 
+// to leak to users and adding unnecessary complexity.
+// 
+// The mobile app should use the simple /sandbox/generate-nodes endpoint instead,
+// which directly returns nodes without streaming complexity or prompt leakage.
 
 export default router;

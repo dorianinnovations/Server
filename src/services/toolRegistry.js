@@ -925,6 +925,61 @@ const defaultTools = [
     requiresPayment: false,
     costPerExecution: 0,
     permissions: ['read']
+  },
+  {
+    name: 'web_search',
+    description: 'Search the web and provide comprehensive summaries instead of just links. Perfect for current information, research, news, and answering questions that require up-to-date data.',
+    category: 'research',
+    schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The search query to look up on the web',
+          minLength: 2,
+          maxLength: 200
+        },
+        maxResults: {
+          type: 'number',
+          description: 'Maximum number of search results to analyze (1-10)',
+          minimum: 1,
+          maximum: 10,
+          default: 5
+        },
+        summaryStyle: {
+          type: 'string',
+          enum: ['brief', 'comprehensive', 'technical'],
+          description: 'Style of summary to generate',
+          default: 'comprehensive'
+        }
+      },
+      required: ['query']
+    },
+    implementation: 'webSearch',
+    enabled: true,
+    requiresAuth: true,
+    requiresPayment: false,
+    costPerExecution: 1,
+    permissions: ['read'],
+    rateLimit: {
+      requests: 20,
+      window: 3600000 // 1 hour
+    },
+    supportedModels: ['all'],
+    examples: [
+      {
+        query: 'latest developments in AI 2024',
+        summaryStyle: 'comprehensive'
+      },
+      {
+        query: 'current weather in New York',
+        summaryStyle: 'brief'
+      },
+      {
+        query: 'quantum computing breakthroughs',
+        summaryStyle: 'technical'
+      }
+    ]
   }
 ];
 

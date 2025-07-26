@@ -2,20 +2,24 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 import { URL } from 'url';
 import richContentService from '../services/richContentService.js';
+import WebSearchService from '../services/webSearchService.js';
 
 dotenv.config();
 
-export default async function webSearch(args, _userContext) {
+export default async function webSearch(args, userContext) {
   console.log(`🔍 WEB SEARCH CALLED WITH:`, JSON.stringify(args, null, 2));
   
   const { 
     query, 
+    maxResults = 5,
+    summaryStyle = 'comprehensive',
+    // Legacy compatibility
     searchType = 'general',
     location = '',
     limit = 10 
   } = args;
   
-  console.log(`🔍 PARSED ARGS: query="${query}", searchType="${searchType}", location="${location}"`);
+  console.log(`🔍 PARSED ARGS: query="${query}", maxResults="${maxResults}", summaryStyle="${summaryStyle}"`);
   
   if (!query) {
     console.error('🔍 WEB SEARCH ERROR: No query provided');
@@ -26,6 +30,101 @@ export default async function webSearch(args, _userContext) {
     };
   }
 
+  try {
+    // Use the new WebSearchService for intelligent summarization
+    const webSearchService = new WebSearchService();
+    
+    // Build enhanced query with location if provided
+    let enhancedQuery = query;
+    if (location) {
+      enhancedQuery = `${query} ${location}`;
+    }
+    
+    const result = await webSearchService.searchAndSummarize(enhancedQuery, {
+      maxResults: Math.min(maxResults || limit, 10),
+      summaryStyle,
+      userId: userContext?.userId
+    });
+
+    if (!result.success) {
+      // Fallback to legacy search if new service fails
+      console.log('🔍 New search service failed, falling back to legacy...');
+      return await legacyWebSearch(query, searchType, location, limit);
+    }
+
+    // Format as rich response with summary instead of just links
+    const formattedContent = formatSummaryAsMarkdown(result, query, location);
+    
+    return {
+      success: true,
+      query: result.query,
+      summary: result.summary,
+      sources: result.sources,
+      searchType: searchType, // For backward compatibility
+      location: location,
+      count: result.sources.length,
+      message: `Found comprehensive information about "${query}" from ${result.sources.length} sources`,
+      formattedResults: formattedContent,
+      richContent: {
+        summary: result.summary,
+        keyPoints: extractKeyPoints(result.summary),
+        sources: result.sources.map(s => s.title),
+        searchTimestamp: result.timestamp
+      },
+      // Legacy compatibility
+      results: result.sources.map(source => ({
+        title: source.title,
+        link: source.url,
+        snippet: source.snippet,
+        displayLink: source.domain
+      }))
+    };
+
+  } catch (error) {
+    console.error('Web search error:', error);
+    
+    // Fallback to legacy search
+    return await legacyWebSearch(query, searchType, location, limit);
+  }
+}
+
+// Helper function to format summary results as markdown
+function formatSummaryAsMarkdown(result, query, location) {
+  const locationText = location ? ` in ${location}` : '';
+  let markdown = `## 🔍 Web Search Summary for "${query}"${locationText}\n\n`;
+  
+  // Add the AI-generated summary
+  markdown += `### 📝 Summary\n\n${result.summary}\n\n`;
+  
+  // Add sources
+  if (result.sources && result.sources.length > 0) {
+    markdown += `### 📚 Sources\n\n`;
+    result.sources.forEach((source, index) => {
+      markdown += `${index + 1}. **[${source.title}](${source.url})**\n`;
+      markdown += `   *${source.domain}*\n`;
+      if (source.snippet) {
+        markdown += `   ${source.snippet}\n`;
+      }
+      markdown += '\n';
+    });
+  }
+  
+  markdown += `\n*Search completed at ${new Date(result.timestamp).toLocaleString()}*`;
+  
+  return markdown;
+}
+
+// Extract key points from summary for rich content
+function extractKeyPoints(summary) {
+  if (!summary || typeof summary !== 'string') return [];
+  
+  // Simple extraction of sentences that seem like key points
+  const sentences = summary.split(/[.!?]+/).filter(s => s.trim().length > 20);
+  return sentences.slice(0, 5).map(s => s.trim());
+}
+
+// Legacy search function for fallback
+async function legacyWebSearch(query, searchType = 'general', location = '', limit = 10) {
   try {
     let searchResults = [];
     
@@ -74,7 +173,7 @@ export default async function webSearch(args, _userContext) {
     };
 
   } catch (error) {
-    console.error('Web search error:', error);
+    console.error('Legacy web search error:', error);
     
     // Return a helpful response instead of failing
     return {

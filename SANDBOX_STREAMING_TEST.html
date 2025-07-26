@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox Streaming Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+        }
+        .narration {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .status {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+        .warning {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+        }
+        .error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+        .completed {
+            background: #e8f5e8;
+            border-left: 4px solid #4caf50;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 8px 4px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+        .results {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .node {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+        }
+        .node-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        .node-content {
+            color: #6c757d;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Sandbox Streaming Test</h1>
+        
+        <div>
+            <h3>Test Basic Streaming</h3>
+            <button onclick="testBasicStream()">Test Stream</button>
+            <button onclick="clearResults()">Clear</button>
+        </div>
+
+        <div>
+            <h3>Test Sandbox Generation</h3>
+            <input type="text" id="queryInput" placeholder="Enter your query (e.g., 'artificial intelligence')" value="artificial intelligence">
+            <input type="text" id="tokenInput" placeholder="JWT Token (get from login)" value="">
+            <br>
+            <label>
+                <input type="checkbox" id="ubpmCheckbox"> Use UBPM
+            </label>
+            <br>
+            <button onclick="testSandboxGeneration()" id="generateBtn">Generate Nodes (Streaming)</button>
+        </div>
+
+        <div class="results" id="results">
+            <div class="narration">Ready to test streaming...</div>
+        </div>
+    </div>
+
+    <script>
+        function addMessage(message, type = 'narration') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `narration ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '<div class="narration">Ready to test streaming...</div>';
+        }
+
+        function testBasicStream() {
+            clearResults();
+            addMessage('Starting basic stream test...', 'status');
+            
+            const eventSource = new EventSource('/sandbox/test-stream');
+            
+            eventSource.onopen = () => {
+                addMessage('✅ Stream connection opened', 'status');
+            };
+            
+            eventSource.addEventListener('test_message', (event) => {
+                const data = JSON.parse(event.data);
+                addMessage(`📡 ${data.message}`, 'narration');
+            });
+            
+            eventSource.addEventListener('completed', (event) => {
+                const data = JSON.parse(event.data);
+                addMessage(`✅ ${data.message}`, 'completed');
+                eventSource.close();
+            });
+            
+            eventSource.onerror = (error) => {
+                addMessage('❌ Stream error occurred', 'error');
+                eventSource.close();
+            };
+        }
+
+        function testSandboxGeneration() {
+            const query = document.getElementById('queryInput').value;
+            const token = document.getElementById('tokenInput').value;
+            const useUBPM = document.getElementById('ubpmCheckbox').checked;
+            const generateBtn = document.getElementById('generateBtn');
+            
+            if (!query.trim()) {
+                addMessage('❌ Please enter a query', 'error');
+                return;
+            }
+            
+            if (!token.trim()) {
+                addMessage('❌ Please enter JWT token', 'error');
+                return;
+            }
+
+            clearResults();
+            addMessage(`🚀 Starting sandbox generation for: "${query}"`, 'status');
+            generateBtn.disabled = true;
+            
+            // Use POST request for the streaming endpoint
+            fetch('/sandbox/generate-nodes-stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    query: query,
+                    selectedActions: ['find', 'think'],
+                    useUBPM: useUBPM,
+                    pillConfig: {
+                        focusAreas: ['research', 'analysis'],
+                        systemPrompts: ['You are a research assistant'],
+                        temperature: 0.7,
+                        maxTokens: 1500,
+                        tools: ['web_search']
+                    }
+                })
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                function readStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            addMessage('✅ Stream completed', 'completed');
+                            generateBtn.disabled = false;
+                            return;
+                        }
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('event:')) {
+                                const eventType = line.substring(6).trim();
+                                continue;
+                            }
+                            if (line.startsWith('data:')) {
+                                try {
+                                    const data = JSON.parse(line.substring(5));
+                                    handleStreamEvent(eventType || 'message', data);
+                                } catch (e) {
+                                    // Skip malformed data
+                                }
+                            }
+                        }
+                        
+                        readStream();
+                    }).catch(error => {
+                        addMessage(`❌ Stream error: ${error.message}`, 'error');
+                        generateBtn.disabled = false;
+                    });
+                }
+                
+                readStream();
+            }).catch(error => {
+                addMessage(`❌ Request failed: ${error.message}`, 'error');
+                generateBtn.disabled = false;
+            });
+        }
+        
+        function handleStreamEvent(eventType, data) {
+            switch (eventType) {
+                case 'started':
+                    addMessage(`🎯 ${data.message}`, 'status');
+                    break;
+                case 'status':
+                    addMessage(`⚙️ ${data.message}`, 'status');
+                    break;
+                case 'tier_detected':
+                    addMessage(`🏆 ${data.message}`, 'status');
+                    break;
+                case 'ubmp_detected':
+                    addMessage(`🧠 ${data.message}`, 'status');
+                    break;
+                case 'fuse_activated':
+                    addMessage(`🔥 ${data.message} (${data.confidence}% confidence)`, 'status');
+                    break;
+                case 'tools_loaded':
+                    addMessage(`🔧 ${data.message}: ${data.tools.join(', ')}`, 'status');
+                    break;
+                case 'narration':
+                    addMessage(`🗣️ ${data.message}`, 'narration');
+                    break;
+                case 'nodes_generated':
+                    addMessage(`📝 ${data.message}`, 'status');
+                    break;
+                case 'completed':
+                    addMessage(`✅ Generation completed!`, 'completed');
+                    if (data.data && data.data.nodes) {
+                        displayNodes(data.data.nodes);
+                    }
+                    break;
+                case 'warning':
+                    addMessage(`⚠️ ${data.message}`, 'warning');
+                    break;
+                case 'error':
+                    addMessage(`❌ ${data.message}`, 'error');
+                    break;
+                default:
+                    addMessage(`📡 ${JSON.stringify(data)}`, 'narration');
+            }
+        }
+        
+        function displayNodes(nodes) {
+            const results = document.getElementById('results');
+            const nodesDiv = document.createElement('div');
+            nodesDiv.innerHTML = '<h3>Generated Nodes:</h3>';
+            
+            nodes.forEach((node, index) => {
+                const nodeDiv = document.createElement('div');
+                nodeDiv.className = 'node';
+                nodeDiv.innerHTML = `
+                    <div class="node-title">${index + 1}. ${node.title}</div>
+                    <div class="node-content">${node.content}</div>
+                    <small>Category: ${node.category} | Confidence: ${Math.round((node.confidence || 0.8) * 100)}%</small>
+                `;
+                nodesDiv.appendChild(nodeDiv);
+            });
+            
+            results.appendChild(nodesDiv);
+            results.scrollTop = results.scrollHeight;
+        }
+    </script>
+</body>
+</html>

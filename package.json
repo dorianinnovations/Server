@@ -27,6 +27,7 @@
     "@aws-sdk/lib-storage": "^3.848.0",
     "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
+    "cheerio": "^1.1.2",
     "compression": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

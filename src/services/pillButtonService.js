@@ -103,8 +103,16 @@ class PillButtonService {
         contextKeys: Object.keys(context) 
       });
 
-      if (!selectedActions || selectedActions.length === 0) {
-        throw new Error('No pill actions provided');
+      // Handle various input formats
+      if (!selectedActions) {
+        throw new Error('No pill actions provided - selectedActions is null/undefined');
+      }
+      
+      // Ensure selectedActions is an array
+      const actionsArray = Array.isArray(selectedActions) ? selectedActions : [selectedActions];
+      
+      if (actionsArray.length === 0) {
+        throw new Error('No pill actions provided - empty array');
       }
 
       const processedActions = [];
@@ -120,7 +128,7 @@ class PillButtonService {
       };
 
       // Process each selected action
-      for (const actionId of selectedActions) {
+      for (const actionId of actionsArray) {
         const actionDef = this.actionDefinitions[actionId];
         if (actionDef) {
           processedActions.push(actionDef);
@@ -173,8 +181,10 @@ class PillButtonService {
     } catch (error) {
       logger.error('Error processing pill actions', { 
         userId, 
-        selectedActions, 
-        error: error.message 
+        selectedActions,
+        selectedActionsType: typeof selectedActions,
+        error: error.message,
+        stack: error.stack
       });
       throw error;
     }

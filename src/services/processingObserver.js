@@ -109,12 +109,12 @@ class ProcessingObserver {
     const queryPreview = query.length > 40 ? query.substring(0, 40) + '...' : query;
     
     const purposes = {
-      'planning': `Planning approach for: ${queryPreview}`,
-      'generation': `Generating insights about: ${queryPreview}`, 
-      'curation': `Refining findings for: ${queryPreview}`,
-      'synthesis': `Synthesizing response about: ${queryPreview}`,
-      'tool_analysis': `Selecting tools to analyze: ${queryPreview}`,
-      'default': `Processing request: ${queryPreview}`
+      'planning': `Numina is thinking about your request...`,
+      'generation': `Gathering insights for you...`, 
+      'curation': `Organizing the best results...`,
+      'synthesis': `Preparing your personalized response...`,
+      'tool_analysis': `Numina is selecting the right tools...`,
+      'default': `Numina is working on your request...`
     };
 
     return purposes[details.purpose] || purposes.default;
@@ -125,39 +125,47 @@ class ProcessingObserver {
     const queryPreview = query.length > 30 ? query.substring(0, 30) + '...' : query;
     
     if (details.success) {
-      return `Completed analysis of: ${queryPreview}`;
+      return `Numina has processed your request...`;
     } else {
-      return `Retrying analysis of: ${queryPreview}`;
+      return `Numina is refining the approach...`;
     }
   }
 
   generateToolStartMessage(details) {
     const toolMessages = {
-      'web_search': `Searching the web for: ${details.parameters?.query || 'information'}`,
-      'calculator': `Calculating: ${details.parameters?.expression || 'mathematical result'}`,
-      'weather': `Getting weather for: ${details.parameters?.location || 'your location'}`,
-      'code_executor': 'Running code to solve problem',
-      'default': `Using ${details.toolName} tool`
+      'web_search': `Numina initiated a web search for: ${details.parameters?.query || 'additional information'}`,
+      'calculator': `Numina is calculating: ${details.parameters?.expression || 'the mathematical result'}`,
+      'weather': `Numina is checking weather for: ${details.parameters?.location || 'your location'}`,
+      'code_executor': 'Numina is running code to solve this',
+      'news_search': `Numina is searching news for: ${details.parameters?.query || 'current events'}`,
+      'academic_search': `Numina is searching academic sources for: ${details.parameters?.query || 'research'}`,
+      'default': `Numina is using ${details.toolName} to help you`
     };
 
     return toolMessages[details.toolName] || toolMessages.default;
   }
 
   generateToolCompleteMessage(details) {
-    if (details.success) {
-      return `${details.toolName} completed successfully`;
-    } else {
-      return `${details.toolName} encountered issue, trying alternative`;
-    }
+    const toolCompletionMessages = {
+      'web_search': details.success ? 'Numina found relevant information online' : 'Numina is trying a different search approach',
+      'calculator': details.success ? 'Numina completed the calculation' : 'Numina is recalculating with a different method',
+      'weather': details.success ? 'Numina retrieved the weather information' : 'Numina is trying another weather source',
+      'code_executor': details.success ? 'Numina successfully ran the code' : 'Numina is adjusting the code approach',
+      'news_search': details.success ? 'Numina found the latest news' : 'Numina is searching alternative news sources',
+      'academic_search': details.success ? 'Numina found relevant research' : 'Numina is searching additional academic sources',
+      'default': details.success ? `Numina completed the ${details.toolName} task` : `Numina is trying an alternative approach`
+    };
+
+    return toolCompletionMessages[details.toolName] || toolCompletionMessages.default;
   }
 
   generatePhaseMessage(details) {
     const phaseMessages = {
-      'planning': 'Planning approach to your request',
-      'research': 'Researching information you need',
-      'synthesis': 'Combining findings into insights', 
-      'finalization': 'Preparing final response',
-      'default': details.description || 'Processing continues'
+      'planning': 'Numina is planning the best approach for you',
+      'research': 'Numina is gathering information you need',
+      'synthesis': 'Numina is connecting the findings', 
+      'finalization': 'Numina is preparing your personalized insights',
+      'default': details.description || 'Numina continues processing'
     };
 
     return phaseMessages[details.phase] || phaseMessages.default;
