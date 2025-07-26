@@ -2706,6 +2706,221 @@ router.post('/node/:nodeId/window-query', protect, async (req, res) => {
   }
 });
 
+// ========================================
+// 📱 MOBILE CLOUD PERSISTENCE ENDPOINTS
+// ========================================
+
+/**
+ * GET /sandbox/sessions/:sessionId
+ * Get specific sandbox session
+ */
+router.get('/sessions/:sessionId', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { sessionId } = req.params;
+
+    const session = await SandboxSession.findOne({
+      userId,
+      sessionId,
+      isActive: true
+    }).lean();
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: session
+    });
+
+  } catch (error) {
+    logger.error('Error fetching sandbox session:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch session'
+    });
+  }
+});
+
+/**
+ * DELETE /sandbox/sessions/:sessionId
+ * Delete sandbox session
+ */
+router.delete('/sessions/:sessionId', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { sessionId } = req.params;
+
+    const result = await SandboxSession.deleteOne({
+      userId,
+      sessionId
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Session deleted successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error deleting sandbox session:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete session'
+    });
+  }
+});
+
+/**
+ * PUT /sandbox/update-node-position
+ * Update node position in session
+ */
+router.put('/update-node-position', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { sessionId, nodeId, position } = req.body;
+
+    if (!sessionId || !nodeId || !position) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: sessionId, nodeId, position'
+      });
+    }
+
+    const session = await SandboxSession.findOne({
+      userId,
+      sessionId,
+      isActive: true
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    // Update node position
+    const node = session.nodes.find(n => n.id === nodeId);
+    if (node) {
+      node.position = position;
+      await session.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Node position updated'
+    });
+
+  } catch (error) {
+    logger.error('Error updating node position:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update node position'
+    });
+  }
+});
+
+/**
+ * POST /sandbox/add-connection
+ * Add connection between nodes
+ */
+router.post('/add-connection', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { sessionId, sourceNodeId, targetNodeId, strength = 0.5, type = 'conceptual' } = req.body;
+
+    if (!sessionId || !sourceNodeId || !targetNodeId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: sessionId, sourceNodeId, targetNodeId'
+      });
+    }
+
+    const session = await SandboxSession.findOne({
+      userId,
+      sessionId,
+      isActive: true
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    // Add connection
+    session.connections.push({
+      source: sourceNodeId,
+      target: targetNodeId,
+      strength,
+      type
+    });
+
+    session.metadata.totalConnections = session.connections.length;
+    await session.save();
+
+    res.json({
+      success: true,
+      message: 'Connection added successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error adding connection:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add connection'
+    });
+  }
+});
+
+/**
+ * DELETE /sandbox/unlock-node/:nodeId
+ * Unlock a locked node
+ */
+router.delete('/unlock-node/:nodeId', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { nodeId } = req.params;
+
+    const result = await LockedNode.deleteOne({
+      userId,
+      nodeId,
+      isActive: true
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Locked node not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Node unlocked successfully'
+    });
+
+  } catch (error) {
+    logger.error('Error unlocking node:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to unlock node'
+    });
+  }
+});
+
 // REMOVED: /sandbox/chain-of-thought endpoint
 // 
 // This complex streaming endpoint was causing "Generate 2-3 nodes" prompts 
