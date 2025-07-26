@@ -24,6 +24,190 @@ router.get('/test', (req, res) => {
   res.json({ success: true, message: 'Sandbox routes are working!' });
 });
 
+// Test pill actions without authentication (for development only)
+router.post('/test-pill-actions', async (req, res) => {
+  try {
+    const { pillActions, query, context } = req.body;
+
+    if (!pillActions || !Array.isArray(pillActions) || pillActions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Pill actions array is required'
+      });
+    }
+
+    // Process each pill action and return appropriate configuration
+    const actionConfigurations = {
+      write: {
+        modelPreference: 'creative',
+        temperature: 0.8,
+        maxTokens: 1500,
+        focusAreas: ['creative_expression', 'narrative_flow', 'personal_voice'],
+        systemPrompt: 'You are a creative writing assistant focused on helping users express their thoughts clearly and engagingly.'
+      },
+      think: {
+        modelPreference: 'analytical', 
+        temperature: 0.3,
+        maxTokens: 2000,
+        focusAreas: ['logical_analysis', 'problem_solving', 'critical_thinking'],
+        systemPrompt: 'You are an analytical thinking partner focused on deep reasoning and structured problem-solving.'
+      },
+      find: {
+        modelPreference: 'research',
+        temperature: 0.5,
+        maxTokens: 1200,
+        focusAreas: ['information_discovery', 'source_verification', 'data_synthesis'],
+        systemPrompt: 'You are a research assistant focused on finding accurate, relevant information from multiple sources.',
+        tools: ['web_search', 'academic_search']
+      },
+      imagine: {
+        modelPreference: 'creative',
+        temperature: 0.9,
+        maxTokens: 1800,
+        focusAreas: ['creative_ideation', 'innovative_thinking', 'possibility_exploration'],
+        systemPrompt: 'You are a creative ideation partner focused on exploring possibilities and generating innovative ideas.'
+      },
+      connect: {
+        modelPreference: 'synthesis',
+        temperature: 0.6,
+        maxTokens: 1600,
+        focusAreas: ['relationship_mapping', 'pattern_recognition', 'interdisciplinary_links'],
+        systemPrompt: 'You are a connection specialist focused on finding relationships and patterns between ideas, concepts, and domains.'
+      },
+      explore: {
+        modelPreference: 'balanced',
+        temperature: 0.7,
+        maxTokens: 1400,
+        focusAreas: ['knowledge_expansion', 'curiosity_driven_research', 'broad_discovery'],
+        systemPrompt: 'You are an exploration guide focused on broadening understanding and discovering new knowledge territories.',
+        tools: ['web_search', 'news_search']
+      },
+      ubpm: {
+        modelPreference: 'personalized',
+        temperature: 0.4,
+        maxTokens: 1300,
+        focusAreas: ['behavioral_analysis', 'personalized_insights', 'user_pattern_recognition'],
+        systemPrompt: 'You are a personalization expert focused on tailoring responses based on user behavioral patterns and preferences.',
+        requiresUBPM: true
+      }
+    };
+
+    const processedActions = [];
+    const combinedConfig = {
+      temperature: 0.6,
+      maxTokens: 1500,
+      focusAreas: new Set(),
+      tools: new Set(),
+      systemPrompts: [],
+      requiresUBPM: false
+    };
+
+    for (const actionId of pillActions) {
+      const config = actionConfigurations[actionId];
+      if (config) {
+        processedActions.push({
+          actionId,
+          ...config
+        });
+
+        combinedConfig.focusAreas = new Set([...combinedConfig.focusAreas, ...config.focusAreas]);
+        if (config.tools) {
+          combinedConfig.tools = new Set([...combinedConfig.tools, ...config.tools]);
+        }
+        combinedConfig.systemPrompts.push(config.systemPrompt);
+        if (config.requiresUBPM) {
+          combinedConfig.requiresUBPM = true;
+        }
+
+        combinedConfig.temperature = (combinedConfig.temperature + config.temperature) / 2;
+        combinedConfig.maxTokens = Math.max(combinedConfig.maxTokens, config.maxTokens);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        processedActions,
+        combinedConfig: {
+          ...combinedConfig,
+          focusAreas: Array.from(combinedConfig.focusAreas),
+          tools: Array.from(combinedConfig.tools)
+        },
+        synergy: { score: 0.85, description: 'Test combination' },
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process pill actions'
+    });
+  }
+});
+
+// Test pill combinations without authentication (for development only)
+router.post('/test-pill-combinations', async (req, res) => {
+  try {
+    const { currentPills, query } = req.body;
+
+    if (!currentPills || !Array.isArray(currentPills)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current pills array is required'
+      });
+    }
+
+    const pillSynergies = {
+      'find+think': { synergy: 0.95, description: 'Research with analytical depth' },
+      'write+imagine': { synergy: 0.93, description: 'Creative expression with ideation' },
+      'connect+explore': { synergy: 0.90, description: 'Relationship discovery through exploration' }
+    };
+
+    const combinationKey = currentPills.sort().join('+');
+    const currentSynergy = pillSynergies[combinationKey] || {
+      synergy: 0.75,
+      description: 'Custom combination',
+      recommendedApproach: 'Multi-faceted approach',
+      additionalPills: []
+    };
+
+    const recommendations = [];
+    if (query && query.toLowerCase().includes('creative') && !currentPills.includes('imagine')) {
+      recommendations.push({
+        pill: 'imagine',
+        reason: 'Query indicates creative ideation needed',
+        confidence: 0.88
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        currentCombination: {
+          pills: currentPills,
+          synergy: currentSynergy,
+          key: combinationKey
+        },
+        recommendations,
+        metrics: {
+          currentSynergyScore: currentSynergy.synergy,
+          combinationComplexity: currentPills.length > 3 ? 'high' : 'medium',
+          recommendedOptimization: 'available',
+          focusCoherence: 'high'
+        },
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze pill combinations'
+    });
+  }
+});
+
 // Test route with auth to debug the auth issue
 router.get('/auth-test', protect, (req, res) => {
   res.json({ 
@@ -34,13 +218,160 @@ router.get('/auth-test', protect, (req, res) => {
 });
 
 /**
+ * POST /sandbox/pill-actions
+ * Process pill button actions and return tailored responses
+ */
+router.post('/pill-actions', protect, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { pillActions, query, context } = req.body;
+
+    logger.debug('Pill actions request', { 
+      userId, 
+      pillActions,
+      query: query?.substring(0, 100)
+    });
+
+    if (!pillActions || !Array.isArray(pillActions) || pillActions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Pill actions array is required'
+      });
+    }
+
+    // Process each pill action and return appropriate configuration
+    const actionConfigurations = {
+      write: {
+        modelPreference: 'creative',
+        temperature: 0.8,
+        maxTokens: 1500,
+        focusAreas: ['creative_expression', 'narrative_flow', 'personal_voice'],
+        systemPrompt: 'You are a creative writing assistant focused on helping users express their thoughts clearly and engagingly.'
+      },
+      think: {
+        modelPreference: 'analytical', 
+        temperature: 0.3,
+        maxTokens: 2000,
+        focusAreas: ['logical_analysis', 'problem_solving', 'critical_thinking'],
+        systemPrompt: 'You are an analytical thinking partner focused on deep reasoning and structured problem-solving.'
+      },
+      find: {
+        modelPreference: 'research',
+        temperature: 0.5,
+        maxTokens: 1200,
+        focusAreas: ['information_discovery', 'source_verification', 'data_synthesis'],
+        systemPrompt: 'You are a research assistant focused on finding accurate, relevant information from multiple sources.',
+        tools: ['web_search', 'academic_search']
+      },
+      imagine: {
+        modelPreference: 'creative',
+        temperature: 0.9,
+        maxTokens: 1800,
+        focusAreas: ['creative_ideation', 'innovative_thinking', 'possibility_exploration'],
+        systemPrompt: 'You are a creative ideation partner focused on exploring possibilities and generating innovative ideas.'
+      },
+      connect: {
+        modelPreference: 'synthesis',
+        temperature: 0.6,
+        maxTokens: 1600,
+        focusAreas: ['relationship_mapping', 'pattern_recognition', 'interdisciplinary_links'],
+        systemPrompt: 'You are a connection specialist focused on finding relationships and patterns between ideas, concepts, and domains.'
+      },
+      explore: {
+        modelPreference: 'balanced',
+        temperature: 0.7,
+        maxTokens: 1400,
+        focusAreas: ['knowledge_expansion', 'curiosity_driven_research', 'broad_discovery'],
+        systemPrompt: 'You are an exploration guide focused on broadening understanding and discovering new knowledge territories.',
+        tools: ['web_search', 'news_search']
+      },
+      ubpm: {
+        modelPreference: 'personalized',
+        temperature: 0.4,
+        maxTokens: 1300,
+        focusAreas: ['behavioral_analysis', 'personalized_insights', 'user_pattern_recognition'],
+        systemPrompt: 'You are a personalization expert focused on tailoring responses based on user behavioral patterns and preferences.',
+        requiresUBPM: true
+      }
+    };
+
+    const processedActions = [];
+    const combinedConfig = {
+      temperature: 0.6,
+      maxTokens: 1500,
+      focusAreas: new Set(),
+      tools: new Set(),
+      systemPrompts: [],
+      requiresUBPM: false
+    };
+
+    // Process each selected pill action
+    for (const actionId of pillActions) {
+      const config = actionConfigurations[actionId];
+      if (config) {
+        processedActions.push({
+          actionId,
+          ...config
+        });
+
+        // Combine configurations
+        combinedConfig.focusAreas = new Set([...combinedConfig.focusAreas, ...config.focusAreas]);
+        if (config.tools) {
+          combinedConfig.tools = new Set([...combinedConfig.tools, ...config.tools]);
+        }
+        combinedConfig.systemPrompts.push(config.systemPrompt);
+        if (config.requiresUBPM) {
+          combinedConfig.requiresUBPM = true;
+        }
+
+        // Average temperature based on selected actions
+        combinedConfig.temperature = (combinedConfig.temperature + config.temperature) / 2;
+        combinedConfig.maxTokens = Math.max(combinedConfig.maxTokens, config.maxTokens);
+      }
+    }
+
+    logger.info('Pill actions processed successfully', { 
+      userId,
+      actionsCount: processedActions.length,
+      combinedFocusAreas: Array.from(combinedConfig.focusAreas),
+      requiresUBPM: combinedConfig.requiresUBPM
+    });
+
+    res.json({
+      success: true,
+      data: {
+        processedActions,
+        combinedConfig: {
+          ...combinedConfig,
+          focusAreas: Array.from(combinedConfig.focusAreas),
+          tools: Array.from(combinedConfig.tools)
+        },
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error in pill actions processing', { 
+      userId: req.user?._id,
+      error: error.message,
+      stack: error.stack
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process pill actions'
+    });
+  }
+});
+
+/**
  * POST /sandbox/generate-nodes
  * Generate AI-powered discovery nodes based on user query and context
  */
 router.post('/generate-nodes', protect, async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
-    const { query, selectedActions, lockedContext, useUBPM, userData } = req.body;
+    const { query, selectedActions, lockedContext, useUBPM, userData, pillConfig } = req.body;
 
     logger.debug('Sandbox generate-nodes request', { 
       userId, 
@@ -192,8 +523,14 @@ router.post('/generate-nodes', protect, async (req, res) => {
       }
     }
 
-    // Build context for AI
+    // Build context for AI with pill configuration
     let contextPrompt = `User is exploring: "${query}"\n\nSelected actions: ${selectedActions.join(', ')}\n\n`;
+    
+    // Enhanced pill configuration integration
+    if (pillConfig && pillConfig.focusAreas) {
+      contextPrompt += `Focus Areas: ${pillConfig.focusAreas.join(', ')}\n`;
+      contextPrompt += `Processing Approach: ${pillConfig.systemPrompts ? pillConfig.systemPrompts[0] : 'General assistance'}\n\n`;
+    }
     
     // ========================================
     // 🔥 THE FUSE: EXPONENTIAL PREDICTIVE CONTEXT
@@ -1026,6 +1363,175 @@ Return enhanced JSON array:`;
       success: false,
       error: 'Failed to generate nodes',
       debug: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * POST /sandbox/pill-combinations
+ * Get insights and recommendations for pill button combinations
+ */
+router.post('/pill-combinations', protect, async (req, res) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { currentPills, query, context } = req.body;
+
+    logger.debug('Pill combinations request', { 
+      userId, 
+      currentPills,
+      query: query?.substring(0, 100)
+    });
+
+    if (!currentPills || !Array.isArray(currentPills)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current pills array is required'
+      });
+    }
+
+    // Define pill synergies and recommendations
+    const pillSynergies = {
+      'write+think': {
+        synergy: 0.95,
+        description: 'Analytical writing with structured reasoning',
+        recommendedApproach: 'Combine creative expression with logical analysis',
+        additionalPills: ['connect', 'explore']
+      },
+      'find+explore': {
+        synergy: 0.92,
+        description: 'Comprehensive research and discovery',
+        recommendedApproach: 'Deep information gathering with broad exploration',
+        additionalPills: ['think', 'connect']
+      },
+      'imagine+connect': {
+        synergy: 0.88,
+        description: 'Creative ideation with relationship mapping',
+        recommendedApproach: 'Generate innovative ideas while finding connections',
+        additionalPills: ['explore', 'write']
+      },
+      'think+connect': {
+        synergy: 0.90,
+        description: 'Analytical pattern recognition',
+        recommendedApproach: 'Structured thinking with relationship analysis',
+        additionalPills: ['find', 'ubpm']
+      },
+      'ubpm+write': {
+        synergy: 0.93,
+        description: 'Personalized creative expression',
+        recommendedApproach: 'Tailored writing based on behavioral patterns',
+        additionalPills: ['think', 'imagine']
+      },
+      'ubpm+think': {
+        synergy: 0.91,
+        description: 'Personalized analytical processing',
+        recommendedApproach: 'Analytical thinking adapted to user patterns',
+        additionalPills: ['connect', 'find']
+      }
+    };
+
+    // Analyze current combination
+    const combinationKey = currentPills.sort().join('+');
+    const currentSynergy = pillSynergies[combinationKey] || {
+      synergy: 0.75,
+      description: 'Custom combination',
+      recommendedApproach: 'Multi-faceted approach combining selected capabilities',
+      additionalPills: []
+    };
+
+    // Generate recommendations based on query and current pills
+    const recommendations = [];
+    const availablePills = ['write', 'think', 'find', 'imagine', 'connect', 'explore', 'ubpm'];
+    const unusedPills = availablePills.filter(pill => !currentPills.includes(pill));
+
+    // Smart recommendations based on query content
+    if (query) {
+      const queryLower = query.toLowerCase();
+      
+      if (queryLower.includes('how') || queryLower.includes('why') || queryLower.includes('explain')) {
+        if (!currentPills.includes('think')) recommendations.push({
+          pill: 'think',
+          reason: 'Query suggests analytical processing needed',
+          confidence: 0.85
+        });
+      }
+      
+      if (queryLower.includes('creative') || queryLower.includes('idea') || queryLower.includes('imagine')) {
+        if (!currentPills.includes('imagine')) recommendations.push({
+          pill: 'imagine',
+          reason: 'Query indicates creative ideation focus',
+          confidence: 0.88
+        });
+      }
+      
+      if (queryLower.includes('research') || queryLower.includes('find') || queryLower.includes('search')) {
+        if (!currentPills.includes('find')) recommendations.push({
+          pill: 'find',
+          reason: 'Query requires information discovery',
+          confidence: 0.90
+        });
+      }
+      
+      if (queryLower.includes('connect') || queryLower.includes('relate') || queryLower.includes('between')) {
+        if (!currentPills.includes('connect')) recommendations.push({
+          pill: 'connect',
+          reason: 'Query involves relationship analysis',
+          confidence: 0.87
+        });
+      }
+    }
+
+    // Add synergy-based recommendations
+    if (currentSynergy.additionalPills) {
+      currentSynergy.additionalPills.forEach(pill => {
+        if (!currentPills.includes(pill)) {
+          recommendations.push({
+            pill,
+            reason: `Enhances synergy with current combination`,
+            confidence: 0.82
+          });
+        }
+      });
+    }
+
+    // Calculate effectiveness metrics
+    const effectivenessMetrics = {
+      currentSynergyScore: currentSynergy.synergy,
+      combinationComplexity: currentPills.length > 3 ? 'high' : currentPills.length > 1 ? 'medium' : 'low',
+      recommendedOptimization: recommendations.length > 0 ? 'available' : 'optimized',
+      focusCoherence: currentPills.length <= 3 ? 'high' : 'medium'
+    };
+
+    logger.info('Pill combinations analyzed', { 
+      userId,
+      currentPills,
+      synergyScore: currentSynergy.synergy,
+      recommendationsCount: recommendations.length
+    });
+
+    res.json({
+      success: true,
+      data: {
+        currentCombination: {
+          pills: currentPills,
+          synergy: currentSynergy,
+          key: combinationKey
+        },
+        recommendations: recommendations.slice(0, 3), // Limit to top 3
+        metrics: effectivenessMetrics,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error in pill combinations analysis', { 
+      userId: req.user?._id,
+      error: error.message,
+      stack: error.stack
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze pill combinations'
     });
   }
 });

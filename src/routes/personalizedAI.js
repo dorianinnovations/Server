@@ -484,6 +484,6 @@ function calculateDynamicTokens(behaviorProfile, message) {
   return Math.min(1000, Math.floor(baseTokens));
 }
 
-console.log("✓ Personalized AI routes initialized");
+// Personalized AI routes ready
 
 export default router;

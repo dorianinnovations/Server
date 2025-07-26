@@ -19,6 +19,59 @@ class IntelligenceCompressorV2 {
     this.performanceMetrics = new Map();
     this.qualityScores = new Map();
     
+    // SEMANTIC ABBREVIATION DICTIONARY for UBPM data
+    this.semanticAbbreviations = {
+      // Micro Analysis
+      messageComplexity: 'mc',
+      currentState: 'cs',
+      primaryEmotion: 'e',
+      emotionalIntensity: 'ei',
+      confidence: 'conf',
+      engagementLevel: 'eng',
+      emotionalShifts: 'esh',
+      communicationStyle: 'comm',
+      
+      // Topic Evolution
+      topicEvolution: 'topic',
+      dominantTopic: 'dom',
+      topicFlow: 'flow',
+      transitions: 'trans',
+      
+      // Medium Analysis
+      engagementTrends: 'etrend',
+      interactionPatterns: 'ipat',
+      emotionalTrends: 'etrend',
+      problemSolvingApproach: 'psa',
+      
+      // Macro Analysis
+      personalityEvolution: 'pers',
+      dominantTraits: 'traits',
+      cognitiveStyle: 'cog',
+      decisionPatterns: 'dec',
+      learningVelocity: 'lv',
+      emotionalProfile: 'eprof',
+      
+      // Common values
+      trend: 't',
+      current: 'c',
+      baseline: 'b',
+      increasing: 'inc',
+      decreasing: 'dec',
+      stable: 'stab',
+      neutral: 'neu',
+      positive: 'pos',
+      negative: 'neg',
+      analytical: 'ana',
+      creative: 'cre',
+      practical: 'prac',
+      inquiry: 'inq',
+      personal: 'pers',
+      technical: 'tech',
+      sharing: 'shr',
+      questioning: 'que',
+      explaining: 'exp'
+    };
+    
     // Model-specific optimization parameters
     this.modelProfiles = {
       'gpt-4o': {
@@ -224,10 +277,13 @@ class IntelligenceCompressorV2 {
     
     // EMOTIONAL CLUSTER - Emotional intelligence
     clusters.emotional = {
+      current: intelligenceContext.micro?.currentState?.primaryEmotion || 'neutral',
+      intensity: intelligenceContext.micro?.currentState?.emotionalIntensity || 5,
+      confidence: intelligenceContext.micro?.currentState?.confidence || 'baseline_established',
+      recentShifts: intelligenceContext.micro?.emotionalShifts || [],
       baseline: intelligenceContext.macro?.emotionalProfile || {},
-      current: intelligenceContext.micro?.currentState?.emotional || {},
       patterns: intelligenceContext.medium?.emotionalTrends || {},
-      reliability: 0.75
+      reliability: 0.85
     };
     
     // COGNITIVE CLUSTER - Thinking patterns
@@ -281,19 +337,19 @@ class IntelligenceCompressorV2 {
   calculateClusterPriorities(clusteredIntelligence, strategy, modelProfile) {
     const priorities = {};
     
-    // Base priorities from strategy
+    // Base priorities from strategy - EMOTIONAL DATA PRIORITIZED
     const strategyPriorities = {
       minimal: {
-        core: 1.0, dynamic: 0.8, contextual: 0.6,
-        predictive: 0.2, behavioral: 0.3, emotional: 0.4, cognitive: 0.3
+        emotional: 1.0, dynamic: 0.9, core: 0.8, contextual: 0.6,
+        predictive: 0.2, behavioral: 0.3, cognitive: 0.3
       },
       balanced: {
-        core: 1.0, dynamic: 0.9, contextual: 0.8,
-        predictive: 0.6, behavioral: 0.7, emotional: 0.7, cognitive: 0.6
+        emotional: 1.0, dynamic: 0.95, core: 0.9, contextual: 0.8,
+        behavioral: 0.7, cognitive: 0.6, predictive: 0.6
       },
       comprehensive: {
-        core: 1.0, dynamic: 1.0, contextual: 0.9,
-        predictive: 0.8, behavioral: 0.8, emotional: 0.8, cognitive: 0.7
+        emotional: 1.0, dynamic: 1.0, core: 0.95, contextual: 0.9,
+        behavioral: 0.8, cognitive: 0.75, predictive: 0.8
       }
     };
     
@@ -355,12 +411,122 @@ class IntelligenceCompressorV2 {
   }
 
   /**
-   * ⚡ ULTRA COMPRESSION (< 20 tokens)
+   * 🎯 SEMANTIC COMPRESSION - The new efficient method
+   */
+  formatSemanticCompressed(data, tokenLimit) {
+    if (!data || Object.keys(data).length === 0) return '';
+    
+    const compressed = this.compressDataSemantically(data, tokenLimit);
+    return compressed;
+  }
+
+  /**
+   * 🔧 CORE SEMANTIC COMPRESSION ENGINE
+   */
+  compressDataSemantically(data, tokenLimit) {
+    const compressedParts = [];
+    
+    for (const [key, value] of Object.entries(data)) {
+      if (key === 'reliability') continue; // Skip metadata
+      
+      const abbreviatedKey = this.getAbbreviation(key) || key.substring(0, 3);
+      const compressedValue = this.compressValue(value);
+      
+      if (compressedValue !== null && abbreviatedKey !== null) {
+        compressedParts.push(`${abbreviatedKey}:${compressedValue}`);
+      }
+    }
+    
+    // Join with commas and ensure it fits token limit
+    let result = compressedParts.join(',');
+    
+    // If over token limit, truncate intelligently
+    if (this.estimateTokenCount(result) > tokenLimit) {
+      result = this.truncateToTokenLimit(result, tokenLimit);
+    }
+    
+    return result;
+  }
+
+  /**
+   * 📝 VALUE COMPRESSION
+   */
+  compressValue(value) {
+    if (value === null || value === undefined) return null;
+    
+    // Handle different data types
+    if (typeof value === 'string') {
+      return this.getAbbreviation(value) || value.substring(0, 8);
+    }
+    
+    if (typeof value === 'number') {
+      return Number.isInteger(value) ? value : Math.round(value * 10) / 10;
+    }
+    
+    if (Array.isArray(value)) {
+      // Compress arrays to single-letter codes
+      return value.map(item => this.getAbbreviation(item) || item.toString().charAt(0)).join('');
+    }
+    
+    if (typeof value === 'object') {
+      // Handle nested objects efficiently
+      if (value.trend && value.current) {
+        const trendAbbr = this.getAbbreviation(value.trend);
+        return `t-${trendAbbr},c:${value.current}`;
+      }
+      
+      if (value.emotion && value.intensity) {
+        const emotionAbbr = this.getAbbreviation(value.emotion);
+        return `${emotionAbbr}(${value.intensity})`;
+      }
+      
+      // For other objects, take first key-value pair
+      const firstEntry = Object.entries(value)[0];
+      if (firstEntry) {
+        const [k, v] = firstEntry;
+        const keyAbbr = this.getAbbreviation(k);
+        const valueAbbr = this.compressValue(v);
+        return `${keyAbbr}:${valueAbbr}`;
+      }
+    }
+    
+    return value.toString().substring(0, 6);
+  }
+
+  /**
+   * 🔤 ABBREVIATION LOOKUP
+   */
+  getAbbreviation(term) {
+    if (!term || typeof term !== 'string') return null;
+    return this.semanticAbbreviations[term] || this.semanticAbbreviations[term.toLowerCase()];
+  }
+
+  /**
+   * ✂️ INTELLIGENT TRUNCATION
+   */
+  truncateToTokenLimit(text, tokenLimit) {
+    const parts = text.split(',');
+    let result = '';
+    let tokenCount = 0;
+    
+    for (const part of parts) {
+      const partTokens = this.estimateTokenCount(part + ',');
+      if (tokenCount + partTokens > tokenLimit) break;
+      
+      result += (result ? ',' : '') + part;
+      tokenCount += partTokens;
+    }
+    
+    return result;
+  }
+
+  /**
+   * ⚡ ULTRA COMPRESSION (< 20 tokens) - SEMANTIC KEY-VALUE METHOD
    */
   ultraCompressCluster(clusterData, tokenLimit) {
     // Extract only the most essential information
     const essential = this.extractEssentialData(clusterData);
-    return this.formatUltraCompressed(essential, tokenLimit);
+    return this.formatSemanticCompressed(essential, tokenLimit);
   }
 
   /**
@@ -418,33 +584,54 @@ class IntelligenceCompressorV2 {
   }
 
   /**
-   * 🎨 OPTIMIZED PROMPT GENERATION
+   * 🎨 OPTIMIZED PROMPT GENERATION - SEMANTIC SECTIONS
    */
   generateOptimizedPrompt(compressedContext, messageType, strategy) {
-    let prompt = '';
+    const sections = [];
     
-    // Structure prompt based on available clusters
-    if (compressedContext.core) {
-      prompt += `**PERSONALITY:** ${this.formatClusterForPrompt(compressedContext.core)}\n`;
+    // PRIORITY ORDER: Most important context first for GPT
+    
+    // 1. MICRO ANALYSIS - Current state and emotions
+    if (compressedContext.emotional || compressedContext.dynamic) {
+      const microData = {
+        ...compressedContext.emotional,
+        ...compressedContext.dynamic
+      };
+      const compressed = this.formatSemanticCompressed(microData, 30);
+      if (compressed) sections.push(`MICRO{${compressed}}`);
     }
     
-    if (compressedContext.dynamic) {
-      prompt += `**CURRENT STATE:** ${this.formatClusterForPrompt(compressedContext.dynamic)}\n`;
-    }
-    
+    // 2. TOPIC CONTEXT - Current conversation focus
     if (compressedContext.contextual) {
-      prompt += `**CONTEXT:** ${this.formatClusterForPrompt(compressedContext.contextual)}\n`;
+      const compressed = this.formatSemanticCompressed(compressedContext.contextual, 25);
+      if (compressed) sections.push(`TOPIC{${compressed}}`);
     }
     
+    // 3. PERSONALITY - Core traits
+    if (compressedContext.core) {
+      const compressed = this.formatSemanticCompressed(compressedContext.core, 25);
+      if (compressed) sections.push(`CORE{${compressed}}`);
+    }
+    
+    // 4. BEHAVIORAL PATTERNS - How they interact
     if (compressedContext.behavioral && strategy !== 'minimal') {
-      prompt += `**BEHAVIOR:** ${this.formatClusterForPrompt(compressedContext.behavioral)}\n`;
+      const compressed = this.formatSemanticCompressed(compressedContext.behavioral, 20);
+      if (compressed) sections.push(`BEHAV{${compressed}}`);
     }
     
+    // 5. COGNITIVE STYLE - How they process information
+    if (compressedContext.cognitive && strategy !== 'minimal') {
+      const compressed = this.formatSemanticCompressed(compressedContext.cognitive, 20);
+      if (compressed) sections.push(`COG{${compressed}}`);
+    }
+    
+    // 6. PREDICTIVE GUIDANCE - Future-oriented insights
     if (compressedContext.predictive && strategy === 'comprehensive') {
-      prompt += `**GUIDANCE:** ${this.formatClusterForPrompt(compressedContext.predictive)}\n`;
+      const compressed = this.formatSemanticCompressed(compressedContext.predictive, 15);
+      if (compressed) sections.push(`PRED{${compressed}}`);
     }
     
-    return prompt.trim();
+    return sections.join(' ');
   }
 
   // ========== UTILITY METHODS ==========
@@ -567,17 +754,9 @@ class IntelligenceCompressorV2 {
   formatClusterForPrompt(cluster) {
     if (!cluster) return '';
     
-    const formatted = Object.entries(cluster)
-      .filter(([key, value]) => value && key !== 'reliability')
-      .map(([key, value]) => {
-        if (typeof value === 'object') {
-          return `${key}: ${JSON.stringify(value)}`;
-        }
-        return `${key}: ${value}`;
-      })
-      .join(', ');
-    
-    return formatted;
+    // Use semantic compression for maximum efficiency
+    const semanticCompressed = this.formatSemanticCompressed(cluster, 50);
+    return semanticCompressed;
   }
 
   extractEssentialData(clusterData) {
@@ -614,21 +793,18 @@ class IntelligenceCompressorV2 {
   }
 
   formatUltraCompressed(data, tokenLimit) {
-    // Ultra-short format
-    const values = Object.values(data).slice(0, 1);
-    return values.join('');
+    // Legacy method - redirect to semantic compression
+    return this.formatSemanticCompressed(data, tokenLimit);
   }
 
   formatStandardCompressed(data, tokenLimit) {
-    // Concise format
-    return Object.entries(data)
-      .map(([k, v]) => `${k}:${v}`)
-      .join(', ');
+    // Legacy method - redirect to semantic compression
+    return this.formatSemanticCompressed(data, tokenLimit);
   }
 
   formatDetailedCompressed(data, tokenLimit) {
-    // Detailed but compressed format
-    return JSON.stringify(data);
+    // Legacy method - redirect to semantic compression
+    return this.formatSemanticCompressed(data, tokenLimit);
   }
 
   improveCompressionQuality(compressedContext, qualityTarget, tokenBudget) {

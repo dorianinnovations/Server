@@ -39,7 +39,7 @@ class PushNotificationService {
 
       this.messaging = admin.messaging();
       this.isInitialized = true;
-      logger.info('Push notification service initialized successfully');
+      // Push notification service initialized successfully
       
     } catch (error) {
       logger.error('Failed to initialize push notification service:', error);

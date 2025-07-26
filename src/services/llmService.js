@@ -2,6 +2,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import https from "https";
 import http from "http";
+import processingObserver from './processingObserver.js';
 
 dotenv.config();
 
@@ -44,9 +45,26 @@ export const createLLMService = () => {
       tools = null,
       tool_choice = "auto",
       attachments = null,
+      observerSessionId = null, // NEW: for observer bridge
+      observerPurpose = 'default', // NEW: what this LLM call is for
     } = options;
 
     const llmStartTime = Date.now();
+
+    // Notify observer that LLM request is starting
+    if (observerSessionId) {
+      // Extract query context from messages
+      const messages = Array.isArray(promptOrMessages) ? promptOrMessages : [{ content: promptOrMessages }];
+      const userMessage = messages.find(m => m.role === 'user')?.content || messages[messages.length - 1]?.content || '';
+      const queryContext = userMessage.length > 100 ? userMessage.substring(0, 100) : userMessage;
+      
+      processingObserver.observeLLMStart(observerSessionId, {
+        model: 'openai/gpt-4o',
+        purpose: observerPurpose,
+        messageCount: Array.isArray(promptOrMessages) ? promptOrMessages.length : 1,
+        query: queryContext
+      });
+    }
 
     try {
       // Handle both string prompts and messages array with vision support
@@ -149,6 +167,21 @@ export const createLLMService = () => {
         console.log(`🔧 LLM SERVICE - Raw tool calls:`, JSON.stringify(choice.message.tool_calls, null, 2));
       }
       
+      // Notify observer that LLM request completed successfully
+      if (observerSessionId) {
+        const duration = Date.now() - llmStartTime;
+        const messages = Array.isArray(promptOrMessages) ? promptOrMessages : [{ content: promptOrMessages }];
+        const userMessage = messages.find(m => m.role === 'user')?.content || messages[messages.length - 1]?.content || '';
+        const queryContext = userMessage.length > 100 ? userMessage.substring(0, 100) : userMessage;
+        
+        processingObserver.observeLLMComplete(observerSessionId, {
+          tokensUsed: response.data.usage?.total_tokens || 0,
+          duration,
+          success: true,
+          query: queryContext
+        });
+      }
+
       // Return response in consistent format with tool calls support
       return {
         content: choice.message.content,
@@ -158,6 +191,16 @@ export const createLLMService = () => {
         choice: choice, // Include full choice for tool call handling
       };
     } catch (error) {
+      // Notify observer that LLM request failed
+      if (observerSessionId) {
+        const duration = Date.now() - llmStartTime;
+        processingObserver.observeLLMComplete(observerSessionId, {
+          tokensUsed: 0,
+          duration,
+          success: false
+        });
+      }
+
       console.error("OpenRouter API Error:", {
         name: error.name,
         message: error.message,

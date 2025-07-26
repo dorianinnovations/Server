@@ -19,7 +19,7 @@ class RedisService {
   async initialize() {
     try {
       // For development, use high-performance in-memory store
-      logger.info('Using high-performance in-memory Redis fallback');
+      // Using high-performance in-memory Redis fallback
       this.isConnected = true; // Mark as connected for high-performance mode
       this.client = new Map();
       return true;

@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/environment.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
 
-console.log("🔐 Initializing authentication middleware...");
+// Authentication middleware initialized
 
 // JWT signing function
 export const signToken = (id) =>
@@ -10,7 +10,7 @@ export const signToken = (id) =>
     expiresIn: env.JWT_EXPIRES_IN,
   });
 
-console.log("✓JWT signing function ready.");
+// JWT signing ready
 
 // Middleware to protect routes
 export const protect = (req, res, next) => {

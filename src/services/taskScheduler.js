@@ -5,24 +5,24 @@ import logger from "../utils/logger.js";
 import { AnalyticsService } from "./analytics.js";
 import { createLLMService } from "./llmService.js";
 
-console.log("📅 Initializing task scheduler...");
+// Initializing task scheduler
 
 class TaskScheduler {
   constructor() {
-    console.log("✓Creating task scheduler instance");
+    // Creating task scheduler instance
     this.jobs = new Map();
     this.isRunning = false;
-    console.log("✓Task scheduler instance created");
+    // Task scheduler instance created
   }
 
   // Start the scheduler
   start() {
     if (this.isRunning) {
-      console.log("⚠️ Task scheduler is already running");
+      // Task scheduler already running
       return;
     }
     
-    console.log("🚀 Starting task scheduler...");
+    // Starting task scheduler
     this.isRunning = true;
     
     // Schedule task processing more frequently for better responsiveness

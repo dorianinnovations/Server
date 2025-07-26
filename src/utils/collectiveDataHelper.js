@@ -1,15 +1,15 @@
 import logger from "./logger.js";
 
-console.log("📊 Initializing collective data helper utilities...");
+// Initializing collective data helper utilities
 
 /**
  * Compresses and formats collective data for efficient transmission
  */
 export class CollectiveDataFormatter {
   constructor() {
-    console.log("✓Creating collective data formatter instance");
+    // Creating collective data formatter instance
     this.compressionThreshold = 1000; // Compress if data size > 1KB
-    console.log("✓Collective data formatter instance created");
+    // Collective data formatter instance created
   }
 
   /**

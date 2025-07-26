@@ -11,8 +11,38 @@ import Event from "../models/Event.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
 import { getUserTier, getTierLimits } from "../config/tiers.js";
+import multer from 'multer';
+import sharp from 'sharp';
+import { fileTypeFromBuffer } from 'file-type';
+import path from 'path';
+import fs from 'fs/promises';
 
 const router = express.Router();
+
+// Configure multer for profile picture uploads
+const profilePictureUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    // Only allow image files
+    const allowedMimes = [
+      'image/jpeg',
+      'image/jpg', 
+      'image/png',
+      'image/webp',
+      'image/gif'
+    ];
+    
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed for profile pictures'), false);
+    }
+  }
+});
 
 // Get user profile
 router.get("/profile", protect, async (req, res) => {
@@ -32,6 +62,7 @@ router.get("/profile", protect, async (req, res) => {
       status: MESSAGES.SUCCESS, 
       data: { 
         user,
+        profilePicture: user.profile?.get('profilePicture') || null,
         tierBadge: {
           tier: userTier,
           name: tierLimits.name,
@@ -44,6 +75,132 @@ router.get("/profile", protect, async (req, res) => {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
       status: MESSAGES.ERROR, 
       message: MESSAGES.PROFILE_FETCH_FAILED 
+    });
+  }
+});
+
+// Upload profile picture
+router.post("/profile/picture", protect, profilePictureUpload.single('profilePicture'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: MESSAGES.ERROR,
+        message: "No image file provided"
+      });
+    }
+
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: MESSAGES.USER_NOT_FOUND
+      });
+    }
+
+    // Validate file type
+    const fileType = await fileTypeFromBuffer(req.file.buffer);
+    if (!fileType || !fileType.mime.startsWith('image/')) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: MESSAGES.ERROR,
+        message: "Invalid image file"
+      });
+    }
+
+    // Process and compress the image
+    const processedImage = await sharp(req.file.buffer)
+      .resize(300, 300, { 
+        fit: 'cover',
+        position: 'center'
+      })
+      .jpeg({ 
+        quality: 85,
+        progressive: true
+      })
+      .toBuffer();
+
+    // Convert to base64 for storage (in production, upload to cloud storage like AWS S3)
+    const base64Image = processedImage.toString('base64');
+    const profilePictureUrl = `data:image/jpeg;base64,${base64Image}`;
+
+    // Update user profile with picture URL
+    if (!user.profile) {
+      user.profile = new Map();
+    }
+    
+    user.profile.set('profilePicture', profilePictureUrl);
+    user.profile.set('profilePictureUpdated', new Date().toISOString());
+    user.markModified('profile');
+    
+    await user.save();
+
+    logger.info('Profile picture updated successfully', { userId });
+
+    res.json({
+      status: MESSAGES.SUCCESS,
+      message: "Profile picture updated successfully",
+      data: {
+        profilePicture: profilePictureUrl,
+        updatedAt: user.profile.get('profilePictureUpdated')
+      }
+    });
+
+  } catch (error) {
+    logger.error('Profile picture upload error:', error);
+    
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: MESSAGES.ERROR,
+        message: "File size too large. Maximum size is 5MB."
+      });
+    }
+    
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: "Failed to upload profile picture"
+    });
+  }
+});
+
+// Delete profile picture
+router.delete("/profile/picture", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: MESSAGES.USER_NOT_FOUND
+      });
+    }
+
+    // Remove profile picture from user profile
+    if (user.profile && user.profile.has('profilePicture')) {
+      user.profile.delete('profilePicture');
+      user.profile.delete('profilePictureUpdated');
+      user.markModified('profile');
+      await user.save();
+
+      logger.info('Profile picture deleted successfully', { userId });
+
+      res.json({
+        status: MESSAGES.SUCCESS,
+        message: "Profile picture deleted successfully"
+      });
+    } else {
+      res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: "No profile picture found"
+      });
+    }
+
+  } catch (error) {
+    logger.error('Profile picture deletion error:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: "Failed to delete profile picture"
     });
   }
 });

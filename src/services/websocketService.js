@@ -70,7 +70,7 @@ class WebSocketService {
       this.handleConnection(socket);
     });
 
-    log.success('WebSocket service initialized successfully');
+    // WebSocket service initialized successfully
   }
 
   /**

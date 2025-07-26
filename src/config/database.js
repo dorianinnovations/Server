@@ -6,7 +6,7 @@ import { log } from "../utils/logger.js";
 // Optimized Database Connection with enhanced pool settings
 const connectDB = async () => {
   try {
-    log.database("Attempting MongoDB connection");
+    // Attempting MongoDB connection
     log.debug("Using optimized connection pool settings");
     
     await mongoose.connect(env.MONGO_URI, {
@@ -23,7 +23,7 @@ const connectDB = async () => {
       retryWrites: true, // Enable write retries
     });
     
-    log.success("MongoDB connected with optimized pool settings");
+    // MongoDB connected
     
     // Log connection pool events for monitoring
     mongoose.connection.on('connected', () => {
@@ -43,7 +43,7 @@ const connectDB = async () => {
       log.database('MongoDB replica set connected');
     });
     
-    log.success("Database connection monitoring configured");
+    // Database connection monitoring configured
     
   } catch (err) {
     log.error("MongoDB connection error", err);

@@ -1,6 +1,6 @@
 import { MEMORY_CONFIG } from "../config/constants.js";
 
-console.log("💾 Initializing cache system...");
+// Cache system initializing
 
 // --- Enhanced Cache Implementation ---
 class MemoryCache {
@@ -62,16 +62,16 @@ class MemoryCache {
   }
 }
 
-console.log("✓Memory cache class defined");
+// Memory cache class ready
 
 // Global cache instance
 const globalCache = new MemoryCache();
 
-console.log("✓Global cache instance created");
+// Global cache ready
 
 // Factory function to create cache instances
 export const createCache = () => {
-  console.log("✓Creating new cache instance");
+  // Creating cache instance
   return new MemoryCache();
 };
 
@@ -164,7 +164,7 @@ let gcCount = 0;
 let lastGcTime = Date.now();
 
 export const setupMemoryMonitoring = () => {
-  console.log("📊 Setting up memory monitoring...");
+  // Setting up memory monitoring
   
   const monitorMemory = () => {
     const memoryUsage = process.memoryUsage();
@@ -206,7 +206,7 @@ export const setupMemoryMonitoring = () => {
   // Initial memory check
   monitorMemory();
   
-  console.log("✓Memory monitoring configured");
+  // Memory monitoring ready
 };
 
 // Component ready

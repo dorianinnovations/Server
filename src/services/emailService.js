@@ -31,11 +31,11 @@ class EmailService {
 
   async initializeEmailServices() {
     try {
-      console.log('🚀 Initializing FREE email services (Resend replacement)...');
+      // Initializing FREE email services
       
       // PRIMARY: Gmail SMTP (500 emails/day free)
       if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
-        console.log('📧 Setting up Gmail SMTP as PRIMARY service');
+        // Setting up Gmail SMTP as PRIMARY
         this.primaryTransporter = nodemailer.createTransport({
           service: 'gmail',
           auth: {
@@ -51,27 +51,27 @@ class EmailService {
         
         // Test Gmail connection
         await this.primaryTransporter.verify();
-        console.log('✅ Gmail SMTP verified and ready (PRIMARY)');
+        // Gmail SMTP verified and ready
       }
       
       // SECONDARY: Brevo (Sendinblue) API (300 emails/day free)
       if (process.env.BREVO_API_KEY) {
-        console.log('📮 Setting up Brevo as SECONDARY service');
+        // Setting up Brevo as SECONDARY
         this.brevoApi = {
           apiKey: process.env.BREVO_API_KEY,
           baseUrl: 'https://api.brevo.com/v3/smtp/email'
         };
-        console.log('✅ Brevo API configured (SECONDARY)');
+        // Brevo API configured
       }
       
       // TERTIARY: SendGrid API (100 emails/day free)
       if (process.env.SENDGRID_API_KEY) {
-        console.log('📬 Setting up SendGrid as TERTIARY service');
+        // Setting up SendGrid as TERTIARY
         this.sendgridApi = {
           apiKey: process.env.SENDGRID_API_KEY,
           baseUrl: 'https://api.sendgrid.com/v3/mail/send'
         };
-        console.log('✅ SendGrid API configured (TERTIARY)');
+        // SendGrid API configured
       }
       
       // FALLBACK: Ethereal test for development
@@ -91,7 +91,7 @@ class EmailService {
       }
       
       this.isInitialized = true;
-      console.log('✅ FREE email services initialized successfully!');
+      // FREE email services initialized
       this.logServiceStatus();
       
     } catch (error) {
@@ -101,11 +101,7 @@ class EmailService {
   }
   
   logServiceStatus() {
-    console.log('📊 Email Service Status:');
-    console.log(`  PRIMARY (Gmail): ${this.primaryTransporter ? '✅ Ready' : '❌ Not configured'}`);
-    console.log(`  SECONDARY (Brevo): ${this.brevoApi ? '✅ Ready' : '❌ Not configured'}`);
-    console.log(`  TERTIARY (SendGrid): ${this.sendgridApi ? '✅ Ready' : '❌ Not configured'}`);
-    console.log(`  FALLBACK (Test): ${this.fallbackTransporter ? '✅ Ready' : '❌ Not needed'}`);
+    // Email service status logging disabled for cleaner startup
   }
   
   resetDailyCountIfNeeded() {

@@ -2,6 +2,7 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
+import conversationService from '../services/conversationService.js';
 import { HTTP_STATUS } from '../config/constants.js';
 
 const router = express.Router();
@@ -109,21 +110,21 @@ router.post('/sync-conversations', protect, async (req, res) => {
         // Final safety check: ensure content meets database requirements
         content = content || '[Empty message]';
 
-        // Save to server memory with try-catch for individual message failures
+        // Save to both short-term memory and persistent conversation storage
         try {
-          await ShortTermMemory.create({
+          await conversationService.addMessage(
             userId,
+            conversation.id,
             role,
             content,
-            timestamp,
-            conversationId: conversation.id,
-            metadata: {
+            message.attachments || [],
+            {
               syncedFromMobile: true,
               originalId: message.id,
               mood: message.mood,
               hasAttachments: message.attachments?.length > 0
             }
-          });
+          );
 
           syncedMessages++;
         } catch (createError) {

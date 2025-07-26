@@ -3,11 +3,11 @@ import collectiveDataService from "./collectiveDataService.js";
 import logger from "../utils/logger.js";
 import { createCache } from "../utils/cache.js";
 
-console.log("⏰ Initializing scheduled aggregation service...");
+// Initializing scheduled aggregation service
 
 class ScheduledAggregationService {
   constructor() {
-    console.log("✓Creating scheduled aggregation service instance");
+    // Creating scheduled aggregation service instance
     this.cache = createCache();
     this.isRunning = false;
     this.lastRun = null;
@@ -15,7 +15,7 @@ class ScheduledAggregationService {
     this.errorCount = 0;
     this.interval = null;
     this.intervalMs = 10 * 60 * 1000; // 10 minutes
-    console.log("✓Scheduled aggregation service instance created");
+    // Scheduled aggregation service instance created
   }
 
   /**
@@ -27,8 +27,8 @@ class ScheduledAggregationService {
       return;
     }
 
-    console.log("🚀 Starting scheduled aggregation service...");
-    console.log(`⏱️ Setting interval to ${this.intervalMs / 1000 / 60} minutes`);
+    // Starting scheduled aggregation service
+    // Setting aggregation interval
 
     logger.info("Starting scheduled aggregation service", {
       interval: "10 minutes",
@@ -269,11 +269,11 @@ class ScheduledAggregationService {
   }
 }
 
-console.log("✓Scheduled aggregation service class defined");
+// Scheduled aggregation service class ready
 
 // Create singleton instance
 const scheduledAggregationService = new ScheduledAggregationService();
 
-console.log("✓Scheduled aggregation service singleton created");
+// Scheduled aggregation service singleton ready
 
 export default scheduledAggregationService; 

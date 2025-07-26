@@ -1,7 +1,7 @@
 import logger from '../utils/logger.js';
 import { AnalyticsService } from '../services/analytics.js';
 
-console.log("⚡ Initializing performance middleware...");
+// Performance middleware initializing
 
 export const performanceMiddleware = (req, res, next) => {
   const start = Date.now();

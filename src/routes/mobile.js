@@ -1,6 +1,8 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { protect as authenticateToken } from '../middleware/auth.js';
+import { visionRateLimit, uploadRateLimit } from '../middleware/uploadRateLimit.js';
+import { trackUploadMetrics, uploadMetrics } from '../middleware/uploadMetrics.js';
 import logger from '../utils/logger.js';
 import redisService from '../services/redisService.js';
 import websocketService from '../services/websocketService.js';
@@ -149,12 +151,27 @@ router.get('/mobile/sync', authenticateToken, async (req, res) => {
 
     // Sync conversations if requested
     if (requestedTypes.includes('conversations')) {
-      // This would integrate with conversation storage
-      syncData.data.conversations = {
-        updated: false,
-        data: [],
-        message: 'Conversation sync will be implemented with conversation storage'
-      };
+      try {
+        const conversationService = (await import('../services/conversationService.js')).default;
+        const conversations = await conversationService.getUserConversations(userId, {
+          page: 1,
+          limit: 10,
+          includeArchived: false
+        });
+        
+        syncData.data.conversations = {
+          updated: true,
+          data: conversations.conversations,
+          hasMore: conversations.pagination.pages > 1,
+          totalCount: conversations.pagination.total
+        };
+      } catch (error) {
+        syncData.data.conversations = {
+          updated: false,
+          data: [],
+          error: 'Failed to sync conversations'
+        };
+      }
     }
 
     // Sync analytics if requested
@@ -444,6 +461,178 @@ router.get('/mobile/app-config', authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /mobile/profile-header
+ * @desc Get profile header data optimized for mobile display
+ * @access Private
+ */
+router.get('/mobile/profile-header', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const cacheKey = `profile-header:${userId}`;
+    
+    // Check cache first
+    const cachedData = await redisService.get(cacheKey);
+    if (cachedData) {
+      return res.json({
+        success: true,
+        ...cachedData,
+        cached: true
+      });
+    }
+
+    // Get user data
+    const user = await User.findById(userId).select('-password -__v');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Get tier information
+    const { getUserTier, getTierLimits } = await import('../config/tiers.js');
+    const userTier = getUserTier(user);
+    const tierLimits = getTierLimits(user);
+
+    // Prepare profile header data
+    const profileHeader = {
+      user: {
+        id: user._id,
+        email: user.email,
+        username: user.profile?.get('username') || user.email.split('@')[0],
+        displayName: user.profile?.get('displayName') || user.profile?.get('username') || user.email.split('@')[0]
+      },
+      profilePicture: {
+        url: user.profile?.get('profilePicture') || null,
+        updatedAt: user.profile?.get('profilePictureUpdated') || null,
+        placeholder: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}&size=300&background=6366f1&color=white&rounded=true`
+      },
+      header: {
+        style: 'rectangle',
+        backgroundColor: '#f8fafc',
+        gradientColors: ['#6366f1', '#8b5cf6'],
+        height: 200,
+        profilePosition: 'left',
+        profileSize: 80,
+        profileBorderColor: '#ffffff',
+        profileBorderWidth: 3
+      },
+      tier: {
+        name: tierLimits.name,
+        level: userTier,
+        color: userTier === 'aether' ? '#fbbf24' : userTier === 'pro' ? '#8b5cf6' : '#6b7280',
+        features: tierLimits.features
+      },
+      stats: {
+        joinedDate: user.createdAt,
+        lastActive: user.updatedAt,
+        sessionCount: user.profile?.get('sessionCount') || 0,
+        totalInteractions: user.profile?.get('totalInteractions') || 0
+      },
+      canUpload: true, // All users can upload profile pictures
+      uploadEndpoint: '/profile/picture',
+      maxFileSize: '5MB'
+    };
+
+    // Cache for 15 minutes
+    await redisService.set(cacheKey, profileHeader, 900);
+
+    res.json({
+      success: true,
+      ...profileHeader
+    });
+
+  } catch (error) {
+    logger.error('Profile header error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get profile header data'
+    });
+  }
+});
+
+/**
+ * @route PUT /mobile/profile-header
+ * @desc Update profile header settings
+ * @access Private
+ */
+router.put('/mobile/profile-header', 
+  authenticateToken,
+  body('displayName').optional().isLength({ min: 1, max: 50 }).withMessage('Display name must be 1-50 characters'),
+  body('username').optional().isLength({ min: 3, max: 30 }).withMessage('Username must be 3-30 characters'),
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          errors: errors.array()
+        });
+      }
+
+      const userId = req.user.userId;
+      const { displayName, username } = req.body;
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'User not found'
+        });
+      }
+
+      // Update profile data
+      if (!user.profile) {
+        user.profile = new Map();
+      }
+
+      if (displayName) {
+        user.profile.set('displayName', displayName);
+      }
+      
+      if (username) {
+        // Check if username is already taken
+        const existingUser = await User.findOne({
+          'profile.username': username,
+          _id: { $ne: userId }
+        });
+        
+        if (existingUser) {
+          return res.status(400).json({
+            success: false,
+            error: 'Username already taken'
+          });
+        }
+        
+        user.profile.set('username', username);
+      }
+
+      user.markModified('profile');
+      await user.save();
+
+      // Clear cache
+      await redisService.delete(`profile-header:${userId}`);
+
+      res.json({
+        success: true,
+        message: 'Profile header updated successfully',
+        data: {
+          displayName: user.profile?.get('displayName'),
+          username: user.profile?.get('username')
+        }
+      });
+
+    } catch (error) {
+      logger.error('Profile header update error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update profile header'
+      });
+    }
+  }
+);
+
 // Helper functions for batch processing
 async function handleProfileRequest(userId, method, data) {
   try {
@@ -500,12 +689,23 @@ async function handleChatHistoryRequest(userId, _method, _data) {
       return { success: true, data: cachedHistory };
     }
     
-    // This would integrate with conversation storage
+    // Get conversation history from persistent storage
+    const conversationService = (await import('../services/conversationService.js')).default;
+    const conversations = await conversationService.getUserConversations(userId, {
+      page: 1,
+      limit: 20,
+      includeArchived: false
+    });
+    
     const chatHistory = {
       userId,
-      conversations: [],
-      message: 'Chat history will be implemented with conversation storage'
+      conversations: conversations.conversations,
+      pagination: conversations.pagination,
+      lastUpdated: new Date()
     };
+    
+    // Cache for 5 minutes
+    await redisService.set(cacheKey, chatHistory, 300);
     
     return { success: true, data: chatHistory };
   } catch (error) {
@@ -567,11 +767,13 @@ const upload = multer({
 
 /**
  * @route POST /upload
- * @desc Upload and process file (image, text, PDF)
+ * @desc Upload and process file (image, text, PDF) - Supports FormData
  * @access Private
  */
 router.post('/upload', 
+  uploadRateLimit, // Apply rate limiting
   authenticateToken,
+  trackUploadMetrics, // Track metrics
   upload.single('file'),
   async (req, res) => {
     try {
@@ -652,6 +854,137 @@ router.post('/upload',
   }
 );
 
+/**
+ * @route POST /upload/vision
+ * @desc Upload image for GPT-4o vision processing - Supports base64
+ * @access Private
+ */
+router.post('/upload/vision', 
+  visionRateLimit, // Apply rate limiting first
+  authenticateToken,
+  trackUploadMetrics, // Track metrics
+  express.json({ limit: '25mb' }), // Higher limit for base64
+  [
+    body('imageData').notEmpty().withMessage('Image data is required'),
+    body('fileName').notEmpty().withMessage('File name is required'),
+    body('mimeType').isIn(['image/jpeg', 'image/png', 'image/webp']).withMessage('Invalid image type')
+  ],
+  async (req, res) => {
+    try {
+      // Validate request
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        logger.warn('Vision upload validation failed', {
+          userId: req.user?.userId,
+          errors: errors.array()
+        });
+        return res.status(400).json({
+          success: false,
+          error: 'Validation failed',
+          details: errors.array()
+        });
+      }
+
+      const { imageData, fileName, mimeType } = req.body;
+      
+      // Enhanced logging
+      logger.info('Vision upload started', {
+        userId: req.user.userId,
+        fileName,
+        mimeType,
+        dataSize: imageData?.length || 0
+      });
+      
+      if (!imageData) {
+        return res.status(400).json({
+          success: false,
+          error: 'No image data provided'
+        });
+      }
+
+      // Handle base64 data URL format
+      let base64Data = imageData;
+      if (imageData.startsWith('data:')) {
+        const base64Match = imageData.match(/^data:([^;]+);base64,(.+)$/);
+        if (!base64Match) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid base64 data URL format'
+          });
+      }
+        base64Data = base64Match[2];
+      }
+
+      // Convert base64 to buffer for processing
+      const buffer = Buffer.from(base64Data, 'base64');
+      const fileId = `vision_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Validate image size (limit to 10MB for vision processing)
+      if (buffer.length > 10 * 1024 * 1024) {
+        return res.status(400).json({
+          success: false,
+          error: 'Image too large for vision processing (max 10MB)'
+        });
+      }
+
+      // Validate file type
+      const detectedType = await fileTypeFromBuffer(buffer);
+      if (!detectedType || !detectedType.mime.startsWith('image/')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid image file type'
+        });
+      }
+
+      let processedData = {
+        fileId,
+        originalName: fileName || `image_${fileId}.jpg`,
+        mimeType: detectedType.mime,
+        size: buffer.length,
+        url: null,
+        extractedText: null
+      };
+
+      // Process for vision - optimize without losing quality
+      processedData = await processImageForVision(buffer, processedData, req.user.userId);
+
+      // Log upload for analytics
+      logger.info('Vision image processed successfully', {
+        userId: req.user.userId,
+        fileId,
+        originalName: processedData.originalName,
+        mimeType: detectedType.mime,
+        size: buffer.length,
+        processingType: 'vision'
+      });
+
+      res.json({
+        success: true,
+        url: processedData.url,
+        extractedText: processedData.extractedText,
+        fileInfo: {
+          id: fileId,
+          name: processedData.originalName,
+          type: detectedType.mime,
+          size: buffer.length
+        }
+      });
+
+    } catch (error) {
+      logger.error('Vision image processing failed', {
+        error: error.message,
+        userId: req.user?.userId,
+        stack: error.stack
+      });
+
+      res.status(500).json({
+        success: false,
+        error: 'Vision image processing failed: ' + error.message
+      });
+    }
+  }
+);
+
 // Helper function to process images
 async function processImage(buffer, fileData, _userId) {
   try {
@@ -722,5 +1055,118 @@ async function processDocument(buffer, fileData, _userId) {
     throw new Error(`Document processing failed: ${error.message}`);
   }
 }
+
+// Helper function to process images for vision (higher quality, optimized for AI)
+async function processImageForVision(buffer, fileData, userId) {
+  const startTime = Date.now();
+  try {
+    // Get image metadata first
+    const metadata = await sharp(buffer).metadata();
+    logger.info('Processing image for vision', {
+      userId,
+      originalSize: buffer.length,
+      width: metadata.width,
+      height: metadata.height,
+      format: metadata.format
+    });
+
+    // Intelligent resizing based on content
+    const maxDimension = Math.max(metadata.width || 0, metadata.height || 0);
+    let targetSize = 2048;
+    
+    // Optimize target size based on original dimensions
+    if (maxDimension <= 1024) {
+      targetSize = Math.min(maxDimension, 1024); // Don't upscale small images
+    } else if (maxDimension <= 2048) {
+      targetSize = maxDimension; // Keep original size if already reasonable
+    }
+
+    // For vision processing, we want to preserve quality while optimizing size
+    const compressedBuffer = await sharp(buffer)
+      .resize(targetSize, targetSize, { 
+        fit: 'inside',
+        withoutEnlargement: true,
+        kernel: sharp.kernel.lanczos3 // Better quality resizing
+      })
+      .jpeg({ 
+        quality: 95, // Higher quality for vision
+        mozjpeg: true, // Better compression
+        progressive: true
+      })
+      .toBuffer();
+
+    // Convert to base64 data URL for vision processing
+    const base64Data = compressedBuffer.toString('base64');
+    const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+    
+    const processingTime = Date.now() - startTime;
+    const compressionRatio = ((buffer.length - compressedBuffer.length) / buffer.length * 100).toFixed(1);
+    
+    logger.info('Vision image processing completed', {
+      userId,
+      originalSize: buffer.length,
+      compressedSize: compressedBuffer.length,
+      compressionRatio: `${compressionRatio}%`,
+      processingTime: `${processingTime}ms`,
+      targetSize
+    });
+    
+    return {
+      ...fileData,
+      url: dataUrl, // Vision expects base64 data URL
+      extractedText: null,
+      processingType: 'vision',
+      metadata: {
+        originalSize: buffer.length,
+        compressedSize: compressedBuffer.length,
+        compressionRatio: parseFloat(compressionRatio),
+        processingTime
+      }
+    };
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    logger.error('Vision image processing failed', {
+      userId,
+      error: error.message,
+      processingTime: `${processingTime}ms`
+    });
+    throw new Error(`Vision image processing failed: ${error.message}`);
+  }
+}
+
+/**
+ * @route GET /upload/metrics
+ * @desc Get upload metrics and performance data
+ * @access Private (Admin only in production)
+ */
+router.get('/upload/metrics', authenticateToken, async (req, res) => {
+  try {
+    // In production, restrict to admin users
+    // if (process.env.NODE_ENV === 'production' && req.user.role !== 'admin') {
+    //   return res.status(403).json({ success: false, error: 'Admin access required' });
+    // }
+    
+    const metrics = uploadMetrics.getMetrics();
+    
+    res.json({
+      success: true,
+      data: {
+        uploadMetrics: metrics,
+        timestamp: new Date().toISOString(),
+        server: 'localhost:5000'
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to get upload metrics', {
+      error: error.message,
+      userId: req.user?.userId
+    });
+    
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve metrics'
+    });
+  }
+});
 
 export default router;

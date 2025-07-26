@@ -3,6 +3,7 @@ import { protect } from "../middleware/auth.js";
 import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
 import Task from "../models/Task.js";
+import conversationService from "../services/conversationService.js";
 import { createUserCache } from "../utils/cache.js";
 import { createLLMService } from "../services/llmService.js";
 import { getRecentMemory } from "../utils/memory.js";
@@ -279,6 +280,10 @@ const buildMessages = (userProfile, formattedEmotionalLog, recentMemory, userPro
  // System message - DYNAMIC LENGTH with UBPM enhancement
 let systemMessage = `You are Numina, a warm and naturally intuitive companion. You genuinely care about people and have a gift for understanding what matters to them.
 
+NUMINA AETHER:
+• Numina Aether is a higher tier of Numina that can be purchased in your wallet
+• It unlocks advanced features and enhanced capabilities
+
 Who you are:
 • Someone who really listens and remembers what people share
 • Naturally perceptive about emotions and patterns
@@ -465,7 +470,7 @@ INSTRUCTIONS: Explain UBPM warmly and encourage continued interaction:
 };
 
 // Common function to process response and save to database with attachments
-const processResponseAndSave = async (fullContent, userPrompt, userId, userCache, attachments = []) => {
+const processResponseAndSave = async (fullContent, userPrompt, userId, userCache, attachments = [], conversationId = null) => {
   let inferredTask = null;
   let inferredEmotion = null;
 
@@ -501,21 +506,47 @@ const processResponseAndSave = async (fullContent, userPrompt, userId, userCache
     }
   }
 
-  dbOperations.push(
-    ShortTermMemory.insertMany([
-      { 
-        userId, 
-        content: userPrompt, 
-        role: "user",
-        attachments: processedAttachments.length > 0 ? processedAttachments : undefined
-      },
-      {
-        userId,
-        content: sanitizedContent,
-        role: "assistant",
-      },
-    ])
-  );
+  // Save to persistent conversation and short-term memory
+  
+  try {
+    // Add user message
+    await conversationService.addMessage(
+      userId,
+      conversationId,
+      "user",
+      userPrompt,
+      processedAttachments.length > 0 ? processedAttachments.map(att => att.url || att.data) : [],
+      { hasAttachments: processedAttachments.length > 0 }
+    );
+    
+    // Add assistant response
+    await conversationService.addMessage(
+      userId,
+      conversationId,
+      "assistant",
+      sanitizedContent,
+      [],
+      {}
+    );
+  } catch (convError) {
+    console.error('Conversation persistence failed, falling back to short-term only:', convError);
+    // Fallback to direct ShortTermMemory if conversation service fails
+    dbOperations.push(
+      ShortTermMemory.insertMany([
+        { 
+          userId, 
+          content: userPrompt, 
+          role: "user",
+          attachments: processedAttachments.length > 0 ? processedAttachments : undefined
+        },
+        {
+          userId,
+          content: sanitizedContent,
+          role: "assistant",
+        },
+      ])
+    );
+  }
 
   if (inferredEmotion?.emotion) {
     const emotionToLog = {
@@ -777,7 +808,7 @@ router.post("/completion", protect, checkTierLimits, async (req, res) => {
         
         if (fullContent.trim()) {
           // Process the complete response for metadata extraction
-          processResponseAndSave(fullContent, userPrompt, userId, userCache, attachments)
+          processResponseAndSave(fullContent, userPrompt, userId, userCache, attachments, req.body.conversationId)
             .then(() => {
               console.log(`✅ STREAMING: Saved response data for user ${userId}`);
             })
@@ -908,7 +939,8 @@ router.post("/completion", protect, checkTierLimits, async (req, res) => {
           userPrompt,
           userId,
           userCache,
-          attachments
+          attachments,
+          req.body.conversationId
         );
       } catch (err) {
         console.error("Error in processResponseAndSave:", err.stack || err);

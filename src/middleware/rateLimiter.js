@@ -99,7 +99,7 @@ export const createRateLimiter = (options = {}) => {
   };
 };
 
-console.log("✓Rate limiter factory function created");
+// Rate limiter factory ready
 
 /**
  * Predefined rate limiters for different endpoint types
@@ -144,7 +144,7 @@ export const rateLimiters = {
   })
 };
 
-console.log("✓Predefined rate limiters configured");
+// Predefined limiters ready
 
 /**
  * User-specific rate limiter (for authenticated users)
@@ -159,5 +159,5 @@ export const userRateLimiter = createRateLimiter({
   message: "Too many requests for this user. Please try again later."
 });
 
-console.log("✓User-specific rate limiter configured");
+// User-specific limiter ready
 // Middleware ready

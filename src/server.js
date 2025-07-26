@@ -5,6 +5,7 @@ import compression from "compression";
 import https from "https";
 import http from "http";
 import mongoose from "mongoose";
+import path from "path";
 
 /**
  * Numina AI Server - Main Application Entry Point
@@ -17,7 +18,7 @@ import mongoose from "mongoose";
 // Import logger first for clean startup
 import { log } from "./utils/logger.js";
 
-log.system("Initializing Numina AI Server");
+// Initializing Numina AI Server
 
 // Core configuration imports
 import "./config/environment.js";
@@ -37,6 +38,7 @@ import mobileRoutes from "./routes/mobile.js";
 import personalInsightsRoutes from "./routes/personalInsights.js";
 import syncRoutes from "./routes/sync.js";
 import conversationSyncRoutes from "./routes/conversationSync.js";
+import conversationsRoutes from "./routes/conversations.js";
 import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 import ubpmRoutes from "./routes/ubpm.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
@@ -112,7 +114,7 @@ log.debug("Express application created");
  * Sets up all middleware, services, and routes
  */
 const initializeServer = async () => {
-  log.system("Beginning server initialization");
+  // Beginning server initialization
   
   // Memory cleanup middleware for performance optimization
   const memoryCleanupMiddleware = (req, res, next) => {
@@ -134,10 +136,10 @@ const initializeServer = async () => {
   log.debug("Memory cleanup middleware configured");
 
   // Initialize core services
-  log.system("Initializing Redis service");
+  // Initializing Redis service
   await redisService.initialize();
   
-  log.system("Initializing push notification service");
+  // Initializing push notification service
   await pushNotificationService.initialize();
 
   // Configure security and middleware stack
@@ -151,20 +153,24 @@ const initializeServer = async () => {
   app.use(memoryCleanupMiddleware);
   app.use(requestLogger);
 
-  // Configure caching for mobile-optimized routes
+  // Configure caching for mobile-optimized routes BEFORE static files
   app.use('/api', cacheMiddleware.mobileOptimizedCache());
   app.use('/mobile', cacheMiddleware.mobileOptimizedCache({ mobileTtl: 900 }));
 
-  log.success("Security and middleware configured");
+  // Serve static files from public directory (AFTER API routes to prevent conflicts)
+  app.use('/static', express.static('public'));
+  app.use('/assets', express.static('public'));
+
+  // Security and middleware configured
 
   // Establish database connection
-  log.database("Connecting to MongoDB");
+  // Connecting to MongoDB
   await connectDB();
 
   // Initialize AI tool system
-  log.system("Initializing tool system");
+  // Initializing tool system
   await toolRegistry.initialize();
-  log.success("Tool system initialized");
+  // Tool system initialized
 
   // Configure HTTPS agent for external API calls
   const globalHttpsAgent = new https.Agent({
@@ -178,10 +184,10 @@ const initializeServer = async () => {
   log.debug("HTTPS agent configured for external API calls");
 
   // Initialize cache and memory monitoring
-  log.system("Initializing cache and memory monitoring");
+  // Initializing cache and memory monitoring
   app.locals.cache = createCache();
   setupMemoryMonitoring();
-  log.success("Cache and memory monitoring initialized");
+  // Cache and memory monitoring initialized
 
   // Root health endpoint for monitoring
   app.get("/", (req, res) => {
@@ -191,6 +197,16 @@ const initializeServer = async () => {
       timestamp: new Date().toISOString(),
       version: "1.0.0"
     });
+  });
+
+  // Profile page route
+  app.get("/profile", (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'profile.html'));
+  });
+
+  // Login page route
+  app.get("/login", (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'login.html'));
   });
 
   // Register API routes
@@ -228,12 +244,12 @@ const initializeServer = async () => {
   app.use("/", mobileRoutes);
   app.use("/", syncRoutes);
   app.use("/conversation", conversationSyncRoutes);
-  app.use("/conversations", conversationSyncRoutes); // Alias for plural form
+  app.use("/conversations", conversationsRoutes); // New persistent conversation routes
   app.use("/emotional-analytics", emotionalAnalyticsRoutes);
   app.use("/test-ubpm", ubpmRoutes);
   app.use("/", apiDocsRoutes);
 
-  log.success("API routes registered");
+  // API routes registered
 
   // Health check endpoint for monitoring
   app.get("/test", (req, res) => {
@@ -254,7 +270,7 @@ const initializeServer = async () => {
   log.debug("Health check endpoint configured");
 
   // Validate required environment variables
-  log.system("Validating environment variables");
+  // Validating environment variables
   const requiredEnvVars = ['OPENROUTER_API_KEY', 'MONGO_URI'];
   const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
@@ -262,12 +278,12 @@ const initializeServer = async () => {
     log.warn('Missing required environment variables', { missing: missingEnvVars });
     log.warn('Some features may not work properly without these variables');
   } else {
-    log.success("All required environment variables are present");
+    // All required environment variables are present
   }
 
   // Initialize scheduled services (production only)
   if (process.env.NODE_ENV !== 'test') {
-    log.system("Initializing scheduled services");
+    // Initializing scheduled services
     // Scheduled aggregation service temporarily disabled for optimization
     // scheduledAggregationService.start();
     log.debug("Collective data services disabled - focusing on core features");
@@ -277,28 +293,28 @@ const initializeServer = async () => {
   log.debug("Configuring error handling middleware");
   app.use(errorLogger);
   app.use(globalErrorHandler);
-  log.success("Error handling middleware configured");
+  // Error handling middleware configured
 
   // Start HTTP server (production only)
   if (process.env.NODE_ENV !== 'test') {
-    log.system("Starting HTTP server");
+    // Starting HTTP server
     const PORT = process.env.PORT || 5000;
     
     // Create HTTP server for WebSocket integration
     const server = http.createServer(app);
     
     // Initialize WebSocket service for real-time features
-    log.system("Initializing WebSocket service");
+    // Initializing WebSocket service
     websocketService.initialize(server);
     
     server.listen(PORT, () => {
       log.success(`Numina AI Server running on port ${PORT}`);
-      log.system(`WebSocket service active on ws://localhost:${PORT}`);
-      log.perf(`Performance optimizations: Enabled`);
-      log.perf(`Memory usage: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
-      log.system(`Redis service: ${redisService.isRedisConnected() ? 'Connected' : 'Fallback mode'}`);
-      log.system(`Push notifications: ${pushNotificationService.isInitialized ? 'Enabled' : 'Disabled'}`);
-      log.success("Server initialization completed successfully");
+      // WebSocket service active
+      // Performance optimizations enabled
+      // Memory usage logged
+      // Redis service status checked
+      // Push notifications status checked
+      // Server initialization completed
     });
   }
 };

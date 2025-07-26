@@ -52,7 +52,7 @@ class DataProcessingPipeline {
       this.updateConnectionRecommendations();
     }, this.analyticsInterval * 2); // Every 10 minutes
 
-    logger.info('Data processing pipeline started');
+    // Data processing pipeline started
   }
 
   /**

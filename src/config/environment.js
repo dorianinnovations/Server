@@ -19,8 +19,12 @@ export const env = {
   MONGO_URI: process.env.MONGO_URI,
   JWT_SECRET: process.env.JWT_SECRET,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES || process.env.JWT_EXPIRES_IN || '1d',
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV: process.env.NODE_ENV || 'production', // SECURITY: Force production mode
   PORT: process.env.PORT || 5000,
+  
+  // SECURITY: Debug logging control
+  ENABLE_DEBUG_LOGS: process.env.NODE_ENV === 'development' ? true : false,
+  LOG_LEVEL: process.env.NODE_ENV === 'production' ? 'error' : 'info',
   
   // AWS Configuration for secure cloud storage
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
@@ -42,4 +46,4 @@ export const env = {
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
 };
 
-console.log('✓Environment configuration loaded successfully');
+// Environment configuration loaded
