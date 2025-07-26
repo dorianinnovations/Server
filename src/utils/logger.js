@@ -2,6 +2,20 @@ import winston, { format } from "winston";
 
 const isDevelopment = process.env.NODE_ENV === 'development';
 
+// Safe JSON stringify that handles circular references
+const safeStringify = (obj, space) => {
+  const seen = new WeakSet();
+  return JSON.stringify(obj, (key, val) => {
+    if (val != null && typeof val === "object") {
+      if (seen.has(val)) {
+        return "[Circular]";
+      }
+      seen.add(val);
+    }
+    return val;
+  }, space);
+};
+
 // Enhanced custom format for better readability
 const logFormat = format.combine(
   format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
@@ -16,7 +30,7 @@ const consoleFormat = format.combine(
   format.printf(({ timestamp, level, message, service, userId, ...meta }) => {
     const serviceTag = service ? `[${service}]` : '';
     const userTag = userId ? `{${userId}}` : '';
-    const metaStr = Object.keys(meta).length > 0 ? JSON.stringify(meta) : '';
+    const metaStr = Object.keys(meta).length > 0 ? safeStringify(meta) : '';
     return `${timestamp} ${level}${serviceTag}${userTag}: ${message} ${metaStr}`.trim();
   })
 );
