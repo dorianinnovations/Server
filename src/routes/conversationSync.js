@@ -67,7 +67,7 @@ router.post('/sync-conversations', protect, async (req, res) => {
       .lean();
 
     const existingContent = new Set(existingMessages.map(msg => 
-      `${msg.role}:${msg.content.substring(0, 100)}`
+      `${msg.role}:${(msg.content || '').substring(0, 100)}`
     ));
 
     for (const conversation of conversations) {
@@ -81,6 +81,12 @@ router.post('/sync-conversations', protect, async (req, res) => {
       );
 
       for (const message of sortedMessages) {
+        // Skip messages with empty or missing text content
+        if (!message.text || message.text.trim() === '') {
+          skippedMessages++;
+          continue;
+        }
+
         const messageKey = `${message.sender === 'user' ? 'user' : 'assistant'}:${message.text.substring(0, 100)}`;
         
         // Skip if message already exists
@@ -91,25 +97,45 @@ router.post('/sync-conversations', protect, async (req, res) => {
 
         // Convert mobile message format to server format
         const role = message.sender === 'user' ? 'user' : 'assistant';
-        const content = message.text;
+        let content = message.text.trim();
         const timestamp = new Date(message.timestamp);
 
-        // Save to server memory
-        await ShortTermMemory.create({
-          userId,
-          role,
-          content,
-          timestamp,
-          conversationId: conversation.id,
-          metadata: {
-            syncedFromMobile: true,
-            originalId: message.id,
-            mood: message.mood,
-            hasAttachments: message.attachments?.length > 0
-          }
-        });
+        // Additional validation before saving - ensure content is never empty
+        if (!content || content.length === 0) {
+          skippedMessages++;
+          continue;
+        }
 
-        syncedMessages++;
+        // Final safety check: ensure content meets database requirements
+        content = content || '[Empty message]';
+
+        // Save to server memory with try-catch for individual message failures
+        try {
+          await ShortTermMemory.create({
+            userId,
+            role,
+            content,
+            timestamp,
+            conversationId: conversation.id,
+            metadata: {
+              syncedFromMobile: true,
+              originalId: message.id,
+              mood: message.mood,
+              hasAttachments: message.attachments?.length > 0
+            }
+          });
+
+          syncedMessages++;
+        } catch (createError) {
+          console.error('Failed to create individual message:', {
+            error: createError.message,
+            userId,
+            role,
+            contentLength: content?.length,
+            timestamp
+          });
+          skippedMessages++;
+        }
       }
     }
 

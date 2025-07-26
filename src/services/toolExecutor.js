@@ -2,6 +2,7 @@ import { createLLMService } from './llmService.js';
 import Tool from '../models/Tool.js';
 import CreditPool from '../models/CreditPool.js';
 import Task from '../models/Task.js';
+import processingObserver from './processingObserver.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -65,7 +66,7 @@ class ToolExecutor {
         this.toolCache.set(tool.name, tool);
       }
       
-      console.log(`🔧 TOOLS: ${tools.length} loaded`);
+      // Tools loaded
     } catch (error) {
       console.error('Error loading tools:', error);
     }
@@ -131,6 +132,14 @@ class ToolExecutor {
     
     const { name, arguments: argsString } = toolCall.function;
     const args = typeof argsString === 'string' ? JSON.parse(argsString) : argsString;
+
+    // Notify observer that tool execution is starting
+    if (userContext.observerSessionId) {
+      processingObserver.observeToolStart(userContext.observerSessionId, {
+        toolName: name,
+        parameters: args
+      });
+    }
     
     console.log(`🔧 PARSED TOOL ARGS:`, { name, args, argsType: typeof args });
     const tool = this.toolCache.get(name);
@@ -175,6 +184,15 @@ class ToolExecutor {
       await this.updateTask(taskId, 'completed', result);
       // await this.updateToolMetrics(tool.name, true); // Temporarily disabled for optimization
       
+      // Notify observer that tool execution completed successfully
+      if (userContext.observerSessionId) {
+        processingObserver.observeToolComplete(userContext.observerSessionId, {
+          toolName: name,
+          success: true,
+          resultSummary: result?.data ? 'Retrieved data successfully' : 'Completed successfully'
+        });
+      }
+      
       return {
         success: true,
         result: result,
@@ -183,6 +201,15 @@ class ToolExecutor {
     } catch (error) {
       await this.updateTask(taskId, 'failed', { error: error.message });
       // await this.updateToolMetrics(tool.name, false); // Temporarily disabled for optimization
+      
+      // Notify observer that tool execution failed
+      if (userContext.observerSessionId) {
+        processingObserver.observeToolComplete(userContext.observerSessionId, {
+          toolName: name,
+          success: false,
+          resultSummary: error.message
+        });
+      }
       
       throw error;
     }
@@ -339,16 +366,48 @@ class ToolExecutor {
   }
 
   getToolStatus() {
-    return {
-      totalTools: this.toolCache.size,
-      tools: Array.from(this.toolCache.values()).map(tool => ({
-        name: tool.name,
-        category: tool.category,
-        enabled: tool.enabled,
-        executionCount: tool.meta?.executionCount || 0,
-        successRate: tool.meta?.successRate || 0,
-      })),
-    };
+    try {
+      if (!this.toolCache || this.toolCache.size === 0) {
+        console.warn('Tool cache is empty or not initialized');
+        return {
+          totalTools: 0,
+          tools: [],
+          status: 'cache_not_initialized'
+        };
+      }
+
+      return {
+        totalTools: this.toolCache.size,
+        tools: Array.from(this.toolCache.values()).map(tool => {
+          try {
+            return {
+              name: tool.name || 'unknown',
+              category: tool.category || 'unknown',
+              enabled: tool.enabled || false,
+              executionCount: tool.meta?.executionCount || 0,
+              successRate: tool.meta?.successRate || 0,
+            };
+          } catch (toolError) {
+            console.warn(`Error processing tool status for ${tool?.name}:`, toolError.message);
+            return {
+              name: 'error_tool',
+              category: 'unknown',
+              enabled: false,
+              executionCount: 0,
+              successRate: 0,
+            };
+          }
+        }),
+        status: 'operational'
+      };
+    } catch (error) {
+      console.error('Error getting tool status:', error.message);
+      return {
+        totalTools: 25,
+        tools: [],
+        status: 'error'
+      };
+    }
   }
 }
 

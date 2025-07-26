@@ -10,6 +10,7 @@ import { checkTierLimits, requireFeature } from '../middleware/tierLimiter.js';
 import logger from '../utils/logger.js';
 import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
 import aiActivityMonitor from '../services/aiActivityMonitor.js';
+import processingObserver from '../services/processingObserver.js';
 import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
@@ -127,6 +128,24 @@ router.post('/generate-nodes', protect, async (req, res) => {
         }
       });
     }
+
+    // ========================================
+    // 👁️ OBSERVER BRIDGE - Watch real GPT-4o work
+    // ========================================
+    const observerSessionId = `obs_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Register observer to watch all LLM calls and tool executions
+    processingObserver.registerObserver(observerSessionId, {
+      onActivity: (message) => {
+        logger.info('🔍 Observer Bridge:', { userId, message });
+        // TODO: Stream this to frontend via WebSocket or SSE
+      }
+    });
+
+    logger.info('🎯 Observer bridge registered for real-time transparency', { 
+      userId, 
+      observerSessionId 
+    });
 
     // Get comprehensive user context for personalization
     const user = await User.findById(userId);
@@ -634,7 +653,9 @@ OUTPUT: Return ONLY a JSON object with your research plan:
       model: 'openai/gpt-4o-mini', // Fast, cost-effective for planning
       max_tokens: 800,
       temperature: 0.3, // More focused planning
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      observerSessionId,
+      observerPurpose: 'planning'
     });
     
     // ========================================
@@ -706,6 +727,8 @@ OUTPUT: Return ONLY a JSON object with your research plan:
       presence_penalty: 0.1,
       frequency_penalty: 0.1,
       tools: tools.length > 0 ? tools : undefined,
+      observerSessionId,
+      observerPurpose: 'generation',
       tool_choice: tools.length > 0 ? 'auto' : undefined,
       response_format: { type: "json_object" } // Force JSON response
     });
@@ -725,7 +748,10 @@ OUTPUT: Return ONLY a JSON object with your research plan:
           
           logger.debug('Sandbox executing tool', { toolName, toolArgs });
           
-          const toolResult = await toolExecutor.executeToolCall(toolCall, { userId });
+          const toolResult = await toolExecutor.executeToolCall(toolCall, { 
+            userId, 
+            observerSessionId 
+          });
           
           toolResults.push({
             tool_call_id: toolCall.id,
@@ -761,6 +787,8 @@ OUTPUT: Return ONLY a JSON object with your research plan:
           max_tokens: 2000, // Increased to prevent truncation
           presence_penalty: 0.1,
           frequency_penalty: 0.1,
+          observerSessionId,
+          observerPurpose: 'tool_analysis',
           tools: [], // No tools in follow-up to avoid loops
           response_format: { type: "json_object" } // Force JSON response
         });
@@ -854,6 +882,8 @@ Return enhanced JSON array:`;
         model: 'openai/gpt-4o-mini', // Cost-effective for enhancement  
         max_tokens: 2000, // Increased to prevent truncation
         temperature: 0.4,
+        observerSessionId,
+        observerPurpose: 'curation',
         response_format: { type: "json_object" }
       });
       
@@ -967,6 +997,9 @@ Return enhanced JSON array:`;
     });
 
 
+    // Unregister observer before response
+    processingObserver.unregisterObserver(observerSessionId);
+
     res.json({
       success: true,
       data: {
@@ -975,6 +1008,9 @@ Return enhanced JSON array:`;
     });
 
   } catch (error) {
+    // Cleanup observer on error
+    processingObserver.unregisterObserver(observerSessionId);
+
     logger.error('Error in sandbox generate-nodes', { 
       userId: req.user?._id,
       error: error.message,
@@ -1054,7 +1090,9 @@ Provide a 1-2 sentence personalized insight about how this node connects to the 
           { role: 'user', content: contextPrompt }
         ], {
           n_predict: 200,
-          temperature: 0.5
+          temperature: 0.5,
+          observerSessionId,
+          observerPurpose: 'synthesis'
         });
         
         enhancementData.personalizedContext = personalizedResponse.content.trim();
@@ -1158,7 +1196,9 @@ Return insights about how these concepts connect and build upon each other.`;
       { role: 'user', content: connectionPrompt }
     ], {
       n_predict: 400,
-      temperature: 0.6
+      temperature: 0.6,
+      observerSessionId,
+      observerPurpose: 'synthesis'
     });
 
     // Generate connection strength scores
@@ -1390,10 +1430,10 @@ router.post('/contextual-search', protect, async (req, res) => {
       nodeCount: nodes?.length 
     });
 
-    if (!searchQuery || typeof searchQuery !== 'string') {
+    if (!searchQuery || typeof searchQuery !== 'string' || searchQuery.trim() === '') {
       return res.status(400).json({
         success: false,
-        error: 'Search query is required'
+        error: 'Search query is required and must be a non-empty string'
       });
     }
 
@@ -1405,7 +1445,7 @@ router.post('/contextual-search', protect, async (req, res) => {
       searchResults = nodes
         .map(node => {
           let relevanceScore = 0;
-          const queryLower = searchQuery.toLowerCase();
+          const queryLower = (searchQuery || '').toLowerCase();
           
           // Title match (highest weight)
           if (node.title?.toLowerCase().includes(queryLower)) {
@@ -1454,11 +1494,12 @@ router.post('/contextual-search', protect, async (req, res) => {
       
       // Extract matching nodes from sessions
       for (const session of matchingSessions) {
-        const matchingNodes = session.nodes.filter(node =>
-          node.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          node.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          node.category?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        const matchingNodes = session.nodes.filter(node => {
+          const queryLower = (searchQuery || '').toLowerCase();
+          return node.title?.toLowerCase().includes(queryLower) ||
+                 node.content?.toLowerCase().includes(queryLower) ||
+                 node.category?.toLowerCase().includes(queryLower);
+        });
         
         searchResults.push(...matchingNodes.map(node => ({
           ...node,
@@ -1933,10 +1974,16 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
         try {
           aiActivityMonitor.completeProcess(userId.toString());
           
+          // Handle the new simplified narration result format
           const completionData = {
-            type: 'final_result',
-            data: result,
-            timestamp: new Date().toISOString()
+            type: 'narration_complete',
+            data: {
+              narrationComplete: result.narrationComplete || true,
+              message: result.message || 'LLAMA narration finished',
+              sessionId: result.sessionId,
+              originalQuery: result.originalQuery,
+              timestamp: new Date().toISOString()
+            }
           };
 
           res.write(`data: ${JSON.stringify(completionData)}\n\n`);
@@ -1944,15 +1991,15 @@ router.post('/chain-of-thought', protect, checkTierLimits, async (req, res) => {
           res.write('data: [DONE]\n\n');
           res.flush(); // FORCE IMMEDIATE TRANSMISSION
           
-          logger.info('Chain of thought completed with AI transparency', { 
+          logger.info('Chain of thought narration completed', { 
             userId, 
-            nodesCount: result.nodes?.length || 0,
-            sessionId: result.sessionId 
+            sessionId: result.sessionId,
+            message: result.message 
           });
           
           res.end();
         } catch (writeError) {
-          logger.error('Error writing completion data', { 
+          logger.error('Error writing narration completion data', { 
             userId, 
             error: writeError.message 
           });

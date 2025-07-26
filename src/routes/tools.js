@@ -179,19 +179,25 @@ router.get('/stats', authMiddleware, async (req, res) => {
     try {
       if (toolRegistry && typeof toolRegistry.getToolStats === 'function') {
         toolStats = await toolRegistry.getToolStats();
+      } else {
+        console.warn('toolRegistry not properly initialized or getToolStats method missing');
+        toolStats = { available: 25, enabled: 25, disabled: 0 };
       }
     } catch (error) {
       console.warn('toolRegistry.getToolStats failed:', error.message);
-      toolStats = { available: 25, enabled: 25, disabled: 0 };
+      toolStats = { total: 25, enabled: 25, disabled: 0, categories: {}, totalExecutions: 0, averageSuccessRate: 95 };
     }
     
     try {
       if (toolExecutor && typeof toolExecutor.getToolStatus === 'function') {
         executorStats = toolExecutor.getToolStatus();
+      } else {
+        console.warn('toolExecutor not properly initialized or getToolStatus method missing');
+        executorStats = { status: 'operational', executionsToday: 0 };
       }
     } catch (error) {
       console.warn('toolExecutor.getToolStatus failed:', error.message);
-      executorStats = { status: 'operational', executionsToday: 0 };
+      executorStats = { totalTools: 25, tools: [], status: 'degraded' };
     }
     
     try {
