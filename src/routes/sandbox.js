@@ -1364,7 +1364,7 @@ OUTPUT: Return ONLY a JSON object with your research plan:
     logger.info('🎯 Invoking THE PLANNER for research strategy', { userId, researchApproach });
     
     // Report workflow progress: Starting planning phase
-    workflowObserver.updateStepProgress(observerSessionId, 'learning_assessment', 20, 'Understanding your request and planning approach...');
+    workflowObserver.updateStepProgress(observerSessionId, 'analyze', 20, 'Understanding your request and planning approach...');
     
     const plannerResponse = await llmService.makeLLMRequest([
       { role: 'system', content: 'You are the Planner - create research strategies and coordinate tool execution. Respond with ONLY valid JSON.' },
@@ -1375,7 +1375,7 @@ OUTPUT: Return ONLY a JSON object with your research plan:
       temperature: 0.3, // More focused planning
       response_format: { type: "json_object" },
       observerSessionId,
-      workflowStepId: 'learning_assessment',
+      workflowStepId: 'analyze',
       workflowProgress: 60,
       observerPurpose: 'planning'
     });
@@ -1438,8 +1438,8 @@ OUTPUT: Return ONLY a JSON object with your research plan:
     // Execute tools based on Planner's strategy
     
     // Complete assessment phase and move to research
-    workflowObserver.updateStepProgress(observerSessionId, 'learning_assessment', 100, 'Analysis complete!');
-    workflowObserver.updateStepProgress(observerSessionId, 'method_research', 30, 'Gathering information from multiple sources...');
+    workflowObserver.updateStepProgress(observerSessionId, 'analyze', 100, 'Analysis complete!');
+    workflowObserver.updateStepProgress(observerSessionId, 'research', 30, 'Gathering information from multiple sources...');
     
     let response = await llmService.makeLLMRequest([
       { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate discovery nodes as a JSON array. Each node must have: title (string), content (concise markdown-formatted string), category (string), confidence (number 0-1), personalHook (string), and predictiveInsight (string or null). Keep content concise but informative. Your response must be ONLY a valid JSON array, no other text.' },
@@ -1454,7 +1454,7 @@ OUTPUT: Return ONLY a JSON object with your research plan:
       tools: tools.length > 0 ? tools : undefined,
       observerSessionId,
       observerPurpose: 'generation',
-      workflowStepId: 'method_research',
+      workflowStepId: 'research',
       workflowProgress: 70,
       tool_choice: tools.length > 0 ? 'auto' : undefined,
       response_format: { type: "json_object" } // Force JSON response
@@ -1724,8 +1724,8 @@ Return enhanced JSON array:`;
     });
 
     // Complete the workflow
-    workflowObserver.updateStepProgress(observerSessionId, 'method_research', 100, 'Research complete!');
-    workflowObserver.updateStepProgress(observerSessionId, 'personalized_strategy', 100, 'Your personalized insights are ready!');
+    workflowObserver.updateStepProgress(observerSessionId, 'research', 100, 'Research complete!');
+    workflowObserver.updateStepProgress(observerSessionId, 'synthesize', 100, 'Your personalized insights are ready!');
     workflowObserver.completeWorkflow(observerSessionId, `Generated ${validNodes.length} insights for you!`);
 
     // Unregister workflow observer before response
