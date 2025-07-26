@@ -1,4 +1,7 @@
 import { createLLMService } from './llmService.js';
+import toolRegistry from './toolRegistry.js';
+import toolExecutor from './toolExecutor.js';
+import processingObserver from './processingObserver.js';
 import logger from '../utils/logger.js';
 
 class ChainOfThoughtEngine {
@@ -8,552 +11,281 @@ class ChainOfThoughtEngine {
 
   /**
    * Process a query through chain of thought reasoning with AI transparency
+   * Houses the observer bridge that watches real node generation
    * @param {string} userId - User ID for personalization
    * @param {string} query - User's query/prompt
    * @param {Object} options - Processing options (includes aiActivityMonitor)
    * @param {Object} callbacks - Event callbacks for streaming
    */
   async processQuery(userId, query, options, callbacks) {
-    const steps = [
-      { id: '1', title: 'Analyzing core sources', status: 'pending' },
-      { id: '2', title: 'Checking additional scenarios', status: 'pending' },
-      { id: '3', title: 'Cross-referencing patterns', status: 'pending' },
-      { id: '4', title: 'Synthesizing insights', status: 'pending' },
-      { id: '5', title: 'Generating nodes', status: 'pending' }
-    ];
+    const sessionId = `cot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let stepCounter = 0;
+    let currentSteps = [];
+    let isProcessingComplete = false;
 
-    logger.info('Starting chain of thought process', { 
-      userId, 
-      query: query.substring(0, 100),
-      stepsCount: steps.length 
+    logger.info('Dynamic chain of thought housing observer bridge', { userId, sessionId });
+
+    // Register observer bridge to watch real processing with dynamic steps
+    processingObserver.registerObserver(sessionId, {
+      onActivity: (message) => {
+        stepCounter++;
+        const stepId = stepCounter.toString();
+        
+        // Mark previous step as completed if it exists
+        const existingStepIndex = currentSteps.findIndex(s => s.status === 'active');
+        if (existingStepIndex >= 0) {
+          currentSteps[existingStepIndex].status = 'completed';
+        }
+        
+        // Add new active step dynamically - no predefined limit
+        const newStep = {
+          id: stepId,
+          title: message,
+          status: 'active'
+        };
+        currentSteps.push(newStep);
+
+        // Stream to frontend with current progress
+        callbacks.onStepUpdate({
+          id: stepId,
+          allSteps: [...currentSteps],
+          totalSteps: currentSteps.length, // Dynamic total
+          isComplete: false
+        }, message);
+
+        logger.info('🔍 Dynamic chain of thought streaming:', { 
+          userId, 
+          stepId, 
+          message, 
+          totalSteps: currentSteps.length 
+        });
+      }
     });
 
     try {
-      // Get AI activity monitor if provided for transparency
-      const aiMonitor = options.context?.aiActivityMonitor;
+      // Call real node generation with observer watching
+      const nodeResult = await this.generateNodesWithObserver(userId, query, options, sessionId);
       
-      // Process each step with real-time updates and AI transparency
-      for (let i = 0; i < steps.length; i++) {
-        steps[i].status = 'active';
-        
-        // Update AI activity monitor for transparency
-        if (aiMonitor) {
-          aiMonitor.updateActivity(userId, `executing step: ${steps[i].title.toLowerCase()}`, {
-            step: `chain_step_${i + 1}`,
-            totalSteps: steps.length,
-            currentStepTitle: steps[i].title
-          });
-        }
-        
-        // Get intelligent contextual progress message using Llama
-        const progressMessage = await this.getProgressInsight(
-          steps[i].title, 
-          query,
-          options.context || {},
-          options.fastModel || 'meta-llama/llama-3.1-8b-instruct'
-        );
-
-        // Log the Llama narration call for transparency
-        if (aiMonitor) {
-          aiMonitor.logLLMCall(userId, {
-            model: options.fastModel || 'meta-llama/llama-3.1-8b-instruct',
-            purpose: 'progress_narration',
-            tokens: 12,
-            step: steps[i].title
-          });
-        }
-
-        // Send step update to client with AI transparency
-        callbacks.onStepUpdate({
-          id: steps[i].id,
-          allSteps: [...steps]
-        }, progressMessage);
-
-        // Check if this is the final "Generating nodes" step
-        const isFinalStep = i === steps.length - 1 && steps[i].title.toLowerCase().includes('generating');
-        
-        if (isFinalStep) {
-          // For the final step, don't complete it yet - let the actual synthesis complete it
-          logger.info('Deferring final step completion until actual node generation completes');
-          
-          // Add a callback reference for later completion
-          this.pendingStepCompletion = {
-            step: steps[i],
-            index: i,
-            callbacks,
-            aiMonitor,
-            allSteps: steps
-          };
-          
-          // Brief pause before starting synthesis
-          await new Promise(resolve => setTimeout(resolve, 800));
-        } else {
-          // For other steps, use normal timing
-          const processingTime = 1800 + Math.random() * 2200;
-          await new Promise(resolve => setTimeout(resolve, processingTime));
-          
-          steps[i].status = 'completed';
-          
-          // Update AI monitor for step completion
-          if (aiMonitor) {
-            aiMonitor.updateActivity(userId, `completed: ${steps[i].title.toLowerCase()}`, {
-              step: `chain_step_${i + 1}_complete`,
-              completedSteps: i + 1,
-              totalSteps: steps.length
-            });
-          }
-          
-          // Send completion update
-          callbacks.onStepUpdate({
-            id: steps[i].id,
-            allSteps: [...steps]
-          }, '');
-          
-          // Brief pause between steps for UX pacing
-          await new Promise(resolve => setTimeout(resolve, 400));
+      // Mark final step as completed and set processing as complete
+      if (currentSteps.length > 0) {
+        const lastStep = currentSteps[currentSteps.length - 1];
+        if (lastStep.status === 'active') {
+          lastStep.status = 'completed';
         }
       }
-
-      // Final synthesis with main model and AI transparency
-      logger.info('Starting final synthesis with AI transparency', { userId });
       
-      // Update AI monitor for final synthesis phase
-      if (aiMonitor) {
-        aiMonitor.updateActivity(userId, 'synthesizing final insights', {
-          step: 'final_synthesis',
-          phase: 'gpt4_processing'
-        });
-      }
+      isProcessingComplete = true;
       
-      const finalResult = await this.synthesizeResults(userId, query, options);
+      // Send final update with completion status
+      callbacks.onStepUpdate({
+        id: 'final',
+        allSteps: [...currentSteps],
+        totalSteps: currentSteps.length,
+        isComplete: true
+      }, 'Processing complete');
       
-      logger.info('Chain of thought completed successfully', { 
-        userId, 
-        nodesGenerated: finalResult.nodes?.length || 0 
+      // Unregister observer
+      processingObserver.unregisterObserver(sessionId);
+      
+      // Return the actual nodes with dynamic step count
+      callbacks.onComplete({
+        nodes: nodeResult.nodes,
+        sessionId,
+        originalQuery: query,
+        completed: true,
+        totalStepsProcessed: currentSteps.length,
+        dynamicSteps: true,
+        timestamp: new Date().toISOString()
       });
 
-      callbacks.onComplete(finalResult);
-
     } catch (error) {
-      logger.error('Chain of thought process failed', { 
+      // Mark any active step as failed
+      if (currentSteps.length > 0) {
+        const activeStep = currentSteps.find(s => s.status === 'active');
+        if (activeStep) {
+          activeStep.status = 'failed';
+          activeStep.title = `Error: ${error.message.substring(0, 50)}`;
+        }
+      }
+      
+      processingObserver.unregisterObserver(sessionId);
+      logger.error('Dynamic chain of thought housing observer failed', { 
         userId, 
         error: error.message,
-        stack: error.stack 
+        stepsCompleted: currentSteps.length
       });
       callbacks.onError(error);
     }
   }
 
   /**
-   * Generate contextual progress insight using a cheap LLM model
+   * Generate nodes with observer watching - integrates with sandbox logic
+   */
+  async generateNodesWithObserver(userId, query, options, observerSessionId) {
+    // Basic setup for node generation with observer
+    const selectedActions = ['research', 'analyze']; // Default actions
+    
+    // Simple LLM call with observer watching
+    const nodePrompt = `Generate 2-3 discovery nodes for: "${query}"
+    
+Each node should be a JSON object with:
+- title: Brief, specific title (max 60 chars)
+- content: Informative content (2-3 sentences)
+- category: Relevant category
+- confidence: 0.7-1.0
+
+Return as JSON array.`;
+
+    logger.info('🎯 Generating nodes with observer watching', { userId, observerSessionId });
+
+    const response = await this.llmService.makeLLMRequest([
+      { role: 'system', content: 'Generate discovery nodes as JSON array. Respond ONLY with valid JSON.' },
+      { role: 'user', content: nodePrompt }
+    ], {
+      model: 'openai/gpt-4o',
+      max_tokens: 1000,
+      temperature: 0.7,
+      observerSessionId,
+      observerPurpose: 'generation',
+      response_format: { type: "json_object" }
+    });
+
+    // Parse response into nodes
+    let nodes = [];
+    try {
+      const cleanResponse = response.content.trim().replace(/```json\n?|\n?```/g, '').trim();
+      const parsed = JSON.parse(cleanResponse);
+      nodes = Array.isArray(parsed) ? parsed : (parsed.nodes || []);
+    } catch (parseError) {
+      logger.warn('Failed to parse generated nodes', { error: parseError.message });
+      nodes = [{
+        id: `fallback_${Date.now()}`,
+        title: 'Processing Complete',
+        content: `Analysis completed for: ${query}`,
+        category: 'General',
+        confidence: 0.7
+      }];
+    }
+
+    // Format nodes properly
+    const validNodes = nodes.slice(0, 3).map((node, index) => ({
+      id: `observed_${Date.now()}_${index}`,
+      title: String(node.title || `Node ${index + 1}`).substring(0, 100),
+      content: String(node.content || 'Generated content').substring(0, 500),
+      category: String(node.category || 'Discovery').substring(0, 50),
+      confidence: Math.min(1.0, Math.max(0.0, parseFloat(node.confidence) || 0.7)),
+      position: {
+        x: 100 + Math.random() * 200,
+        y: 100 + Math.random() * 200
+      },
+      connections: [],
+      isLocked: false
+    }));
+
+    logger.info('✅ Nodes generated with observer', { 
+      userId, 
+      nodeCount: validNodes.length,
+      observerSessionId 
+    });
+
+    return { nodes: validNodes };
+  }
+
+  /**
+   * Generate simple narration message
    * @param {string} stepTitle - Current step being processed
    * @param {string} query - Original user query
-   * @param {Object} context - Additional context
    * @param {string} model - LLM model to use (cheap one)
-   * @returns {string} Progress message
+   * @returns {string} Narration message
    */
-  async getProgressInsight(stepTitle, query, context = {}, model = 'meta-llama/llama-3.1-8b-instruct') {
+  async getNarrationMessage(stepTitle, query, model = 'meta-llama/llama-3.1-8b-instruct') {
     try {
-      // Concise LLAMA prompt for progress reporting
-      const systemPrompt = `Report what the AI is currently doing in one clear sentence. Be specific to the user's query domain and the current processing step.
+      // Simple prompt for narration only
+      const systemPrompt = `You are an observer. Your job is to briefly describe what's happening in one simple sentence.
 
 Examples:
-- "Analyzing data patterns"
-- "Processing domain knowledge" 
-- "Evaluating response options"
-- "Synthesizing findings"`;
-      
-      const contextInfo = context.useUBPM ? ' using behavioral profiling' : '';
-      const actionsInfo = context.actions ? ` with ${context.actions.slice(0, 2).join(' and ')} focus` : '';
+- "Analyzing the request"
+- "Selecting tools"
+- "Processing response"`;
       
       const userPrompt = `Step: "${stepTitle}"
-Query: "${query.substring(0, 60)}"${contextInfo}${actionsInfo}
+User asked: "${query.substring(0, 40)}"
 
-What is the AI doing right now?`;
+What's happening right now?`;
 
       const response = await this.llmService.makeLLMRequest([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ], {
         model,
-        max_tokens: 80, // Concise responses
-        temperature: 0.4, // More focused, less verbose
-        stream: false,
-        stop: ['\n', '.', 'Human:', 'Assistant:']
+        max_tokens: 40, // Very concise
+        temperature: 0.3, // Focused
+        stream: false
       });
 
-      let message = response.content || this.getFallbackInsight(stepTitle);
+      let message = response.content || this.getFallbackNarration(stepTitle);
       
-      // Light cleanup - preserve natural sentence structure
+      // Clean up response
       message = message.trim()
-        .replace(/\s+/g, ' ') // Normalize whitespace
-        .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+        .replace(/\s+/g, ' ')
+        .replace(/^["']|["']$/g, '')
         .trim();
       
-      // Basic validation - ensure we have meaningful content
-      const words = message.split(' ').filter(word => word.length > 0);
-      if (words.length >= 3 && message.length <= 200) {
-        // Capitalize first letter for proper sentence format
-        message = message.charAt(0).toUpperCase() + message.slice(1);
-        return message;
+      // Validate and return
+      if (message.length > 10 && message.length <= 100) {
+        return message.charAt(0).toUpperCase() + message.slice(1);
       } else {
-        // Fallback to contextual insight if response is too short or too long
-        return this.getContextualInsight(stepTitle, query) || this.getFallbackInsight(stepTitle);
+        return this.getFallbackNarration(stepTitle);
       }
 
     } catch (error) {
-      logger.warn('LLM insight failed, using contextual fallback', { 
+      logger.warn('Narration failed, using fallback', { 
         stepTitle, 
         error: error.message 
       });
       
-      return this.getContextualInsight(stepTitle, query) || this.getFallbackInsight(stepTitle);
+      return this.getFallbackNarration(stepTitle);
     }
-  }
-
-  getContextualInsight(stepTitle, query) {
-    // Map specific query keywords to natural sentence contextual messages
-    const queryKeywords = query.toLowerCase();
-    
-    const contextualMaps = {
-      'Analyzing core sources': {
-        'sleep': 'Scanning through sleep pattern data and circadian rhythm indicators',
-        'productivity': 'Reading productivity metrics and workflow efficiency patterns carefully',
-        'creativity': 'Processing creative idea patterns and innovation frameworks',
-        'relationships': 'Analyzing relationship behavior patterns and social dynamics',
-        'habits': 'Examining habit formation data and behavioral consistency metrics',
-        'emotions': 'Processing emotional state indicators and mood pattern analysis',
-        'default': 'Scanning core data sources and foundational information patterns'
-      },
-      'Checking additional scenarios': {
-        'sleep': 'Exploring alternative sleep optimization scenarios and recovery patterns',
-        'productivity': 'Checking productivity improvement metrics across different contexts',
-        'creativity': 'Validating creative workflow ideas and alternative approaches',
-        'relationships': 'Exploring relationship dynamic scenarios and interaction patterns',
-        'habits': 'Checking alternative habit patterns and behavioral modification strategies',
-        'emotions': 'Validating emotional response data and psychological frameworks',
-        'default': 'Exploring additional scenario options and contextual variations'
-      },
-      'Cross-referencing patterns': {
-        'sleep': 'Linking sleep behavior patterns with health and performance indicators',
-        'productivity': 'Connecting productivity metrics with environmental and personal factors',
-        'creativity': 'Linking creative idea networks and inspiration sources',
-        'relationships': 'Mapping relationship connection patterns and social influence networks',
-        'habits': 'Finding behavioral habit connections and trigger-response relationships',
-        'emotions': 'Mapping emotional pattern links and psychological state correlations',
-        'default': 'Finding cross-pattern connections and interdisciplinary relationships'
-      },
-      'Synthesizing insights': {
-        'sleep': 'Combining sleep optimization insights with holistic wellness approaches',
-        'productivity': 'Building comprehensive productivity insights from multiple data streams',
-        'creativity': 'Synthesizing creative workflow ideas into actionable frameworks',
-        'relationships': 'Combining relationship dynamic insights for better social connections',
-        'habits': 'Creating habit optimization insights based on behavioral science',
-        'emotions': 'Building emotional intelligence insights from psychological research',
-        'default': 'Combining insights from analysis into coherent understanding'
-      },
-      'Generating nodes': {
-        'sleep': 'Creating sleep improvement nodes with personalized recommendations',
-        'productivity': 'Building productivity optimization nodes tailored to your workflow',
-        'creativity': 'Generating creative enhancement nodes for innovation and inspiration',
-        'relationships': 'Creating relationship insight nodes for better social connections',
-        'habits': 'Finalizing habit formation nodes with practical implementation strategies',
-        'emotions': 'Creating emotional wellness nodes for mental health and balance',
-        'default': 'Creating personalized insight nodes based on your unique context'
-      }
-    };
-
-    const stepMap = contextualMaps[stepTitle];
-    if (!stepMap) return null;
-
-    // Find matching keyword
-    for (const [keyword, message] of Object.entries(stepMap)) {
-      if (keyword !== 'default' && queryKeywords.includes(keyword)) {
-        return message;
-      }
-    }
-
-    return stepMap.default;
   }
 
   /**
-   * Get fallback insight when LLM is unavailable
+   * Get simple fallback narration when LLAMA is unavailable
    * @param {string} stepTitle - Current step title
-   * @returns {string} Fallback message
+   * @returns {string} Fallback narration message
    */
-  getFallbackInsight(stepTitle) {
+  getFallbackNarration(stepTitle) {
     const fallbackMessages = {
-      'Analyzing core sources': [
-        'Scanning primary data sources to understand your context and preferences',
-        'Reading behavioral pattern data to identify relevant insights',
-        'Processing user information thoroughly to build comprehensive understanding'
+      'Observing GPT-4o analysis': [
+        'Watching GPT-4o understand your request',
+        'Observing initial analysis process',
+        'Monitoring GPT-4o\'s thinking'
       ],
-      'Checking additional scenarios': [
-        'Exploring alternative scenario options to broaden the analysis scope',
-        'Validating supplementary data sources for comprehensive coverage',
-        'Checking contextual information patterns across different domains'
+      'Monitoring tool execution': [
+        'Watching tool selection and execution',
+        'Observing GPT-4o use available tools',
+        'Monitoring tool processing'
       ],
-      'Cross-referencing patterns': [
-        'Finding behavioral connection patterns that link different aspects together',
-        'Mapping data relationship networks to understand interconnections',
-        'Linking relevant information sources to create holistic insights'
+      'Watching synthesis process': [
+        'Observing response synthesis',
+        'Watching GPT-4o combine information',
+        'Monitoring final processing'
       ],
-      'Synthesizing insights': [
-        'Combining analytical findings together into coherent recommendations',
-        'Creating comprehensive insight summaries from multiple data streams',
-        'Building personalized recommendation systems based on your unique profile'
-      ],
-      'Generating nodes': [
-        'Creating personalized insight nodes tailored to your specific needs',
-        'Building interactive data visualizations for better understanding',
-        'Finalizing intelligent recommendation outputs with actionable guidance'
+      'Reporting completion': [
+        'Watching final preparation',
+        'Observing completion process',
+        'Monitoring final checks'
       ]
     };
 
     const messages = fallbackMessages[stepTitle] || [
-      'Processing complex user data to generate meaningful insights',
-      'Analyzing behavioral information patterns for personalized recommendations',
-      'Working on intelligent insights that match your specific context'
+      'Observing AI processing',
+      'Watching GPT-4o work',
+      'Monitoring progress'
     ];
 
     return messages[Math.floor(Math.random() * messages.length)];
   }
 
-  /**
-   * Synthesize final results using main model with real AI monitoring
-   * @param {string} userId - User ID
-   * @param {string} query - Original query
-   * @param {Object} options - Processing options
-   * @returns {Object} Final results with nodes
-   */
-  async synthesizeResults(userId, query, options) {
-    try {
-      // Import real AI monitoring system
-      const aiActivityMonitor = (await import('./aiActivityMonitor.js')).default;
-      
-      // Call the real node generation logic with monitoring
-      const realNodes = await this.generateRealNodes(userId, query, options, aiActivityMonitor);
-      
-      // Complete the pending final step if it exists
-      if (this.pendingStepCompletion) {
-        const { step, index, callbacks, aiMonitor, allSteps } = this.pendingStepCompletion;
-        
-        logger.info('Completing deferred final step after node generation');
-        
-        // Mark step as completed
-        step.status = 'completed';
-        
-        // Update AI monitor for step completion
-        if (aiMonitor) {
-          aiMonitor.updateActivity(userId, `completed: ${step.title.toLowerCase()}`, {
-            step: `chain_step_${index + 1}_complete`,
-            completedSteps: index + 1,
-            totalSteps: allSteps.length,
-            nodesGenerated: realNodes.length
-          });
-        }
-        
-        // Send completion update to client with all steps
-        callbacks.onStepUpdate({
-          id: step.id,
-          allSteps: [...allSteps]
-        }, '');
-        
-        // Clear the pending completion
-        this.pendingStepCompletion = null;
-        
-        // Brief pause for UI smoothness
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      
-      return {
-        nodes: realNodes,
-        insights: [
-          'Analysis completed using real AI processing',
-          'Multiple data sources integrated successfully'
-        ],
-        sessionId: `cot_${Date.now()}`,
-        completed: true,
-        timestamp: new Date().toISOString()
-      };
-
-    } catch (error) {
-      logger.error('Failed to synthesize results', { 
-        userId, 
-        error: error.message 
-      });
-      
-      // Also complete the step in case of error
-      if (this.pendingStepCompletion) {
-        const { step, callbacks, allSteps } = this.pendingStepCompletion;
-        step.status = 'completed';
-        callbacks.onStepUpdate({
-          id: step.id,
-          allSteps: [...allSteps]
-        }, '');
-        this.pendingStepCompletion = null;
-      }
-      
-      throw new Error('Failed to generate final insights');
-    }
-  }
-
-  /**
-   * Generate real nodes using actual AI processing with monitoring
-   * @param {string} userId - User ID
-   * @param {string} query - User query
-   * @param {Object} options - Processing options  
-   * @param {Object} aiActivityMonitor - Activity monitor instance
-   * @returns {Array} Generated nodes
-   */
-  async generateRealNodes(userId, query, options, aiActivityMonitor) {
-    try {
-      // Update activity: Starting real AI processing
-      aiActivityMonitor.updateActivity(userId, 'analyzing user context', { step: 'context_analysis' });
-      
-      // Get selected actions from options context
-      const selectedActions = options.context?.actions || ['explore', 'discover', 'connect'];
-      
-      // Update activity: Building AI prompt  
-      aiActivityMonitor.updateActivity(userId, 'building ai prompt', { step: 'prompt_construction' });
-      
-      // Build context for AI (similar to sandbox route)
-      let contextPrompt = `User is exploring: "${query}"\n\nSelected actions: ${selectedActions.join(', ')}\n\n`;
-      
-      // Create enhanced AI prompt for node generation
-      const aiPrompt = `${contextPrompt}Generate 2-3 discovery nodes that help the user explore "${query}" in meaningful ways. Focus on ${selectedActions.join(' and ')} aspects.
-
-REQUIREMENTS:
-- Title: Compelling, specific, max 60 chars
-- Content: 2-3 informative sentences with actionable insights
-- Category: Relevant domain (insight, behavioral, analytical, etc.)
-- Confidence: 0.7-0.95 based on accuracy
-- PersonalHook: Connection to user query
-
-Return ONLY valid JSON array:
-[
-  {
-    "title": "Specific Title",
-    "content": "Rich content with actionable insights.",
-    "category": "insight", 
-    "confidence": 0.85,
-    "personalHook": "Connection to your exploration"
-  }
-]`;
-
-      // Update activity: Processing with main LLM
-      aiActivityMonitor.updateActivity(userId, 'processing with main ai', { step: 'llm_generation' });
-      
-      // Log the main LLM call for transparency
-      aiActivityMonitor.logLLMCall(userId, {
-        model: options.mainModel || 'openai/gpt-4o',
-        purpose: 'node_generation',
-        tokens: 1500,
-        step: 'primary_reasoning'
-      });
-
-      // Make the real LLM request with premium model
-      const response = await this.llmService.makeLLMRequest([
-        { role: 'system', content: 'You are an expert knowledge discovery assistant. Generate insightful, accurate discovery nodes in valid JSON format. Always respond with valid JSON array.' },
-        { role: 'user', content: aiPrompt }
-      ], {
-        model: options.mainModel || 'openai/gpt-4o',
-        n_predict: 1500,
-        temperature: 0.7,
-        stop: ['\n\n\n', '```', 'Human:', 'Assistant:'],
-        max_tokens: 1500,
-        presence_penalty: 0.1,
-        frequency_penalty: 0.1
-      });
-
-      // Update activity: Parsing AI response
-      aiActivityMonitor.updateActivity(userId, 'parsing ai response', { step: 'response_parsing' });
-
-      let generatedNodes = [];
-      try {
-        const jsonMatch = response.content.match(/\[(.*)\]/s);
-        if (jsonMatch) {
-          generatedNodes = JSON.parse(`[${jsonMatch[1]}]`);
-        } else {
-          generatedNodes = JSON.parse(response.content);
-        }
-      } catch (parseError) {
-        logger.warn('Failed to parse AI response as JSON', { userId, error: parseError.message });
-        
-        // Fallback to mock nodes if parsing fails
-        generatedNodes = [
-          {
-            title: 'AI Processing Insight',
-            content: `Generated analysis based on your query: "${query.substring(0, 100)}". This insight was created through real AI processing.`,
-            category: 'insight',
-            confidence: 0.8,
-            personalHook: `This connects directly to your exploration of ${query.split(' ').slice(0, 3).join(' ')}`
-          }
-        ];
-      }
-
-      // Update activity: Enhancing nodes with metadata
-      aiActivityMonitor.updateActivity(userId, 'enhancing node metadata', { step: 'node_enhancement' });
-
-      // Add IDs and deep insights to generated nodes
-      const enhancedNodes = generatedNodes.map((node, index) => ({
-        id: `node_${Date.now()}_${index + 1}`,
-        title: node.title,
-        content: node.content,
-        category: node.category || 'insight',
-        confidence: node.confidence || (0.8 + Math.random() * 0.15),
-        personalHook: node.personalHook || `This insight relates to your query about ${query.split(' ').slice(0, 3).join(' ')}`,
-        deepInsights: {
-          summary: 'Generated through monitored real-time AI processing',
-          keyPatterns: [
-            'Real AI model processing and analysis',
-            'Contextual understanding of user query',
-            'Structured knowledge discovery approach'
-          ],
-          personalizedContext: `Based on your query "${query}", this insight was generated using monitored AI processing`,
-          dataConnections: [
-            {
-              type: 'ai_processing_metric',
-              value: 'Real-time monitored generation',
-              source: 'Chain of Thought Engine',
-              relevanceScore: 0.9
-            }
-          ],
-          relevanceScore: node.confidence || 0.85
-        }
-      }));
-
-      // Update activity: Finalizing output
-      aiActivityMonitor.updateActivity(userId, 'finalizing node output', { step: 'completion' });
-
-      return enhancedNodes;
-
-    } catch (error) {
-      logger.error('Failed to generate real nodes', { 
-        userId, 
-        error: error.message 
-      });
-      
-      // Return fallback nodes on error
-      return [
-        {
-          id: `node_${Date.now()}_fallback`,
-          title: 'Processing Error Recovery',
-          content: 'An error occurred during AI processing. This is a fallback insight generated to maintain functionality.',
-          category: 'system',
-          confidence: 0.7,
-          personalHook: 'System recovery mechanism activated',
-          deepInsights: {
-            summary: 'Fallback processing activated due to AI processing error',
-            keyPatterns: ['Error recovery', 'System resilience', 'Graceful degradation'],
-            personalizedContext: 'System maintained functionality despite processing error',
-            dataConnections: [],
-            relevanceScore: 0.7
-          }
-        }
-      ];
-    }
-  }
 }
 
 export default new ChainOfThoughtEngine();
