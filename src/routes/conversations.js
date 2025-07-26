@@ -8,6 +8,103 @@ import { log } from '../utils/logger.js';
 const router = express.Router();
 
 /**
+ * @route GET /conversations/recent
+ * @desc Get user's recent conversations (mobile app compatible)
+ * @access Private
+ */
+router.get('/recent', 
+  protect,
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
+          errors: errors.array()
+        });
+      }
+
+      const userId = req.user.id;
+      const limit = parseInt(req.query.limit) || 20;
+
+      const result = await conversationService.getUserConversations(userId, {
+        page: 1,
+        limit,
+        includeArchived: false,
+        sortBy: 'lastActivity',
+        sortOrder: 'desc'
+      });
+
+      res.json({
+        success: true,
+        data: result.conversations || [],
+        total: result.pagination?.total || 0
+      });
+
+    } catch (error) {
+      log.error('Error fetching recent conversations:', error);
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        error: 'Failed to fetch recent conversations'
+      });
+    }
+  }
+);
+
+/**
+ * @route POST /conversations/sync
+ * @desc Sync conversations for mobile app
+ * @access Private
+ */
+router.post('/sync',
+  protect,
+  body('lastSyncTimestamp').optional().isISO8601().withMessage('Invalid timestamp format'),
+  body('deviceId').optional().isString().trim().withMessage('Device ID must be a string'),
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
+          errors: errors.array()
+        });
+      }
+
+      const userId = req.user.id;
+      const { lastSyncTimestamp, deviceId } = req.body;
+
+      // Get conversations modified since last sync
+      const since = lastSyncTimestamp ? new Date(lastSyncTimestamp) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago default
+
+      const result = await conversationService.getUserConversations(userId, {
+        page: 1,
+        limit: 100,
+        includeArchived: true,
+        modifiedSince: since
+      });
+
+      res.json({
+        success: true,
+        data: {
+          conversations: result.conversations || [],
+          syncTimestamp: new Date().toISOString(),
+          deviceId: deviceId || 'unknown'
+        },
+        total: result.conversations?.length || 0
+      });
+
+    } catch (error) {
+      log.error('Error syncing conversations:', error);
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        error: 'Failed to sync conversations'
+      });
+    }
+  }
+);
+
+/**
  * @route GET /conversations
  * @desc Get user's conversations with pagination
  * @access Private
