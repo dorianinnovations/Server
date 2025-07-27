@@ -206,6 +206,111 @@ router.delete("/profile/picture", protect, async (req, res) => {
 });
 
 // Update emotional profile
+// User settings routes
+router.get("/settings", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("settings preferences -_id");
+    
+    res.json({
+      success: true,
+      data: {
+        settings: user?.settings || {},
+        preferences: user?.preferences || {}
+      }
+    });
+  } catch (error) {
+    logger.error("Error fetching user settings:", error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: "Failed to fetch user settings"
+    });
+  }
+});
+
+router.post("/settings", protect, async (req, res) => {
+  try {
+    const { settings, preferences } = req.body;
+    
+    const updateData = {};
+    if (settings) updateData.settings = settings;
+    if (preferences) updateData.preferences = preferences;
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: updateData },
+      { new: true, select: "settings preferences -_id" }
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        settings: user?.settings || {},
+        preferences: user?.preferences || {}
+      },
+      message: "Settings updated successfully"
+    });
+  } catch (error) {
+    logger.error("Error updating user settings:", error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: "Failed to update user settings"
+    });
+  }
+});
+
+// User preferences routes (separate from settings)
+router.get("/preferences", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("preferences -_id");
+    
+    res.json({
+      success: true,
+      data: {
+        preferences: user?.preferences || {}
+      }
+    });
+  } catch (error) {
+    logger.error("Error fetching user preferences:", error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: "Failed to fetch user preferences"
+    });
+  }
+});
+
+router.post("/preferences", protect, async (req, res) => {
+  try {
+    const { preferences } = req.body;
+    
+    if (!preferences) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: "Preferences data is required"
+      });
+    }
+    
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { preferences } },
+      { new: true, select: "preferences -_id" }
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        preferences: user?.preferences || {}
+      },
+      message: "Preferences updated successfully"
+    });
+  } catch (error) {
+    logger.error("Error updating user preferences:", error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: "Failed to update user preferences"
+    });
+  }
+});
+
 router.put("/emotional-profile", protect, async (req, res) => {
   try {
     const { 

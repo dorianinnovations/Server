@@ -127,13 +127,16 @@ export const validateContent = (req, res, next) => {
       });
     }
 
-    // Validate JSON content type for POST/PUT requests
+    // Validate content type for POST/PUT requests (allow file uploads)
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
       const contentType = req.headers['content-type'];
-      if (contentType && !contentType.includes('application/json')) {
+      if (contentType && 
+          !contentType.includes('application/json') && 
+          !contentType.includes('multipart/form-data') &&
+          !contentType.includes('application/octet-stream')) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
-          message: "Content-Type must be application/json"
+          message: "Content-Type must be application/json or multipart/form-data"
         });
       }
     }

@@ -18,6 +18,7 @@ import dataProcessingPipeline from '../services/dataProcessingPipeline.js';
 import toolRegistry from '../services/toolRegistry.js';
 import toolExecutor from '../services/toolExecutor.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
+import conversationService from '../services/conversationService.js';
 import requestCacheService from '../services/requestCacheService.js';
 import ubpmService from '../services/ubpmService.js';
 import chainOfThoughtEngine from '../services/chainOfThoughtEngine.js';
@@ -1014,7 +1015,7 @@ function formatToolResultForUser(toolName, result) {
 
 router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
   try {
-    const { message, prompt, emotionalContext: _emotionalContext, personalityProfile: _personalityProfile, personalityStyle: _personalityStyle, conversationGoal: _conversationGoal, stream, attachments, userContext: clientUserContext } = req.body;
+    const { message, prompt, conversationId, emotionalContext: _emotionalContext, personalityProfile: _personalityProfile, personalityStyle: _personalityStyle, conversationGoal: _conversationGoal, stream, attachments, userContext: clientUserContext } = req.body;
     // Support both message and prompt parameters for flexibility
     const userMessage = message || prompt;
     const userId = req.user.id;
@@ -1091,9 +1092,13 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
         
         // IMPORTANT: Save direct query responses to conversation history for future context
         try {
-          await ShortTermMemory.insertMany([
-            { userId, content: finalMessage, role: "user", timestamp: new Date() },
-            { userId, content: directDataResult, role: "assistant", timestamp: new Date() }
+          await Promise.all([
+            conversationService.addMessage(userId, conversationId, 'user', finalMessage),
+            conversationService.addMessage(userId, conversationId, 'assistant', directDataResult),
+            ShortTermMemory.insertMany([
+              { userId, content: finalMessage, role: "user", timestamp: new Date() },
+              { userId, content: directDataResult, role: "assistant", timestamp: new Date() }
+            ])
           ]);
           console.log(`💾 SAVED: Direct query and response to conversation history`);
         } catch (err) {
@@ -1974,17 +1979,29 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
               }))
             } : {};
             
-            enhancedMemoryService.saveConversation(
-              userId, 
-              messageToSave, 
-              fullContent.trim(),
-              { 
-                emotion: detectSimpleEmotion(userMessage || ''), 
+            // Save to conversation and enhanced memory
+            Promise.all([
+              conversationService.addMessage(userId, conversationId, 'user', messageToSave, attachments || [], {
+                emotion: detectSimpleEmotion(userMessage || ''),
                 context: conversationContext,
                 ...attachmentInfo
-              }
-            ).then(async () => {
-              console.log(`💾 Saved conversation to enhanced memory`);
+              }),
+              conversationService.addMessage(userId, conversationId, 'assistant', fullContent.trim(), [], {
+                emotion: detectSimpleEmotion(userMessage || ''),
+                context: conversationContext
+              }),
+              enhancedMemoryService.saveConversation(
+                userId, 
+                messageToSave, 
+                fullContent.trim(),
+                { 
+                  emotion: detectSimpleEmotion(userMessage || ''), 
+                  context: conversationContext,
+                  ...attachmentInfo
+                }
+              )
+            ]).then(async () => {
+              console.log(`💾 Saved conversation to both conversation and enhanced memory`);
               userCache.invalidateUser(userId);
 
               // COST OPTIMIZATION: Track memory usage analytics
@@ -2044,7 +2061,11 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
         
         // Save conversation to memory (background task)
         setImmediate(async () => {
-          await enhancedMemoryService.saveConversation(userId, finalMessage, cacheResult.data.response);
+          await Promise.all([
+            conversationService.addMessage(userId, conversationId, 'user', finalMessage, attachments || []),
+            conversationService.addMessage(userId, conversationId, 'assistant', cacheResult.data.response),
+            enhancedMemoryService.saveConversation(userId, finalMessage, cacheResult.data.response)
+          ]);
         });
         
         return res.json({
@@ -2226,16 +2247,27 @@ const milestonePrompt = conversationCount > 0 ? `\n\n**CONVERSATION #${conversat
             }))
           } : {};
           
-          await enhancedMemoryService.saveConversation(
-            userId, 
-            messageToSave, 
-            finalContent.trim(),
-            { 
-              emotion: detectSimpleEmotion(userMessage || ''), 
+          await Promise.all([
+            conversationService.addMessage(userId, conversationId, 'user', messageToSave, attachments || [], {
+              emotion: detectSimpleEmotion(userMessage || ''),
               context: conversationContext,
               ...attachmentInfo
-            }
-          );
+            }),
+            conversationService.addMessage(userId, conversationId, 'assistant', finalContent.trim(), [], {
+              emotion: detectSimpleEmotion(userMessage || ''),
+              context: conversationContext
+            }),
+            enhancedMemoryService.saveConversation(
+              userId, 
+              messageToSave, 
+              finalContent.trim(),
+              { 
+                emotion: detectSimpleEmotion(userMessage || ''), 
+                context: conversationContext,
+                ...attachmentInfo
+              }
+            )
+          ]);
           userCache.invalidateUser(userId);
 
           // Track memory usage analytics

@@ -28,6 +28,7 @@ import connectDB from "./config/database.js";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js";
 import healthRoutes from "./routes/health.js";
+import { protect } from "./middleware/auth.js";
 import completionRoutes from "./routes/completion.js";
 import analyticsRoutes from "./routes/analytics.js";
 import taskRoutes from "./routes/tasks.js";
@@ -57,6 +58,7 @@ import intelligenceDebugRoutes from "./routes/intelligenceDebug.js";
 import compressionDashboardRoutes from "./routes/compressionDashboard.js";
 import tierTestRoutes from "./routes/tierTest.js";
 import sandboxRoutes from "./routes/sandbox.js";
+import analyticsEcosystemRoutes from "./routes/analyticsEcosystem.js";
 import authTestRoutes from "./routes/authTest.js";
 import emailRoutes from "./routes/email.js";
 
@@ -199,17 +201,7 @@ const initializeServer = async () => {
     });
   });
 
-  // Profile page route
-  app.get("/profile", (req, res) => {
-    res.sendFile(path.join(process.cwd(), 'public', 'profile.html'));
-  });
-
-  // Login page route
-  app.get("/login", (req, res) => {
-    res.sendFile(path.join(process.cwd(), 'public', 'login.html'));
-  });
-
-  // Register API routes
+  // Register API routes first to take precedence over static routes
   log.debug("Registering API routes");
   app.use("/", authRoutes);
   app.use("/", userRoutes);
@@ -219,6 +211,7 @@ const initializeServer = async () => {
   app.use("/", taskRoutes);
   app.use("/", docsRoutes);
   app.use("/analytics", analyticsRoutes);
+  app.use("/analytics", analyticsEcosystemRoutes);
   app.use("/analytics/llm", analyticsLLMRoutes);
   app.use("/analytics-rate-status", analyticsRateStatusRoutes);
   app.use("/intelligence-debug", intelligenceDebugRoutes);
@@ -246,6 +239,44 @@ const initializeServer = async () => {
   app.use("/conversation", conversationSyncRoutes);
   app.use("/conversations", conversationsRoutes); // New persistent conversation routes
   app.use("/emotional-analytics", emotionalAnalyticsRoutes);
+  
+  // Direct emotions endpoint for mobile app compatibility
+  app.post("/emotions", protect, async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { emotion, intensity, context, timestamp } = req.body;
+
+      if (!emotion || intensity === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: 'Emotion and intensity are required'
+        });
+      }
+
+      const emotionData = {
+        userId,
+        emotion,
+        intensity: Math.max(1, Math.min(10, intensity)),
+        context: context || '',
+        timestamp: timestamp || new Date().toISOString(),
+        submittedAt: new Date().toISOString()
+      };
+
+      res.json({
+        success: true,
+        data: emotionData,
+        message: 'Emotion data submitted successfully'
+      });
+
+    } catch (error) {
+      console.error('Error submitting emotion data:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to submit emotion data'
+      });
+    }
+  });
+  
   app.use("/test-ubpm", ubpmRoutes);
   app.use("/", apiDocsRoutes);
 
@@ -268,6 +299,15 @@ const initializeServer = async () => {
   });
 
   log.debug("Health check endpoint configured");
+
+  // Static HTML routes (after API routes to prevent conflicts)
+  app.get("/profile-page", (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'profile.html'));
+  });
+
+  app.get("/login-page", (req, res) => {
+    res.sendFile(path.join(process.cwd(), 'public', 'login.html'));
+  });
 
   // Validate required environment variables
   // Validating environment variables
@@ -350,6 +390,7 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/", taskRoutes);
       app.use("/", docsRoutes);
       app.use("/analytics", analyticsRoutes);
+      app.use("/analytics", analyticsEcosystemRoutes);
       app.use("/analytics/llm", analyticsLLMRoutes);
       app.use("/intelligence-debug", intelligenceDebugRoutes);
       app.use("/compression-dashboard", compressionDashboardRoutes);

@@ -26,24 +26,46 @@ if (typeof jest !== 'undefined') {
 
 // Consolidated test database setup
 export const setupTestDatabase = async () => {
-  const mongoServer = await MongoMemoryServer.create({
-    binary: {
-      version: '7.0.3' // Use compatible MongoDB version
-    }
-  });
-  const mongoUri = mongoServer.getUri();
-
-  await mongoose.connect(mongoUri);
-
-  return {
-    mongoServer,
-    mongoUri,
-    cleanup: async () => {
-      await mongoose.connection.dropDatabase();
+  try {
+    // Close existing connection if any
+    if (mongoose.connection.readyState !== 0) {
       await mongoose.connection.close();
-      await mongoServer.stop();
     }
-  };
+
+    const mongoServer = await MongoMemoryServer.create({
+      binary: {
+        version: '7.0.3' // Use compatible MongoDB version
+      }
+    });
+    const mongoUri = mongoServer.getUri();
+
+    await mongoose.connect(mongoUri, {
+      bufferCommands: true, // Enable buffering for tests
+      maxPoolSize: 1, // Limit connections for tests
+    });
+
+    // Wait for connection to be ready
+    await mongoose.connection.asPromise();
+
+    return {
+      mongoServer,
+      mongoUri,
+      cleanup: async () => {
+        try {
+          if (mongoose.connection.readyState !== 0) {
+            await mongoose.connection.dropDatabase();
+            await mongoose.connection.close();
+          }
+          await mongoServer.stop();
+        } catch (error) {
+          console.warn('Cleanup warning:', error.message);
+        }
+      }
+    };
+  } catch (error) {
+    console.error('Database setup failed:', error);
+    throw error;
+  }
 };
 
 // Common test user factory

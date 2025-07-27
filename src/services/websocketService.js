@@ -49,11 +49,19 @@ class WebSocketService {
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-        const user = await User.findById(decoded.userId);
+        
+        // Handle both userId and id fields for backward compatibility (same as auth middleware)
+        const userId = decoded.userId || decoded.id;
+        if (!userId) {
+          log.warn('WebSocket token missing user ID', { decoded });
+          return next(new Error('Invalid token format'));
+        }
+        
+        const user = await User.findById(userId);
         
         if (!user) {
           log.warn('WebSocket connection attempt with invalid user', {
-            userId: decoded.userId,
+            userId: userId,
             ip: socket.request.connection.remoteAddress
           });
           return next(new Error('User not found'));

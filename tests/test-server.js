@@ -9,7 +9,7 @@ import mongoose from 'mongoose';
 // Import routes (avoid problematic AI routes that trigger background services)
 import authRoutes from '../src/routes/auth.js';
 import healthRoutes from '../src/routes/health.js';
-import emotionsRoutes from '../src/routes/emotions.js';
+import emotionalAnalyticsRoutes from '../src/routes/emotionalAnalytics.js';
 import mobileRoutes from '../src/routes/mobile.js';
 import cloudRoutes from '../src/routes/cloud.js';
 import analyticsRoutes from '../src/routes/analytics.js';
@@ -67,7 +67,7 @@ export const createTestApp = async () => {
   app.use('/', userRoutes);
   app.use('/', healthRoutes);
   app.use('/', completionRoutes);
-  app.use('/emotions', emotionsRoutes);
+  app.use('/emotional-analytics', emotionalAnalyticsRoutes);
   app.use('/analytics', analyticsRoutes);
   app.use('/cloud', cloudRoutes);
   app.use('/personal-insights', personalInsightsRoutes);

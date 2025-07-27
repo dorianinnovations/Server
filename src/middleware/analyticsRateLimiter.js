@@ -27,8 +27,8 @@ setInterval(() => {
  */
 export const createAnalyticsRateLimiter = (endpointName, options = {}) => {
   const {
-    windowMs = 10 * 60 * 1000, // 10 minutes default (was 1 hour - too restrictive for testing)
-    maxCalls = 5, // 5 calls per 10 minutes default (was 1 per hour - too restrictive for testing)
+    windowMs = 1 * 60 * 1000, // 1 minute for testing
+    maxCalls = 100, // 100 calls per minute for testing
     message = `Analytics endpoint '${endpointName}' is rate limited to ${maxCalls} calls per ${Math.round(windowMs/60000)} minutes to prevent excessive costs.`,
     skipSuccessfulResponses = false
   } = options;

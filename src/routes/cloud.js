@@ -41,7 +41,12 @@ User Emotional State: ${JSON.stringify(userEmotionalState)}`;
       n_predict: 256
     });
 
-    return JSON.parse(response.content);
+    // Clean markdown formatting from LLM response
+    let cleanContent = response.content.trim();
+    if (cleanContent.startsWith('```json')) {
+      cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    }
+    return JSON.parse(cleanContent);
   } catch (error) {
     log.error('Compatibility analysis error', error);
     return {
@@ -203,7 +208,7 @@ router.post('/events', protect, async (req, res) => {
       isPublic: true,
       participants: [],
       emotionalContext: {
-        targetMood: 'positive',
+        targetMood: 'inspiring',
         moodBoostPotential: 7
       }
     });
@@ -327,7 +332,12 @@ Context: ${JSON.stringify(compatibilityContext)}`;
           n_predict: 512
         });
 
-        const compatibility = JSON.parse(response.content);
+        // Clean markdown formatting from LLM response
+        let cleanContent = response.content.trim();
+        if (cleanContent.startsWith('```json')) {
+          cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        }
+        const compatibility = JSON.parse(cleanContent);
         
         return {
           userId: user._id,

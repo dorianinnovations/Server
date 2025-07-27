@@ -244,4 +244,28 @@ router.post('/spotify/disconnect', protect, async (req, res) => {
   }
 });
 
+// JWT Token Refresh Route
+router.post("/refresh", protect, async (req, res) => {
+  try {
+    // User is already authenticated by protect middleware
+    const userId = req.user.id;
+    
+    // Generate new token
+    const newToken = signToken(userId);
+    
+    res.json({
+      status: MESSAGES.SUCCESS,
+      token: newToken,
+      message: 'Token refreshed successfully'
+    });
+    
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: 'Failed to refresh token'
+    });
+  }
+});
+
 export default router; 

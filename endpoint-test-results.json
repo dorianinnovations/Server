@@ -1,0 +1,255 @@
+{
+  "timestamp": "2025-07-27T08:07:10.137Z",
+  "summary": {
+    "total": 30,
+    "working": 2,
+    "broken": 28,
+    "percentage": 7
+  },
+  "categories": {
+    "User": {
+      "working": 0,
+      "total": 3
+    },
+    "Conversations": {
+      "working": 2,
+      "total": 2
+    },
+    "AI": {
+      "working": 0,
+      "total": 1
+    },
+    "Analytics": {
+      "working": 0,
+      "total": 3
+    },
+    "Emotional": {
+      "working": 0,
+      "total": 3
+    },
+    "Cloud": {
+      "working": 0,
+      "total": 2
+    },
+    "Mobile": {
+      "working": 0,
+      "total": 4
+    },
+    "Sandbox": {
+      "working": 0,
+      "total": 2
+    },
+    "Insights": {
+      "working": 0,
+      "total": 2
+    },
+    "Subscription": {
+      "working": 0,
+      "total": 1
+    },
+    "Wallet": {
+      "working": 0,
+      "total": 2
+    },
+    "Tools": {
+      "working": 0,
+      "total": 2
+    },
+    "Health": {
+      "working": 0,
+      "total": 2
+    },
+    "Documentation": {
+      "working": 0,
+      "total": 1
+    }
+  },
+  "workingEndpoints": [
+    {
+      "path": "/conversations",
+      "method": "GET",
+      "name": "List Conversations"
+    },
+    {
+      "path": "/conversations/recent",
+      "method": "GET",
+      "name": "Recent Conversations"
+    }
+  ],
+  "brokenEndpoints": [
+    {
+      "path": "/user/profile",
+      "method": "GET",
+      "name": "User Profile",
+      "error": 404
+    },
+    {
+      "path": "/user/settings",
+      "method": "GET",
+      "name": "User Settings",
+      "error": 404
+    },
+    {
+      "path": "/user/preferences",
+      "method": "GET",
+      "name": "User Preferences",
+      "error": 404
+    },
+    {
+      "path": "/ai/adaptive-chat",
+      "method": "POST",
+      "name": "Adaptive Chat",
+      "error": "ERROR"
+    },
+    {
+      "path": "/analytics/llm",
+      "method": "POST",
+      "name": "LLM Analytics",
+      "error": "ERROR"
+    },
+    {
+      "path": "/analytics/memory",
+      "method": "GET",
+      "name": "Analytics Memory",
+      "error": "ERROR"
+    },
+    {
+      "path": "/analytics/recommendations",
+      "method": "GET",
+      "name": "Analytics Recommendations",
+      "error": "ERROR"
+    },
+    {
+      "path": "/emotional-analytics/current-session",
+      "method": "GET",
+      "name": "Current Session",
+      "error": "ERROR"
+    },
+    {
+      "path": "/emotional-analytics/weekly-report",
+      "method": "GET",
+      "name": "Weekly Report",
+      "error": "ERROR"
+    },
+    {
+      "path": "/emotions",
+      "method": "POST",
+      "name": "Submit Emotion",
+      "error": "ERROR"
+    },
+    {
+      "path": "/cloud/events",
+      "method": "GET",
+      "name": "Cloud Events",
+      "error": "ERROR"
+    },
+    {
+      "path": "/cloud/compatibility/users",
+      "method": "POST",
+      "name": "User Compatibility",
+      "error": "ERROR"
+    },
+    {
+      "path": "/mobile/sync",
+      "method": "GET",
+      "name": "Mobile Sync",
+      "error": "ERROR"
+    },
+    {
+      "path": "/mobile/app-config",
+      "method": "GET",
+      "name": "App Config",
+      "error": "ERROR"
+    },
+    {
+      "path": "/mobile/realtime-status",
+      "method": "GET",
+      "name": "Realtime Status",
+      "error": "ERROR"
+    },
+    {
+      "path": "/mobile/profile-header",
+      "method": "GET",
+      "name": "Profile Header",
+      "error": "ERROR"
+    },
+    {
+      "path": "/sandbox/test",
+      "method": "GET",
+      "name": "Sandbox Test",
+      "error": "ERROR"
+    },
+    {
+      "path": "/sandbox/auth-test",
+      "method": "GET",
+      "name": "Sandbox Auth Test",
+      "error": "ERROR"
+    },
+    {
+      "path": "/personal-insights/growth-summary",
+      "method": "GET",
+      "name": "Growth Summary",
+      "error": "ERROR"
+    },
+    {
+      "path": "/personal-insights/milestones",
+      "method": "GET",
+      "name": "Milestones",
+      "error": "ERROR"
+    },
+    {
+      "path": "/subscription/status",
+      "method": "GET",
+      "name": "Subscription Status",
+      "error": "ERROR"
+    },
+    {
+      "path": "/wallet/balance",
+      "method": "GET",
+      "name": "Wallet Balance",
+      "error": "ERROR"
+    },
+    {
+      "path": "/wallet/summary",
+      "method": "GET",
+      "name": "Wallet Summary",
+      "error": "ERROR"
+    },
+    {
+      "path": "/tools/available",
+      "method": "GET",
+      "name": "Available Tools",
+      "error": "ERROR"
+    },
+    {
+      "path": "/tools/registry",
+      "method": "GET",
+      "name": "Tools Registry",
+      "error": "ERROR"
+    },
+    {
+      "path": "/health",
+      "method": "GET",
+      "name": "Health Status",
+      "error": "ERROR"
+    },
+    {
+      "path": "/health/websocket",
+      "method": "GET",
+      "name": "WebSocket Health",
+      "error": "ERROR"
+    },
+    {
+      "path": "/api/docs",
+      "method": "GET",
+      "name": "API Documentation",
+      "error": "ERROR"
+    }
+  ],
+  "features": {
+    "websocket": false,
+    "conversations": false,
+    "aiChat": false,
+    "authentication": true
+  }
+}

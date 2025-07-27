@@ -252,7 +252,7 @@ router.get('/api/docs', async (req, res) => {
               weeklyDigest: {
                 generatedAt: 'number (timestamp)',
                 insights: 'object (per-category insights)',
-                recentInsights: 'array (fallback insights)',
+                recentInsights: 'array (recent analytical insights)',
                 categories: 'array',
                 summary: 'string'
               }
@@ -586,7 +586,7 @@ router.get('/api/test', async (req, res) => {
         // Add database ping test
       },
       redis: {
-        status: redisService.isRedisConnected() ? 'connected' : 'fallback',
+        status: redisService.isRedisConnected() ? 'connected' : 'memory-store',
         connectionInfo: redisService.getConnectionInfo()
       },
       websocket: {

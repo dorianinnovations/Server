@@ -506,7 +506,7 @@ router.get('/mobile/profile-header', authenticateToken, async (req, res) => {
       profilePicture: {
         url: user.profile?.get('profilePicture') || null,
         updatedAt: user.profile?.get('profilePictureUpdated') || null,
-        placeholder: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}&size=300&background=6366f1&color=white&rounded=true`
+        defaultAvatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}&size=300&background=6366f1&color=white&rounded=true`
       },
       header: {
         style: 'rectangle',
@@ -747,14 +747,16 @@ const upload = multer({
     files: 1 // Only one file at a time
   },
   fileFilter: (req, file, cb) => {
-    // Allow images, text files, and PDFs
+    // Allow images, text files, JSON, and PDFs
     const allowedMimes = [
       'image/jpeg',
       'image/png', 
       'image/webp',
       'image/gif',
       'text/plain',
-      'application/pdf'
+      'application/json',
+      'application/pdf',
+      'application/octet-stream' // For generic uploads
     ];
     
     if (allowedMimes.includes(file.mimetype)) {
@@ -821,7 +823,7 @@ router.post('/upload',
       logger.info('File uploaded successfully', {
         userId: req.user.userId,
         fileId,
-        originalName,
+        originalName: originalname,
         mimeType: mimetype,
         size,
         hasText: !!processedData.extractedText

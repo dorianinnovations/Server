@@ -137,7 +137,10 @@ router.get('/',
 
       res.json({
         success: true,
-        data: result.conversations,
+        data: {
+          conversations: result.conversations,
+          pagination: result.pagination
+        },
         pagination: result.pagination
       });
 

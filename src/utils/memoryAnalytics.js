@@ -115,7 +115,19 @@ class MemoryAnalytics {
   getUserAnalytics(userId) {
     const session = this.sessions.get(userId);
     if (!session) {
-      return { error: 'No analytics data found for user' };
+      // Return default analytics for new users
+      return {
+        userId,
+        sessionDuration: 0,
+        totalRequests: 0,
+        totalTokensSaved: 0,
+        totalCostSaved: 0.00,
+        averageTokensSaved: 0,
+        averageMemoryUsed: 0,
+        contextTypeDistribution: { standard: 0 },
+        optimizationEffectiveness: [],
+        recentPerformance: []
+      };
     }
 
     const recentRequests = session.requests.slice(-10); // Last 10 requests
