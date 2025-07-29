@@ -379,46 +379,19 @@ router.put('/:id/archive', protect, async (req, res) => {
 });
 
 /**
- * @route DELETE /conversations/:id
- * @desc Delete a conversation
- * @access Private
- */
-router.delete('/:id', protect, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const conversationId = req.params.id;
-
-    await conversationService.deleteConversation(userId, conversationId);
-
-    res.json({
-      success: true,
-      message: 'Conversation deleted successfully'
-    });
-
-  } catch (error) {
-    log.error('Error deleting conversation:', error);
-    if (error.message === 'Conversation not found') {
-      return res.status(HTTP_STATUS.NOT_FOUND).json({
-        success: false,
-        error: 'Conversation not found'
-      });
-    }
-    
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-      success: false,
-      error: 'Failed to delete conversation'
-    });
-  }
-});
-
-/**
  * @route DELETE /conversations/all
  * @desc Delete all conversations for the authenticated user
  * @access Private
+ * @note MUST be defined before /:id route to avoid parameter matching
  */
 router.delete('/all', protect, async (req, res) => {
   try {
     const userId = req.user.id;
+    
+    // Set timeout for bulk operations
+    req.timeout = 30000; // 30 seconds timeout
+    
+    log.info(`User ${userId} requesting deletion of all conversations`);
 
     const result = await conversationService.deleteAllConversations(userId);
 
@@ -433,9 +406,83 @@ router.delete('/all', protect, async (req, res) => {
 
   } catch (error) {
     log.error('Error deleting all conversations:', error);
+    
+    // Handle specific error types
+    if (error.message?.includes('Database connection lost')) {
+      res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({
+        success: false,
+        error: 'Database connection lost. Please try again.',
+        code: 'DATABASE_CONNECTION_ERROR'
+      });
+    } else if (error.message?.includes('timed out')) {
+      res.status(HTTP_STATUS.REQUEST_TIMEOUT).json({
+        success: false,
+        error: 'Operation timed out. Please try again.',
+        code: 'TIMEOUT_ERROR'
+      });
+    } else {
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        error: error.message || 'Failed to delete all conversations',
+        code: 'DELETION_ERROR'
+      });
+    }
+  }
+});
+
+/**
+ * @route DELETE /conversations/:id
+ * @desc Delete a conversation
+ * @access Private
+ */
+router.delete('/:id', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const conversationId = req.params.id;
+    
+    log.info(`User ${userId} requesting deletion of conversation ${conversationId}`);
+
+    await conversationService.deleteConversation(userId, conversationId);
+
+    res.json({
+      success: true,
+      message: 'Conversation deleted successfully'
+    });
+
+  } catch (error) {
+    log.error('Error deleting conversation:', error);
+    
+    // Handle specific error types
+    if (error.message === 'Conversation not found or already deleted') {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: 'Conversation not found or already deleted',
+        code: 'CONVERSATION_NOT_FOUND'
+      });
+    } else if (error.message === 'Invalid conversation ID format') {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: 'Invalid conversation ID format',
+        code: 'INVALID_ID_FORMAT'
+      });
+    } else if (error.message?.includes('Database connection lost')) {
+      return res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({
+        success: false,
+        error: 'Database connection lost. Please try again.',
+        code: 'DATABASE_CONNECTION_ERROR'
+      });
+    } else if (error.message?.includes('timed out')) {
+      return res.status(HTTP_STATUS.REQUEST_TIMEOUT).json({
+        success: false,
+        error: 'Operation timed out. Please try again.',
+        code: 'TIMEOUT_ERROR'
+      });
+    }
+    
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to delete all conversations'
+      error: error.message || 'Failed to delete conversation',
+      code: 'DELETION_ERROR'
     });
   }
 });

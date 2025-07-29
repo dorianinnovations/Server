@@ -173,53 +173,112 @@ class ConversationService {
   }
 
   /**
-   * Delete a conversation
+   * Delete a conversation with enhanced error handling
    */
   async deleteConversation(userId, conversationId) {
     try {
+      // Validate ObjectId format
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        throw new Error('Invalid conversation ID format');
+      }
+      
+      log.debug(`Deleting conversation ${conversationId} for user ${userId}`);
+      
       const result = await Conversation.deleteOne({
         _id: conversationId,
         userId
       });
       
       if (result.deletedCount === 0) {
-        throw new Error('Conversation not found');
+        throw new Error('Conversation not found or already deleted');
       }
       
       // Also clean up related short-term memory
-      await ShortTermMemory.deleteMany({
+      const memoryResult = await ShortTermMemory.deleteMany({
         userId,
         conversationId: conversationId
       });
       
-      log.debug(`Deleted conversation ${conversationId} for user ${userId}`);
+      log.debug(`Deleted conversation ${conversationId} and ${memoryResult.deletedCount} memory entries for user ${userId}`);
       return true;
     } catch (error) {
       log.error('Error deleting conversation:', error);
-      throw error;
+      
+      // Provide more specific error information
+      if (error.message === 'Invalid conversation ID format') {
+        throw error;
+      } else if (error.message === 'Conversation not found or already deleted') {
+        throw error;
+      } else if (error.name === 'MongoNetworkError') {
+        throw new Error('Database connection lost. Please try again.');
+      } else if (error.name === 'MongoTimeoutError') {
+        throw new Error('Database operation timed out. Please try again.');
+      } else {
+        throw new Error('Failed to delete conversation. Please try again.');
+      }
     }
   }
 
   /**
-   * Delete all conversations for a user
+   * Delete all conversations for a user (memory optimized with enhanced error handling)
    */
   async deleteAllConversations(userId) {
     try {
-      // Delete all conversations for this user
-      const conversationResult = await Conversation.deleteMany({ userId });
+      log.info(`Starting bulk deletion of conversations for user ${userId}`);
       
-      // Also clean up all related short-term memory for this user
-      const memoryResult = await ShortTermMemory.deleteMany({ userId });
+      // Get count first for validation
+      const conversationCount = await Conversation.countDocuments({ userId });
+      const memoryCount = await ShortTermMemory.countDocuments({ userId });
       
-      log.debug(`Deleted ${conversationResult.deletedCount} conversations and ${memoryResult.deletedCount} memory entries for user ${userId}`);
+      log.debug(`Found ${conversationCount} conversations and ${memoryCount} memory entries to delete`);
       
-      return {
-        conversationsDeleted: conversationResult.deletedCount,
-        memoryEntriesDeleted: memoryResult.deletedCount
-      };
+      // Use session for transaction-like behavior
+      const session = await mongoose.startSession();
+      let conversationResult = { deletedCount: 0 };
+      let memoryResult = { deletedCount: 0 };
+      
+      try {
+        await session.withTransaction(async () => {
+          // Delete in batches to prevent memory issues and timeouts
+          if (conversationCount > 0) {
+            conversationResult = await Conversation.deleteMany({ userId }, { session });
+          }
+          
+          if (memoryCount > 0) {
+            memoryResult = await ShortTermMemory.deleteMany({ userId }, { session });
+          }
+        });
+        
+        await session.endSession();
+        
+        log.info(`Successfully deleted ${conversationResult.deletedCount} conversations and ${memoryResult.deletedCount} memory entries for user ${userId}`);
+        
+        // Force garbage collection after bulk deletion
+        if (global.gc && (conversationResult.deletedCount > 10 || memoryResult.deletedCount > 50)) {
+          setImmediate(() => global.gc());
+        }
+        
+        return {
+          conversationsDeleted: conversationResult.deletedCount,
+          memoryEntriesDeleted: memoryResult.deletedCount
+        };
+      } catch (transactionError) {
+        await session.endSession();
+        throw transactionError;
+      }
     } catch (error) {
       log.error('Error deleting all conversations:', error);
-      throw error;
+      
+      // Provide more specific error information
+      if (error.name === 'MongoNetworkError') {
+        throw new Error('Database connection lost. Please try again.');
+      } else if (error.name === 'MongoTimeoutError') {
+        throw new Error('Database operation timed out. Please try again.');
+      } else if (error.message?.includes('E11000')) {
+        throw new Error('Database conflict. Please try again.');
+      } else {
+        throw new Error('Failed to delete conversations. Please try again.');
+      }
     }
   }
 

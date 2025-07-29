@@ -84,7 +84,7 @@ import { createCache, setupMemoryMonitoring } from "./utils/cache.js";
 
 log.debug("Utility modules imported");
 
-import taskScheduler from "./services/taskScheduler.js";
+// import taskScheduler from "./services/taskScheduler.js"; // REMOVED - phased out
 
 import websocketService from "./services/websocketService.js";
 import redisService from "./services/redisService.js";
@@ -415,7 +415,7 @@ if (process.env.NODE_ENV !== 'test') {
       app.use("/", mobileRoutes);
       app.use("/", syncRoutes);
       app.use("/conversation", conversationSyncRoutes);
-      app.use("/conversations", conversationSyncRoutes); // Alias for plural form
+      // Note: /conversations is handled by conversationsRoutes - don't override it
       app.use("/emotional-analytics", emotionalAnalyticsRoutes);
       app.use("/test-ubpm", ubpmRoutes);
       app.use("/", apiDocsRoutes);
