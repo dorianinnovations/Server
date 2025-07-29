@@ -99,7 +99,7 @@ export const getRecentMemory = async (userId, userCache, limitMinutes = 24 * 60,
       memory = prioritized.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     }
 
-    console.log(`🧠 CONTEXT WINDOW: Retrieved ${memory.length} messages (${contextType} mode, ${effectiveTimeWindow}min window${useImportanceScoring ? ', importance-scored' : ''})`);
+    // Context window retrieved
     
     return memory;
 

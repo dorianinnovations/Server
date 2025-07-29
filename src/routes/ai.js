@@ -1062,14 +1062,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, async (req, res) => {
       limitMinutes: 30 // Only look at last 30 minutes
     });
     
-    // DEBUG: Log what context we're actually retrieving
-    console.log(`🔍 DEBUG: Context retrieval for "${finalMessage}"`);
-    console.log(`🔍 DEBUG: Found ${recentMemoryForContext?.length || 0} messages in context`);
-    if (recentMemoryForContext && recentMemoryForContext.length > 0) {
-      recentMemoryForContext.forEach((msg, idx) => {
-        console.log(`🔍 DEBUG: [${idx}] ${msg.role}: "${msg.content?.substring(0, 100)}..."`);
-      });
-    }
+    // Context retrieval completed
     
     const contextInjection = processContextInjection(finalMessage, recentMemoryForContext);
     

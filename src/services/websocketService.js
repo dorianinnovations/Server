@@ -25,12 +25,47 @@ class WebSocketService {
         credentials: true
       },
       transports: ['websocket', 'polling'],
-      pingTimeout: 60000,
-      pingInterval: 25000,
-      // Render.com specific configuration
+      pingTimeout: 30000, // Reduced from 60s for faster detection
+      pingInterval: 15000, // Reduced from 25s for more frequent checks
+      // Performance optimizations
       allowEIO3: true,
+      maxHttpBufferSize: 1e6, // 1MB max message size
+      httpCompression: true, // Enable compression
+      perMessageDeflate: {
+        threshold: 1024, // Compress messages > 1KB
+        concurrencyLimit: 10,
+        memLevel: 3 // Lower memory usage
+      },
+      // Connection limits for performance
+      connectTimeout: 5000, // 5 second connection timeout
+      upgradeTimeout: 3000, // 3 second upgrade timeout
       allowRequest: (req, callback) => {
-        // Allow all origins in production for Render.com
+        // Basic rate limiting for connection attempts
+        const clientIP = req.socket.remoteAddress;
+        const now = Date.now();
+        
+        if (!this.connectionAttempts) {
+          this.connectionAttempts = new Map();
+        }
+        
+        const attempts = this.connectionAttempts.get(clientIP) || { count: 0, resetTime: now + 60000 };
+        
+        if (now > attempts.resetTime) {
+          attempts.count = 1;
+          attempts.resetTime = now + 60000;
+        } else {
+          attempts.count++;
+        }
+        
+        this.connectionAttempts.set(clientIP, attempts);
+        
+        // Allow max 10 connection attempts per minute per IP
+        if (attempts.count > 10) {
+          log.warn('WebSocket connection rate limit exceeded', { ip: clientIP, attempts: attempts.count });
+          callback('Rate limit exceeded', false);
+          return;
+        }
+        
         callback(null, true);
       }
     });
@@ -115,13 +150,18 @@ class WebSocketService {
     const userId = socket.userId;
     log.system(`User connected: ${userId}`);
 
-    // Store user connection
+    // Store user connection with connection pooling awareness
     this.connectedUsers.set(userId, {
       socket,
       userData: socket.userData,
       connectedAt: new Date(),
-      lastActivity: new Date()
+      lastActivity: new Date(),
+      messageCount: 0, // Track message volume
+      connectionId: `${userId}_${Date.now()}` // Unique connection identifier
     });
+    
+    // Clean up old connections for the same user (prevent connection leaks)
+    this.cleanupOldUserConnections(userId, socket.id);
 
     // Join user to their personal room
     socket.join(`user:${userId}`);
@@ -453,28 +493,55 @@ class WebSocketService {
   }
 
   /**
-   * Handle user disconnection
+   * Clean up old connections for a user (prevent memory leaks)
+   */
+  cleanupOldUserConnections(userId, currentSocketId) {
+    // Check if user already has connections and disconnect old ones
+    for (const [connectedUserId, connection] of this.connectedUsers.entries()) {
+      if (connectedUserId === userId && connection.socket.id !== currentSocketId) {
+        log.debug(`Cleaning up old connection for user ${userId}`);
+        connection.socket.disconnect(true);
+        this.connectedUsers.delete(connectedUserId);
+      }
+    }
+  }
+
+  /**
+   * Handle user disconnection (optimized)
    */
   handleDisconnection(socket) {
     const userId = socket.userId;
     log.system(`User disconnected: ${userId}`);
 
+    // Get connection info before cleanup
+    const connection = this.connectedUsers.get(userId);
+    const sessionDuration = connection ? Date.now() - connection.connectedAt.getTime() : 0;
+    const messageCount = connection ? connection.messageCount : 0;
+
     // Remove from connected users
     this.connectedUsers.delete(userId);
 
-    // Notify all rooms user was in
+    // Batch notify all rooms user was in (more efficient)
     if (this.userRooms.has(userId)) {
-      this.userRooms.get(userId).forEach(roomId => {
-        socket.to(roomId).emit('user_disconnected', {
-          userId,
-          userData: socket.userData,
-          timestamp: new Date()
-        });
+      const userRoomsList = Array.from(this.userRooms.get(userId));
+      const disconnectionData = {
+        userId,
+        userData: socket.userData,
+        timestamp: new Date(),
+        sessionDuration,
+        messageCount
+      };
+      
+      // Single emit to all rooms
+      userRoomsList.forEach(roomId => {
+        socket.to(roomId).emit('user_disconnected', disconnectionData);
       });
       
       // Clean up user rooms
       this.userRooms.delete(userId);
     }
+    
+    log.debug(`Session stats for ${userId}: ${sessionDuration}ms duration, ${messageCount} messages`);
   }
 
   /**

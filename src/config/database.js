@@ -16,11 +16,21 @@ const connectDB = async () => {
       maxIdleTimeMS: DB_CONFIG.CONNECTION_POOL.MAX_IDLE_TIME_MS,
       serverSelectionTimeoutMS: DB_CONFIG.CONNECTION_POOL.SERVER_SELECTION_TIMEOUT_MS,
       socketTimeoutMS: DB_CONFIG.CONNECTION_POOL.SOCKET_TIMEOUT_MS,
+      connectTimeoutMS: DB_CONFIG.CONNECTION_POOL.CONNECT_TIMEOUT_MS,
       family: 4, // Use IPv4, avoid slow IPv6 lookups
       bufferCommands: false, // Disable mongoose buffering for better performance
       heartbeatFrequencyMS: DB_CONFIG.CONNECTION_POOL.HEARTBEAT_FREQUENCY_MS,
       retryReads: true, // Enable read retries
       retryWrites: true, // Enable write retries
+      compressors: ['zlib'], // Enable compression for network traffic
+      zlibCompressionLevel: 6, // Balanced compression level
+      writeConcern: {
+        w: 'majority',
+        wtimeout: DB_CONFIG.CONNECTION_POOL.WRITE_CONCERN_TIMEOUT_MS
+      },
+      readPreference: 'primary', // Ensure consistent reads
+      autoIndex: env.NODE_ENV === 'development', // Only auto-create indexes in dev
+      maxConnecting: 2 // Limit concurrent connection attempts
     });
     
     // MongoDB connected

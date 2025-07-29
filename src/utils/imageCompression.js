@@ -11,15 +11,36 @@ import sharp from 'sharp';
  * @param {object} options - Compression options
  * @returns {Promise<object>} Compressed image data with metadata
  */
+// Image compression cache to avoid recompressing the same images
+const compressionCache = new Map();
+const MAX_COMPRESSION_CACHE_SIZE = 100;
+
+// Helper to generate cache key for image
+function getImageCacheKey(base64Data, options) {
+  const imageHash = base64Data.substring(0, 100); // Use first 100 chars as hash
+  return `${imageHash}_${options.thumbnailWidth || 256}_${options.quality || 60}`;
+}
+
 export const compressImageForMemory = async (base64Data, options = {}) => {
   const {
     thumbnailWidth = 256,
     thumbnailHeight = 256,
     quality = 60,
-    format = 'jpeg'
+    format = 'jpeg',
+    skipCache = false
   } = options;
 
   try {
+    // Check cache first (unless explicitly skipped)
+    if (!skipCache) {
+      const cacheKey = getImageCacheKey(base64Data, options);
+      const cached = compressionCache.get(cacheKey);
+      if (cached) {
+        console.log(`⚡ IMAGE CACHE HIT: Using cached compression`);
+        return cached;
+      }
+    }
+
     // Extract format and data from base64 string
     const matches = base64Data.match(/^data:image\/([a-zA-Z]*);base64,(.*)$/);
     if (!matches) {
@@ -29,25 +50,78 @@ export const compressImageForMemory = async (base64Data, options = {}) => {
     const [, originalFormat, imageData] = matches;
     const buffer = Buffer.from(imageData, 'base64');
 
-    // Get original image metadata
-    const metadata = await sharp(buffer).metadata();
+    // Get original image metadata (with timeout for performance)
+    const metadataPromise = sharp(buffer).metadata();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Metadata extraction timeout')), 5000)
+    );
+    
+    const metadata = await Promise.race([metadataPromise, timeoutPromise]);
     const originalSize = buffer.length;
 
-    // Create compressed thumbnail
+    // Skip compression if image is already small enough
+    if (originalSize < 50000 && metadata.width <= thumbnailWidth && metadata.height <= thumbnailHeight) {
+      console.log(`📐 IMAGE SKIP: Image already optimal size (${originalSize} bytes)`);
+      const result = {
+        original: {
+          url: base64Data,
+          size: originalSize,
+          width: metadata.width,
+          height: metadata.height,
+          format: originalFormat
+        },
+        thumbnail: {
+          url: base64Data, // Use original as thumbnail
+          size: originalSize,
+          width: metadata.width,
+          height: metadata.height,
+          format: originalFormat,
+          quality
+        },
+        metadata: {
+          compressionRatio: 1,
+          sizeSaved: 0,
+          timestamp: new Date().toISOString(),
+          skipped: true
+        }
+      };
+      
+      // Cache the result
+      if (!skipCache) {
+        const cacheKey = getImageCacheKey(base64Data, options);
+        if (compressionCache.size >= MAX_COMPRESSION_CACHE_SIZE) {
+          // Remove oldest entry
+          const firstKey = compressionCache.keys().next().value;
+          compressionCache.delete(firstKey);
+        }
+        compressionCache.set(cacheKey, result);
+      }
+      
+      return result;
+    }
+
+    // Create compressed thumbnail with optimized settings
+    const compressionStart = process.hrtime.bigint();
     const compressed = await sharp(buffer)
       .resize(thumbnailWidth, thumbnailHeight, {
         fit: 'inside',
-        withoutEnlargement: true
+        withoutEnlargement: true,
+        kernel: sharp.kernel.lanczos2 // Faster kernel
       })
-      .jpeg({ quality })
+      .jpeg({ 
+        quality,
+        progressive: false, // Disable progressive for speed
+        mozjpeg: true // Use mozjpeg for better compression
+      })
       .toBuffer();
-
+    
+    const compressionTime = Number(process.hrtime.bigint() - compressionStart) / 1000000;
     const compressedBase64 = `data:image/${format};base64,${compressed.toString('base64')}`;
     const compressionRatio = originalSize / compressed.length;
 
-    console.log(`🗜️ IMAGE COMPRESSION: ${originalSize} → ${compressed.length} bytes (${compressionRatio.toFixed(1)}x reduction)`);
+    console.log(`🗜️ IMAGE COMPRESSION: ${originalSize} → ${compressed.length} bytes (${compressionRatio.toFixed(1)}x reduction) in ${compressionTime.toFixed(1)}ms`);
 
-    return {
+    const result = {
       original: {
         url: base64Data,
         size: originalSize,
@@ -66,9 +140,23 @@ export const compressImageForMemory = async (base64Data, options = {}) => {
       metadata: {
         compressionRatio,
         sizeSaved: originalSize - compressed.length,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        compressionTime: compressionTime.toFixed(1) + 'ms'
       }
     };
+    
+    // Cache the result for future use
+    if (!skipCache) {
+      const cacheKey = getImageCacheKey(base64Data, options);
+      if (compressionCache.size >= MAX_COMPRESSION_CACHE_SIZE) {
+        // Remove oldest entry (LRU-style)
+        const firstKey = compressionCache.keys().next().value;
+        compressionCache.delete(firstKey);
+      }
+      compressionCache.set(cacheKey, result);
+    }
+    
+    return result;
   } catch (error) {
     console.error('❌ IMAGE COMPRESSION: Error compressing image:', error);
     throw new Error(`Image compression failed: ${error.message}`);
@@ -87,7 +175,8 @@ export const selectOptimalImagesForAPI = (attachments, userPrompt, options = {})
   const {
     maxImages = 4,
     useFullResolution = false,
-    detectionKeywords = ['analyze', 'detail', 'read', 'text', 'examine', 'precise']
+    detectionKeywords = ['analyze', 'detail', 'read', 'text', 'examine', 'precise', 'ocr', 'document'],
+    smartSelection = true // Enable intelligent size-based selection
   } = options;
 
   if (!attachments || !attachments.length) {
@@ -95,14 +184,29 @@ export const selectOptimalImagesForAPI = (attachments, userPrompt, options = {})
   }
 
   // Detect if user needs high-resolution analysis
+  const promptLower = userPrompt.toLowerCase();
   const needsFullResolution = useFullResolution || 
-    detectionKeywords.some(keyword => 
-      userPrompt.toLowerCase().includes(keyword)
-    );
+    detectionKeywords.some(keyword => promptLower.includes(keyword));
 
   console.log(`🎯 IMAGE SELECTION: ${needsFullResolution ? 'Full resolution' : 'Thumbnail'} mode for ${attachments.length} images`);
 
-  return attachments.slice(0, maxImages).map(attachment => {
+  // Sort attachments by importance (smaller images first for thumbnails, larger for full res)
+  let sortedAttachments = attachments;
+  if (smartSelection && attachments.length > maxImages) {
+    sortedAttachments = attachments.sort((a, b) => {
+      const aSize = a.compressed?.original.size || a.url?.length || 0;
+      const bSize = b.compressed?.original.size || b.url?.length || 0;
+      
+      // For full resolution, prefer larger images (more detail)
+      // For thumbnails, prefer smaller images (less processing)
+      return needsFullResolution ? bSize - aSize : aSize - bSize;
+    });
+  }
+
+  return sortedAttachments.slice(0, maxImages).map((attachment, index) => {
+    // Calculate processing priority
+    const priority = maxImages - index;
+    
     if (attachment.compressed && !needsFullResolution) {
       // Use thumbnail for general conversation
       return {
@@ -111,14 +215,21 @@ export const selectOptimalImagesForAPI = (attachments, userPrompt, options = {})
         type: 'image',
         resolution: 'thumbnail',
         originalSize: attachment.compressed.original.size,
-        currentSize: attachment.compressed.thumbnail.size
+        currentSize: attachment.compressed.thumbnail.size,
+        priority,
+        compressionRatio: attachment.compressed.metadata.compressionRatio
       };
     } else {
       // Use full resolution for detailed analysis or if no compression available
+      const currentSize = attachment.compressed?.original.size || attachment.url?.length || 0;
       return {
         ...attachment,
         resolution: 'full',
-        currentSize: attachment.compressed?.original.size || attachment.url?.length || 0
+        currentSize,
+        priority,
+        // Use compressed version if available but still need full res
+        url: needsFullResolution && attachment.compressed ? 
+          attachment.compressed.original.url : attachment.url
       };
     }
   });

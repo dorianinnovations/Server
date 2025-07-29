@@ -266,9 +266,7 @@ export const prioritizeMemories = (memories, options = {}) => {
   // Combine and limit total count
   const prioritized = [...recent, ...important].slice(0, maxCount);
 
-  console.log(`🎯 MEMORY PRIORITIZATION: ${prioritized.length}/${memories.length} memories selected (avg score: ${
-    (prioritized.reduce((sum, m) => sum + m.importanceScore, 0) / prioritized.length).toFixed(1)
-  })`);
+  // Memory prioritization complete
 
   return prioritized;
 };

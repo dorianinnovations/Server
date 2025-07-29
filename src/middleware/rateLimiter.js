@@ -3,20 +3,59 @@ import logger from "../utils/logger.js";
 
 // Rate limiting middleware initialization
 
-// In-memory store for rate limiting (in production, use Redis)
+// Optimized in-memory store for rate limiting with LRU eviction
+const MAX_RATE_LIMIT_ENTRIES = 10000; // Prevent memory bloat
 const rateLimitStore = new Map();
+const rateLimitAccess = new Map(); // Track access times for LRU
 
 // Rate limit store ready
 
-// Clean up expired entries every 5 minutes
-setInterval(() => {
+// Clean up expired entries every 2 minutes (more frequent)
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
+  const expiredKeys = [];
+  const accessThreshold = now - (10 * 60 * 1000); // 10 minutes of inactivity
+  
+  // Collect expired and inactive entries
   for (const [key, data] of rateLimitStore.entries()) {
-    if (now > data.resetTime) {
-      rateLimitStore.delete(key);
+    const lastAccess = rateLimitAccess.get(key) || 0;
+    
+    if (now > data.resetTime || lastAccess < accessThreshold) {
+      expiredKeys.push(key);
     }
   }
-}, 5 * 60 * 1000);
+  
+  // Bulk delete expired entries
+  expiredKeys.forEach(key => {
+    rateLimitStore.delete(key);
+    rateLimitAccess.delete(key);
+  });
+  
+  if (expiredKeys.length > 0) {
+    console.log(`🧹 Rate limiter cleanup: removed ${expiredKeys.length} entries`);
+  }
+  
+  // LRU eviction if store is too large
+  if (rateLimitStore.size > MAX_RATE_LIMIT_ENTRIES) {
+    const sortedByAccess = Array.from(rateLimitAccess.entries())
+      .sort((a, b) => a[1] - b[1]) // Sort by access time (oldest first)
+      .slice(0, rateLimitStore.size - MAX_RATE_LIMIT_ENTRIES + 100); // Remove extra entries
+    
+    sortedByAccess.forEach(([key]) => {
+      rateLimitStore.delete(key);
+      rateLimitAccess.delete(key);
+    });
+    
+    console.log(`🗑️ Rate limiter LRU eviction: removed ${sortedByAccess.length} entries`);
+  }
+}, 2 * 60 * 1000); // Every 2 minutes
+
+// Graceful cleanup on shutdown
+process.on('SIGTERM', () => {
+  clearInterval(cleanupInterval);
+  rateLimitStore.clear();
+  rateLimitAccess.clear();
+});
 
 // Cleanup interval configured
 
@@ -35,43 +74,58 @@ export const createRateLimiter = (options = {}) => {
     max = 100, // 100 requests per window default
     message = "Too many requests, please try again later.",
     keyGenerator = (req) => {
-      // Use IP address as default key
-      return req.ip || req.connection.remoteAddress || 'unknown';
-    }
+      // Use IP address as default key with fallbacks
+      return req.ip || 
+             req.headers['x-forwarded-for']?.split(',')[0] || 
+             req.connection.remoteAddress || 
+             req.socket.remoteAddress ||
+             'unknown';
+    },
+    skipSuccessfulRequests = false,
+    skipFailedRequests = false
   } = options;
 
   return (req, res, next) => {
     const key = keyGenerator(req);
     const now = Date.now();
     
+    // Update access time for LRU
+    rateLimitAccess.set(key, now);
+    
     // Get or create rate limit data for this key
     let rateLimitData = rateLimitStore.get(key);
     
     if (!rateLimitData || now > rateLimitData.resetTime) {
-      // First request or window expired
+      // First request or window expired - reset counter
       rateLimitData = {
-        requests: 1,
+        requests: 0, // Start at 0, will increment below
         resetTime: now + windowMs,
-        firstRequest: now
+        firstRequest: now,
+        lastRequest: now
       };
-    } else {
-      // Increment request count
-      rateLimitData.requests += 1;
     }
+    
+    // Increment request count (before response to catch all requests)
+    rateLimitData.requests += 1;
+    rateLimitData.lastRequest = now;
     
     // Store updated data
     rateLimitStore.set(key, rateLimitData);
     
     // Check if limit exceeded
-    if (rateLimitData.requests > max) {
+    const remaining = Math.max(0, max - rateLimitData.requests);
+    const isExceeded = rateLimitData.requests > max;
+    
+    if (isExceeded) {
       const retryAfter = Math.ceil((rateLimitData.resetTime - now) / 1000);
       
       logger.warn("Rate limit exceeded", {
-        key,
+        key: key.substring(0, 20) + '...', // Truncate for privacy
         requests: rateLimitData.requests,
         max,
         windowMs,
-        retryAfter
+        retryAfter,
+        userAgent: req.headers['user-agent']?.substring(0, 50)
       });
       
       return res.status(429).json({
@@ -87,13 +141,31 @@ export const createRateLimiter = (options = {}) => {
       });
     }
     
-    // Add rate limit headers
+    // Add optimized rate limit headers
+    const resetTimeSeconds = Math.ceil(rateLimitData.resetTime / 1000);
     res.set({
-      'X-RateLimit-Limit': max,
-      'X-RateLimit-Remaining': Math.max(0, max - rateLimitData.requests),
-      'X-RateLimit-Reset': rateLimitData.resetTime,
-      'X-RateLimit-Window': windowMs
+      'X-RateLimit-Limit': String(max),
+      'X-RateLimit-Remaining': String(remaining),
+      'X-RateLimit-Reset': String(resetTimeSeconds),
+      'X-RateLimit-Window': String(windowMs)
     });
+    
+    // Optional: Decrement counter for successful/failed requests
+    if (skipSuccessfulRequests || skipFailedRequests) {
+      const originalSend = res.send;
+      res.send = function(data) {
+        const shouldSkip = 
+          (skipSuccessfulRequests && res.statusCode >= 200 && res.statusCode < 400) ||
+          (skipFailedRequests && res.statusCode >= 400);
+          
+        if (shouldSkip && rateLimitData.requests > 0) {
+          rateLimitData.requests -= 1;
+          rateLimitStore.set(key, rateLimitData);
+        }
+        
+        return originalSend.call(this, data);
+      };
+    }
     
     next();
   };

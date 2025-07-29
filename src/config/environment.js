@@ -26,6 +26,24 @@ export const env = {
   ENABLE_DEBUG_LOGS: process.env.NODE_ENV === 'development' ? true : false,
   LOG_LEVEL: process.env.NODE_ENV === 'production' ? 'error' : 'info',
   
+  // AI Services
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+  LLAMA_CPP_API_URL: process.env.LLAMA_CPP_API_URL || 'http://localhost:8000/completion',
+  
+  // Search APIs
+  GOOGLE_SEARCH_API_KEY: process.env.GOOGLE_SEARCH_API_KEY,
+  GOOGLE_SEARCH_ENGINE_ID: process.env.GOOGLE_SEARCH_ENGINE_ID,
+  SERPAPI_API_KEY: process.env.SERPAPI_API_KEY,
+  
+  // Spotify Integration
+  SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID,
+  SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET,
+  
+  // Stripe Payment Processing
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY,
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+  
   // AWS Configuration for secure cloud storage
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
@@ -44,6 +62,14 @@ export const env = {
   
   // Tertiary: SendGrid (100 emails/day free)
   SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+  
+  // Additional API Keys
+  OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,
+  GOOGLE_TRANSLATE_API_KEY: process.env.GOOGLE_TRANSLATE_API_KEY,
+  
+  // Security
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
+  HTTP_REFERER: process.env.HTTP_REFERER,
 };
 
 // Environment configuration loaded

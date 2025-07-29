@@ -32,12 +32,15 @@ export const MESSAGES = {
 // Database Configuration
 export const DB_CONFIG = {
   CONNECTION_POOL: {
-    MAX_POOL_SIZE: 50,
-    MIN_POOL_SIZE: 5,
-    MAX_IDLE_TIME_MS: 30000,
-    SERVER_SELECTION_TIMEOUT_MS: 5000,
-    SOCKET_TIMEOUT_MS: 45000,
-    HEARTBEAT_FREQUENCY_MS: 10000
+    MAX_POOL_SIZE: 20, // Reduced from 50 for better resource management
+    MIN_POOL_SIZE: 2, // Reduced from 5 for lighter footprint
+    MAX_IDLE_TIME_MS: 20000, // Reduced from 30s for faster cleanup
+    SERVER_SELECTION_TIMEOUT_MS: 3000, // Reduced from 5s for faster failover
+    SOCKET_TIMEOUT_MS: 30000, // Reduced from 45s for faster detection
+    HEARTBEAT_FREQUENCY_MS: 5000, // Increased from 10s for better monitoring
+    BUFFER_MAX_ENTRIES: 0, // Disable buffering for immediate error detection
+    CONNECT_TIMEOUT_MS: 10000, // 10 second connect timeout
+    WRITE_CONCERN_TIMEOUT_MS: 5000 // 5 second write concern timeout
   },
   STATES: {
     DISCONNECTED: 'disconnected',
@@ -69,10 +72,14 @@ export const TASK_CONFIG = {
 
 // Memory and Performance Configuration
 export const MEMORY_CONFIG = {
-  CACHE_TTL: 3600000, 
-  GC_THRESHOLD: 100000000,
-  MEMORY_MONITORING_INTERVAL: 60000, 
-  MAX_RESPONSE_SIZE: 100000 
+  CACHE_TTL: 1800000, // 30 minutes (reduced from 1 hour for better memory management)
+  GC_THRESHOLD: 80000000, // 80MB (reduced from 100MB for more aggressive GC)
+  MEMORY_MONITORING_INTERVAL: 30000, // 30 seconds (increased frequency)
+  MAX_RESPONSE_SIZE: 50000, // 50KB (reduced from 100KB)
+  MAX_CACHE_SIZE: 1000, // Maximum number of cache entries
+  CACHE_CLEANUP_INTERVAL: 300000, // 5 minutes cache cleanup
+  HEAP_USAGE_THRESHOLD: 0.85, // Trigger cleanup at 85% heap usage
+  COMPRESSION_THRESHOLD: 1024 // Compress responses larger than 1KB
 };
 
 // Security Configuration
