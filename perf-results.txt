@@ -1,0 +1,35 @@
+🚀 Numina Server Performance Test Suite
+=======================================
+Started at: Tue Jul 29 02:48:03 PM PDT 2025
+
+Testing: Root Endpoint
+{"status":"success","message":"Numina AI Server is running","timestamp":"2025-07-29T21:48:04.500Z","version":"1.0.0"}{  "time_namelookup": 0.000009,  "time_connect": 0.000066,  "time_appconnect": 0.000000,  "time_pretransfer": 0.000085,  "time_redirect": 0.000000,  "time_starttransfer": 0.001328,  "time_total": 0.001339,  "speed_download": 87378,  "speed_upload": 0,  "size_download": 117,  "size_upload": 0,  "http_code": 200}
+
+Testing: Health Endpoint
+{"status":"success","health":{"server":"healthy","database":"connected","llm_api":"accessible","llm_service":"OpenRouter (GPT-4o)","llm_response_status":200,"websocket":"active","websocket_stats":{"status":"active","connected_users":0,"total_rooms":0,"uptime":269.101617}}}{  "time_namelookup": 0.000008,  "time_connect": 0.000062,  "time_appconnect": 0.000000,  "time_pretransfer": 0.000081,  "time_redirect": 0.000000,  "time_starttransfer": 0.688623,  "time_total": 0.688646,  "speed_download": 396,  "speed_upload": 0,  "size_download": 273,  "size_upload": 0,  "http_code": 200}
+
+Testing: Test Endpoint
+{"title":"API Testing Interface","description":"Test API endpoints interactively","endpoints":[{"name":"Health Check","method":"GET","url":"/health","description":"Test system health"},{"name":"User Registration","method":"POST","url":"/signup","description":"Create a new user account","body":{"email":"test@example.com","password":"password123"}},{"name":"User Login","method":"POST","url":"/login","description":"Authenticate user","body":{"email":"test@example.com","password":"password123"}},{"name":"Get Profile","method":"GET","url":"/profile","description":"Get user profile (requires auth)","headers":{"Authorization":"Bearer <your-token>"}},{"name":"AI Completion","method":"POST","url":"/completion","description":"Get AI response (requires auth)","headers":{"Authorization":"Bearer <your-token>"},"body":{"prompt":"Hello, how are you today?"}}]}{  "time_namelookup": 0.000012,  "time_connect": 0.000080,  "time_appconnect": 0.000000,  "time_pretransfer": 0.000101,  "time_redirect": 0.000000,  "time_starttransfer": 0.001730,  "time_total": 0.001745,  "speed_download": 491117,  "speed_upload": 0,  "size_download": 857,  "size_upload": 0,  "http_code": 200}
+
+Memory Usage Test
+Memory after 20 concurrent requests: N/AMB
+
+Conversation Deletion Performance
+Testing: Health Check
+{"status":"success","health":{"server":"healthy","database":"connected","llm_api":"accessible","llm_service":"OpenRouter (GPT-4o)","llm_response_status":200,"websocket":"active","websocket_stats":{"status":"active","connected_users":0,"total_rooms":0,"uptime":272.394850122}}}{  "time_namelookup": 0.000008,  "time_connect": 0.000066,  "time_appconnect": 0.000000,  "time_pretransfer": 0.000085,  "time_redirect": 0.000000,  "time_starttransfer": 0.922326,  "time_total": 0.922348,  "speed_download": 299,  "speed_upload": 0,  "size_download": 276,  "size_upload": 0,  "http_code": 200}
+
+Note: Conversation deletion tests require authentication
+Skipping for now - would need JWT token setup
+
+Load Testing
+10 concurrent requests completed in: s
+
+Response Time Analysis
+Response time P50: 0.000786s
+Response time P95: 0.000973s
+Response time P99: 0.001142s
+
+Final memory usage: N/AMB
+
+=======================================
+Test completed at: Tue Jul 29 02:48:09 PM PDT 2025

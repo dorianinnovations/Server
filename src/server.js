@@ -40,6 +40,7 @@ import personalInsightsRoutes from "./routes/personalInsights.js";
 import syncRoutes from "./routes/sync.js";
 import conversationSyncRoutes from "./routes/conversationSync.js";
 import conversationsRoutes from "./routes/conversations.js";
+import deletionQueueRoutes from "./routes/deletionQueue.js";
 import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 import ubpmRoutes from "./routes/ubpm.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
@@ -242,6 +243,7 @@ const initializeServer = async () => {
   app.use("/", syncRoutes);
   app.use("/conversation", conversationSyncRoutes);
   app.use("/conversations", conversationsRoutes); // New persistent conversation routes
+  app.use("/deletion-queue", deletionQueueRoutes); // Deletion queue system
   app.use("/emotional-analytics", emotionalAnalyticsRoutes);
   
   // Direct emotions endpoint for mobile app compatibility
