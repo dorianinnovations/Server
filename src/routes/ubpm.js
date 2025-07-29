@@ -12,11 +12,14 @@ const router = express.Router();
 router.get('/context', protect, async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('🔥 UBPM ROUTE HIT - USER:', req.user.email, 'ID:', userId);
     
     // Get real UBPM profile from database
     const behaviorProfile = await UserBehaviorProfile.findOne({ userId });
+    console.log('🔥 BEHAVIOR PROFILE FOUND:', !!behaviorProfile, 'PATTERNS:', behaviorProfile?.behaviorPatterns?.length || 0);
     
     if (!behaviorProfile) {
+      console.log('🔥 NO PROFILE - RETURNING BUILDING STATE');
       // User has no behavioral data yet - return minimal context
       return res.json({
         success: true,
@@ -70,6 +73,10 @@ router.get('/context', protect, async (req, res) => {
     const overallConfidence = realUBPMPatterns.length > 0 ? 
       realUBPMPatterns.reduce((sum, p) => sum + p.confidence, 0) / realUBPMPatterns.length : 0.1;
 
+    console.log('🔥 CALCULATED CONFIDENCE:', Math.round(overallConfidence * 100), '% FROM', realUBPMPatterns.length, 'PATTERNS');
+    console.log('🔥 COMMUNICATION PATTERNS:', communicationPatterns.map(p => p.pattern));
+    console.log('🔥 COMMUNICATION STYLE:', behavioralContext.communicationStyle);
+
     const ubpmContext = {
       userId,
       behavioralContext,
@@ -83,6 +90,8 @@ router.get('/context', protect, async (req, res) => {
       note: realUBPMPatterns.length === 0 ? 'UBPM analysis requires 5+ interactions for pattern detection' : undefined
     };
 
+    console.log('🔥 SENDING REAL UBPM DATA - CONFIDENCE:', Math.round(overallConfidence * 100), '%');
+    
     res.json({
       success: true,
       data: ubpmContext

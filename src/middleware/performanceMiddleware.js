@@ -4,78 +4,103 @@ import { AnalyticsService } from '../services/analytics.js';
 // Performance middleware initializing
 
 export const performanceMiddleware = (req, res, next) => {
-  const start = Date.now();
+  const start = process.hrtime.bigint(); // Use high-resolution timer
   
-  // Track specific operations
+  // Track specific operations with optimized structure
   req.performanceMetrics = {
-    start,
-    operations: {},
+    start: Number(start),
+    startTime: Date.now(), // Keep Date.now() for compatibility
+    operations: new Map(), // Use Map for better performance
     memory: {
       start: process.memoryUsage().heapUsed
-    }
+    },
+    requestSize: Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8')
   };
   
-  // Helper function to track operation duration
+  // Optimized helper function to track operation duration
   req.trackOperation = (operation, duration) => {
-    req.performanceMetrics.operations[operation] = duration;
+    req.performanceMetrics.operations.set(operation, duration);
   };
   
-  // Helper function to track memory usage
+  // Optimized helper function to track memory usage
   req.trackMemory = (operation) => {
     const current = process.memoryUsage().heapUsed;
     const delta = current - req.performanceMetrics.memory.start;
     req.performanceMetrics.memory[operation] = {
-      current: Math.round(current / 1024 / 1024), // MB
-      delta: Math.round(delta / 1024 / 1024) // MB
+      current: Math.round(current / 1048576), // More efficient division
+      delta: Math.round(delta / 1048576)
     };
   };
   
   res.on('finish', () => {
-    const total = Date.now() - start;
+    const end = process.hrtime.bigint();
     const metrics = req.performanceMetrics;
-    const finalMemory = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const total = Number(end - BigInt(metrics.start)) / 1000000; // Convert to milliseconds
+    const memUsage = process.memoryUsage();
+    const finalMemory = Math.round(memUsage.heapUsed / 1048576);
+    const responseSize = res.get('content-length') || 0;
     
-    // Log performance metrics
+    // Convert Map to Object for logging (only if needed)
+    const operationsObj = metrics.operations.size > 0 ? 
+      Object.fromEntries(metrics.operations) : {};
+    
+    // Log performance metrics with more details
     const logData = {
       method: req.method,
       path: req.path,
-      duration: total,
-      operations: metrics.operations,
-      memoryUsage: finalMemory,
+      duration: Math.round(total * 100) / 100, // Round to 2 decimal places
+      operations: operationsObj,
+      memory: {
+        heap: finalMemory,
+        rss: Math.round(memUsage.rss / 1048576),
+        external: Math.round(memUsage.external / 1048576)
+      },
+      requestSize: metrics.requestSize,
+      responseSize: parseInt(responseSize) || 0,
       statusCode: res.statusCode
     };
     
-    // Log slow requests
-    if (total > 2000) {
-      logger.warn(`🐌 SLOW REQUEST: ${req.method} ${req.path} - ${total}ms`, logData);
-    } else if (total > 1000) {
-      logger.info(`⚠️ MODERATE REQUEST: ${req.method} ${req.path} - ${total}ms`, logData);
+    // Optimized threshold checking with early returns
+    const shouldLogSlow = total > 2000;
+    const shouldLogModerate = total > 1000 && !shouldLogSlow;
+    const shouldTrackAnalytics = total > 1000;
+    
+    if (shouldLogSlow) {
+      logger.warn(`🐌 SLOW REQUEST: ${req.method} ${req.path} - ${Math.round(total)}ms`, logData);
+    } else if (shouldLogModerate) {
+      logger.info(`⚠️ MODERATE REQUEST: ${req.method} ${req.path} - ${Math.round(total)}ms`, logData);
     }
     
-    // Track specific operation performance
-    if (metrics.operations.task_inference && metrics.operations.task_inference > 100) {
-      logger.warn(`🐌 Slow task inference: ${metrics.operations.task_inference}ms`);
+    // Track specific operation performance with Map.get()
+    const taskInference = metrics.operations.get('task_inference');
+    const emotionLogging = metrics.operations.get('emotion_logging');
+    const stringSanitization = metrics.operations.get('string_sanitization');
+    
+    if (taskInference > 100) {
+      logger.warn(`🐌 Slow task inference: ${taskInference}ms`);
     }
     
-    if (metrics.operations.emotion_logging && metrics.operations.emotion_logging > 50) {
-      logger.warn(`🐌 Slow emotion logging: ${metrics.operations.emotion_logging}ms`);
+    if (emotionLogging > 50) {
+      logger.warn(`🐌 Slow emotion logging: ${emotionLogging}ms`);
     }
     
-    if (metrics.operations.string_sanitization && metrics.operations.string_sanitization > 20) {
-      logger.warn(`🐌 Slow string sanitization: ${metrics.operations.string_sanitization}ms`);
+    if (stringSanitization > 20) {
+      logger.warn(`🐌 Slow string sanitization: ${stringSanitization}ms`);
     }
     
-    // Track analytics for slow operations
-    if (total > 1000) {
+    // Track analytics for slow operations (only when necessary)
+    if (shouldTrackAnalytics) {
       AnalyticsService.trackEvent(
         'performance_metric',
         'performance',
         {
           operation: 'request_processing',
-          duration: total,
+          duration: Math.round(total),
           path: req.path,
-          operations: metrics.operations,
-          memoryUsage: finalMemory
+          operations: operationsObj,
+          memoryUsage: finalMemory,
+          requestSize: metrics.requestSize,
+          responseSize: logData.responseSize
         }
       );
     }
