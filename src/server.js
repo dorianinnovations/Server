@@ -61,6 +61,8 @@ import sandboxRoutes from "./routes/sandbox.js";
 import analyticsEcosystemRoutes from "./routes/analyticsEcosystem.js";
 import authTestRoutes from "./routes/authTest.js";
 import emailRoutes from "./routes/email.js";
+import visualizationsRoutes from "./routes/visualizations.js";
+import behaviorMetricsRoutes from "./routes/behaviorMetrics.js";
 
 log.debug("Route modules imported");
 
@@ -220,6 +222,8 @@ const initializeServer = async () => {
   app.use("/sandbox", sandboxRoutes);
   app.use("/", authTestRoutes);
   app.use("/email", emailRoutes);
+  app.use("/visualizations", visualizationsRoutes);
+  app.use("/behavior-metrics", behaviorMetricsRoutes);
   app.use("/ai", aiRoutes);
   app.use("/personalized-ai", personalizedAIRoutes);
   app.use("/tools", toolsRoutes);

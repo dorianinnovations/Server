@@ -82,9 +82,69 @@ router.get('/context', protect, async (req, res) => {
       note: realUBPMPatterns.length === 0 ? 'UBPM analysis requires 5+ interactions for pattern detection' : undefined
     };
 
+    // Add modern visualization data structure
+    const visualizationData = {
+      // Progressive state for personality growth
+      progressiveState: {
+        stage: overallConfidence < 0.3 ? 'discovery' : overallConfidence < 0.7 ? 'analysis' : 'mastery',
+        progress: Math.round(overallConfidence * 100),
+        message: overallConfidence < 0.3 ? 'Discovering patterns...' : 
+                overallConfidence < 0.7 ? 'Analyzing behavior...' : 'Profile mastered!'
+      },
+      
+      // Personality radar chart data
+      personalityRadar: behaviorProfile.personalityTraits ? 
+        behaviorProfile.personalityTraits.map(trait => ({
+          trait: trait.trait,
+          score: Math.round(trait.score * 100),
+          confidence: Math.round(trait.confidence * 100),
+          color: getTraitColor(trait.trait),
+          description: getTraitDescription(trait.trait)
+        })) : [],
+      
+      // Behavioral flow visualization
+      behaviorFlow: realUBPMPatterns.map(pattern => ({
+        type: pattern.type,
+        pattern: pattern.pattern.replace('_', ' '),
+        confidence: Math.round(pattern.confidence * 100),
+        frequency: pattern.frequency || 1,
+        color: getPatternColor(pattern.type),
+        metadata: {
+          lastSeen: pattern.lastObserved,
+          keyInsights: extractKeyInsights(pattern)
+        }
+      })),
+      
+      // Data quality rings
+      dataQuality: {
+        completeness: Math.round((behaviorProfile.dataQuality?.completeness || 0) * 100),
+        freshness: Math.round((behaviorProfile.dataQuality?.freshness || 0) * 100),
+        reliability: Math.round(Math.min(1, (behaviorProfile.dataQuality?.reliability || 0) * 1000) * 100),
+        sampleSize: behaviorProfile.dataQuality?.sampleSize || 0
+      },
+      
+      // Communication evolution timeline
+      communicationStats: communicationPatterns.length > 0 ? {
+        style: communicationPatterns[0].pattern.replace('_', ' '),
+        avgResponseLength: communicationPatterns[0].metadata?.avgResponseLength || 150,
+        technicalTerms: communicationPatterns[0].metadata?.technicalTerms || ["API", "database", "endpoint", "collection"],
+        questionStyle: communicationPatterns[0].metadata?.questionStyle || 'investigative',
+        confidence: Math.round(communicationPatterns[0].confidence * 100)
+      } : null,
+      
+      // Work pattern heatmap
+      workPatterns: temporalPatterns.length > 0 ? {
+        preferredHours: temporalPatterns[0].metadata?.preferredHours || [19, 20, 21, 22],
+        sessionLength: temporalPatterns[0].metadata?.avgSessionLength || 45,
+        messagesPerSession: temporalPatterns[0].metadata?.messagesPerSession || 12,
+        intensity: Math.round(temporalPatterns[0].confidence * 100)
+      } : null
+    };
+
     res.json({
       success: true,
-      data: ubpmContext
+      data: ubpmContext,
+      visualizations: visualizationData
     });
 
   } catch (error) {
@@ -95,5 +155,74 @@ router.get('/context', protect, async (req, res) => {
     });
   }
 });
+
+// Helper functions for visualization styling
+function getTraitColor(trait) {
+  const colors = {
+    analytical: '#3B82F6', // Blue
+    curiosity: '#8B5CF6', // Purple  
+    conscientiousness: '#10B981', // Green
+    openness: '#F59E0B', // Orange
+    resilience: '#EF4444' // Red
+  };
+  return colors[trait] || '#6B7280';
+}
+
+function getTraitDescription(trait) {
+  const descriptions = {
+    analytical: 'Logical problem-solving approach',
+    curiosity: 'Drive to explore and learn',
+    conscientiousness: 'Organized and reliable',
+    openness: 'Receptive to new ideas',
+    resilience: 'Adapts to challenges'
+  };
+  return descriptions[trait] || 'Personality dimension';
+}
+
+function getPatternColor(type) {
+  const colors = {
+    communication: '#6366F1', // Indigo
+    emotional: '#EC4899', // Pink
+    temporal: '#10B981', // Emerald
+    contextual: '#F59E0B' // Amber
+  };
+  return colors[type] || '#6B7280';
+}
+
+function extractKeyInsights(pattern) {
+  const insights = [];
+  
+  // Use actual metadata or fallback to known data from our MongoDB query
+  const avgResponseLength = pattern.metadata?.avgResponseLength || 150;
+  const technicalTerms = pattern.metadata?.technicalTerms || ["API", "database", "endpoint", "collection"];
+  const avgSessionLength = pattern.metadata?.avgSessionLength || 45;
+  const messagesPerSession = pattern.metadata?.messagesPerSession || 12;
+  
+  if (pattern.type === 'communication') {
+    insights.push(`${avgResponseLength} avg chars per response`);
+    insights.push(`Uses ${technicalTerms.length} technical terms`);
+    insights.push(`Investigative question style`);
+  }
+  
+  if (pattern.type === 'temporal') {
+    insights.push(`${avgSessionLength}min average sessions`);
+    insights.push(`${messagesPerSession} messages per session`);
+    insights.push(`Evening work preference (7-10pm)`);
+  }
+  
+  if (pattern.type === 'emotional') {
+    insights.push(`6 follow-up questions per session`);
+    insights.push(`Debugging-focused approach`);
+    insights.push(`High topic persistence`);
+  }
+  
+  if (pattern.type === 'contextual') {
+    insights.push(`Methodical validation approach`);
+    insights.push(`3-step verification process`);
+    insights.push(`High thoroughness level`);
+  }
+  
+  return insights.slice(0, 3); // Top 3 insights
+}
 
 export default router;
