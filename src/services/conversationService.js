@@ -201,6 +201,29 @@ class ConversationService {
   }
 
   /**
+   * Delete all conversations for a user
+   */
+  async deleteAllConversations(userId) {
+    try {
+      // Delete all conversations for this user
+      const conversationResult = await Conversation.deleteMany({ userId });
+      
+      // Also clean up all related short-term memory for this user
+      const memoryResult = await ShortTermMemory.deleteMany({ userId });
+      
+      log.debug(`Deleted ${conversationResult.deletedCount} conversations and ${memoryResult.deletedCount} memory entries for user ${userId}`);
+      
+      return {
+        conversationsDeleted: conversationResult.deletedCount,
+        memoryEntriesDeleted: memoryResult.deletedCount
+      };
+    } catch (error) {
+      log.error('Error deleting all conversations:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Update conversation title
    */
   async updateConversationTitle(userId, conversationId, title) {

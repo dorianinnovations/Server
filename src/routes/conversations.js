@@ -412,6 +412,35 @@ router.delete('/:id', protect, async (req, res) => {
 });
 
 /**
+ * @route DELETE /conversations/all
+ * @desc Delete all conversations for the authenticated user
+ * @access Private
+ */
+router.delete('/all', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await conversationService.deleteAllConversations(userId);
+
+    res.json({
+      success: true,
+      message: 'All conversations deleted successfully',
+      data: {
+        conversationsDeleted: result.conversationsDeleted,
+        memoryEntriesDeleted: result.memoryEntriesDeleted
+      }
+    });
+
+  } catch (error) {
+    log.error('Error deleting all conversations:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: 'Failed to delete all conversations'
+    });
+  }
+});
+
+/**
  * @route GET /conversations/context/:id?
  * @desc Get conversation context for AI processing
  * @access Private
