@@ -321,7 +321,7 @@ GET  /api/health/llm        # LLM service health
 ### Environment Setup
 ```bash
 # Required environment variables
-MONGO_URI=mongodb://localhost:27017/numina
+MONGO_URI=your_mongodb_connection_string_here
 JWT_SECRET=your-jwt-secret
 OPENROUTER_API_KEY=sk-or-your-key
 REDIS_URL=redis://localhost:6379
