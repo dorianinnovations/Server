@@ -135,9 +135,19 @@ class ConversationService {
         return null;
       }
       
-      // Return recent messages if conversation is large
+      // For mobile app: return ALL messages if conversation is reasonable size
+      // Otherwise return recent messages (to maintain performance)
       if (conversation.messages.length > messageLimit) {
-        conversation.messages = conversation.messages.slice(-messageLimit);
+        // If requesting max limit (500), try to return all messages anyway for better UX
+        // Only truncate if conversation is extremely large (1000+ messages)
+        if (messageLimit >= 500 && conversation.messages.length <= 1000) {
+          // Return all messages for better mobile UX
+          log.debug(`Returning all ${conversation.messages.length} messages for conversation ${conversationId}`);
+        } else {
+          // Return recent messages for very large conversations
+          conversation.messages = conversation.messages.slice(-messageLimit);
+          log.debug(`Truncated to ${messageLimit} recent messages for large conversation ${conversationId}`);
+        }
       }
       
       return conversation;

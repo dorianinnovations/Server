@@ -134,7 +134,7 @@ class EmailService {
     
     const emailData = {
       to: userEmail,
-      subject: '🎉 Welcome to Numina - Your AI Personal Assistant!',
+      subject: 'Hey, welcome!',
       html: this.getWelcomeEmailTemplate(userName),
       text: this.getWelcomeEmailText(userName)
     };
@@ -394,52 +394,105 @@ class EmailService {
       <html>
       <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Hey, welcome!</title>
         <style>
-          .container { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: linear-gradient(135deg, #10b981, #059669); color: white; text-align: center; padding: 30px; border-radius: 10px; }
-          .content { padding: 30px 0; }
-          .feature { margin: 20px 0; padding: 15px; background: #f9fafb; border-radius: 8px; }
-          .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
-          .button { background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 10px 0; }
-          .free-badge { background: #059669; color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+          body { margin: 0; padding: 0; background: linear-gradient(135deg, #E6E6FA 0%, #DDA0DD 100%); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+          .email-container { width: 100%; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.1); }
+          .header { background: linear-gradient(135deg, #9370DB 0%, #DA70D6 100%); text-align: center; padding: 50px 30px; position: relative; }
+          .brand-text { font-size: 36px; font-weight: bold; color: #2d3748; font-style: italic; margin-bottom: 0; }
+          .hero-illustration { width: 200px; height: 200px; margin: 30px auto; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+          .hero-emoji { font-size: 80px; }
+          .main-title { font-size: 32px; font-weight: 600; color: #2d3748; margin: 30px 0 10px 0; }
+          .main-description { font-size: 16px; color: #718096; line-height: 1.6; margin-bottom: 40px; max-width: 400px; margin-left: auto; margin-right: auto; }
+          .cta-button { background: linear-gradient(135deg, #E91E63 0%, #FF1744 100%); color: white; padding: 16px 32px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; display: inline-block; transition: transform 0.2s; }
+          .cta-button:hover { transform: translateY(-2px); }
+          .content { padding: 60px 40px; }
+          .whats-next { margin-top: 60px; }
+          .section-title { font-size: 24px; font-weight: 600; color: #2d3748; margin-bottom: 30px; text-align: center; }
+          .feature { display: flex; align-items: flex-start; margin-bottom: 30px; }
+          .feature-icon { width: 60px; height: 60px; border-radius: 15px; display: flex; align-items: center; justify-content: center; margin-right: 20px; font-size: 24px; }
+          .feature-icon-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+          .feature-icon-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+          .feature-icon-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+          .feature-content h3 { font-size: 18px; font-weight: 600; color: #2d3748; margin: 0 0 8px 0; }
+          .feature-content p { font-size: 14px; color: #718096; margin: 0; line-height: 1.5; }
+          .footer { background: #4a5568; color: #cbd5e0; text-align: center; padding: 40px; }
+          .footer p { margin: 8px 0; font-size: 14px; }
+          .social-links { margin: 20px 0; }
+          .social-link { display: inline-block; margin: 0 10px; width: 40px; height: 40px; background: rgba(255,255,255,0.1); border-radius: 50%; text-decoration: none; }
+          .unsubscribe { font-size: 12px; color: #a0aec0; margin-top: 20px; }
+          @media (max-width: 600px) {
+            .content { padding: 40px 20px; }
+            .feature { flex-direction: column; text-align: center; }
+            .feature-icon { margin: 0 auto 15px auto; }
+          }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="header">
-            <div class="free-badge">✅ FREE EMAIL SERVICE</div>
-            <h1>🎉 Welcome to Numina!</h1>
-            <p>Your AI Personal Assistant is Ready</p>
-          </div>
-          
-          <div class="content">
-            <h2>Hi ${userName}!</h2>
-            <p>Thank you for joining Numina! We're excited to help you on your personal growth journey with AI-powered insights and assistance.</p>
-            
-            <div class="feature">
-              <h3>🤖 AI Chat Assistant</h3>
-              <p>Get personalized responses with 25+ AI tools including web search, weather, calculations, and more.</p>
+        <div style="padding: 20px;">
+          <div class="email-container">
+            <div class="header">
+              <div class="brand-text">numina</div>
+              <div class="hero-illustration">
+                <div class="hero-emoji">👋</div>
+              </div>
             </div>
             
-            <div class="feature">
-              <h3>📊 Emotional Analytics</h3>
-              <p>Track your emotional patterns and get insights to improve your wellbeing.</p>
+            <div class="content">
+              <h1 class="main-title">Hey, welcome!</h1>
+              <p class="main-description">
+                You're all set up with Numina. Start having conversations that actually understand you.
+              </p>
+              
+              <div style="text-align: center;">
+                <a href="https://numina.ai" class="cta-button">GET STARTED</a>
+              </div>
+              
+              <div class="whats-next">
+                <h2 class="section-title">What's next</h2>
+                
+                <div class="feature">
+                  <div class="feature-icon feature-icon-1">🤖</div>
+                  <div class="feature-content">
+                    <h3>Smart Conversations</h3>
+                    <p>Chat with an AI that learns your communication style and provides personalized responses.</p>
+                  </div>
+                </div>
+                
+                <div class="feature">
+                  <div class="feature-icon feature-icon-2">📊</div>
+                  <div class="feature-content">
+                    <h3>Personal Insights</h3>
+                    <p>Track your emotional patterns and get insights to improve your wellbeing over time.</p>
+                  </div>
+                </div>
+                
+                <div class="feature">
+                  <div class="feature-icon feature-icon-3">🎯</div>
+                  <div class="feature-content">
+                    <h3>Adaptive Experience</h3>
+                    <p>The more you use Numina, the better it understands and adapts to your unique needs.</p>
+                  </div>
+                </div>
+              </div>
             </div>
             
-            <div class="feature">
-              <h3>🎯 Personalized Experience</h3>
-              <p>The more you use Numina, the better it adapts to your communication style and preferences.</p>
+            <div class="footer">
+              <div class="social-links">
+                <a href="#" class="social-link"></a>
+                <a href="#" class="social-link"></a>
+                <a href="#" class="social-link"></a>
+                <a href="#" class="social-link"></a>
+              </div>
+              <p>Address: AI Labs, Tech District, Innovation City</p>
+              <p>(555) 123-4567 - hello@numina.ai</p>
+              <p class="unsubscribe">
+                <a href="#" style="color: #a0aec0;">UNSUBSCRIBE</a> | 
+                <a href="#" style="color: #a0aec0;">WEB VERSION</a> | 
+                <a href="#" style="color: #a0aec0;">SEND TO A FRIEND</a>
+              </p>
             </div>
-            
-            <p style="text-align: center;">
-              <a href="https://numina.ai" class="button">Start Using Numina</a>
-            </p>
-          </div>
-          
-          <div class="footer">
-            <p>Welcome to the future of personal AI assistance!</p>
-            <p>If you have any questions, just reply to this email.</p>
-            <p><small>✨ Powered by free email services (no more expensive Resend!)</small></p>
           </div>
         </div>
       </body>
@@ -449,22 +502,20 @@ class EmailService {
 
   getWelcomeEmailText(userName) {
     return `
-Welcome to Numina, ${userName}!
+Hey, welcome!
 
-Thank you for joining Numina! We're excited to help you on your personal growth journey with AI-powered insights and assistance.
+You're all set up with Numina. Start having conversations that actually understand you.
 
-What you can do with Numina:
-• AI Chat Assistant with 25+ tools (web search, weather, calculations, etc.)
-• Emotional Analytics to track your emotional patterns
-• Personalized Experience that adapts to your style
+What's next:
+• Smart Conversations - Chat with an AI that learns your communication style
+• Personal Insights - Track emotional patterns and improve your wellbeing  
+• Adaptive Experience - The more you use it, the better it gets
 
 Get started at: https://numina.ai
 
-Welcome to the future of personal AI assistance!
-If you have any questions, just reply to this email.
+Questions? Just reply to this email.
 
 - The Numina Team
-✨ Powered by free email services
     `;
   }
 
