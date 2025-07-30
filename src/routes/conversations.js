@@ -2,7 +2,6 @@ import express from 'express';
 import { body, query, validationResult } from 'express-validator';
 import { protect } from '../middleware/auth.js';
 import conversationService from '../services/conversationService.js';
-import deletionQueueService from '../services/deletionQueueService.js';
 import { HTTP_STATUS } from '../config/constants.js';
 import { log } from '../utils/logger.js';
 
@@ -388,81 +387,26 @@ router.put('/:id/archive', protect, async (req, res) => {
 router.delete('/all', protect, async (req, res) => {
   try {
     const userId = req.user.id;
-    const useQueue = req.query.queue === 'true' || req.headers['x-use-queue'] === 'true';
     
-    log.debug(`User ${userId} requesting deletion of all conversations (queue: ${useQueue})`);
+    log.debug(`User ${userId} requesting deletion of all conversations`);
 
-    if (useQueue) {
-      // Use queue system for guaranteed delivery
-      const task = await deletionQueueService.queueDeletion(
-        userId,
-        'delete_all_conversations',
-        { userId },
-        { priority: 2 }
-      );
-      
-      return res.json({
-        success: true,
-        queued: true,
-        message: 'All conversations queued for deletion',
-        task: {
-          id: task.taskId,
-          status: task.status,
-          message: task.message,
-          estimatedDuration: task.estimatedDuration,
-          queuePosition: task.queuePosition
-        }
-      });
-    }
+    const result = await conversationService.deleteAllConversations(userId);
 
-    // Try immediate deletion first
-    try {
-      // Set timeout for bulk operations
-      req.timeout = 30000; // 30 seconds timeout
-      
-      const result = await conversationService.deleteAllConversations(userId);
-
-      res.json({
-        success: true,
-        message: 'All conversations deleted successfully',
-        data: {
-          conversationsDeleted: result.conversationsDeleted,
-          memoryEntriesDeleted: result.memoryEntriesDeleted
-        }
-      });
-
-    } catch (immediateError) {
-      log.warn('Immediate deletion failed, falling back to queue:', immediateError.message);
-      
-      // Fallback to queue system
-      const task = await deletionQueueService.queueDeletion(
-        userId,
-        'delete_all_conversations',
-        { userId },
-        { priority: 2 }
-      );
-      
-      res.json({
-        success: true,
-        queued: true,
-        message: 'Server busy - all conversations queued for deletion',
-        fallbackReason: 'Immediate deletion failed, using reliable queue system',
-        task: {
-          id: task.taskId,
-          status: task.status,
-          message: task.message,
-          estimatedDuration: task.estimatedDuration,
-          queuePosition: task.queuePosition
-        }
-      });
-    }
+    res.json({
+      success: true,
+      message: 'All conversations deleted successfully',
+      data: {
+        conversationsDeleted: result.conversationsDeleted,
+        memoryEntriesDeleted: result.memoryEntriesDeleted
+      }
+    });
 
   } catch (error) {
-    log.error('Error in delete all conversations endpoint:', error);
+    log.error('Error deleting all conversations:', error);
     
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to process deletion request',
+      error: 'Failed to delete conversations. Please try again.',
       code: 'DELETION_ERROR'
     });
   }

@@ -41,6 +41,7 @@ import syncRoutes from "./routes/sync.js";
 import conversationSyncRoutes from "./routes/conversationSync.js";
 import conversationsRoutes from "./routes/conversations.js";
 import deletionQueueRoutes from "./routes/deletionQueue.js";
+import deletionQueueService from "./services/deletionQueueService.js";
 import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
 import ubpmRoutes from "./routes/ubpm.js";
 import apiDocsRoutes from "./routes/apiDocs.js";
@@ -244,6 +245,11 @@ const initializeServer = async () => {
   app.use("/conversation", conversationSyncRoutes);
   app.use("/conversations", conversationsRoutes); // New persistent conversation routes
   app.use("/deletion-queue", deletionQueueRoutes); // Deletion queue system
+  
+  // Start deletion queue processing
+  setTimeout(() => {
+    deletionQueueService.startProcessing();
+  }, 5000); // Start after 5 seconds to allow server to fully initialize
   app.use("/emotional-analytics", emotionalAnalyticsRoutes);
   
   // Direct emotions endpoint for mobile app compatibility
