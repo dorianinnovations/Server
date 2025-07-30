@@ -1,7 +1,7 @@
 import express from "express";
 import { body, validationResult } from "express-validator";
 import User from "../models/User.js";
-import { signToken, protect } from "../middleware/auth.js";
+import { signToken, protect, protectRefresh } from "../middleware/auth.js";
 import { HTTP_STATUS, MESSAGES, SECURITY_CONFIG as _SECURITY_CONFIG } from "../config/constants.js";
 import emailService from "../services/emailService.js";
 
@@ -245,7 +245,7 @@ router.post('/spotify/disconnect', protect, async (req, res) => {
 });
 
 // JWT Token Refresh Route
-router.post("/refresh", protect, async (req, res) => {
+router.post("/refresh", protectRefresh, async (req, res) => {
   try {
     // User is already authenticated by protect middleware
     const userId = req.user.id;

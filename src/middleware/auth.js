@@ -56,4 +56,47 @@ export const protect = (req, res, next) => {
   }
 };
 
+// Special middleware for token refresh that accepts expired tokens
+export const protectRefresh = (req, res, next) => {
+  let token;
+  
+  // Check for token in authorization header
+  if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  // If no token, return unauthorized
+  if (!token) {
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
+      status: MESSAGES.ERROR,
+      message: MESSAGES.UNAUTHORIZED 
+    });
+  }
+
+  try {
+    // Verify token with JWT secret, ignoring expiration
+    const decoded = jwt.verify(token, env.JWT_SECRET, { ignoreExpiration: true });
+    
+    // Handle both userId and id fields for backward compatibility
+    const userId = decoded.userId || decoded.id;
+    if (!userId) {
+      throw new Error('No user ID found in token');
+    }
+    
+    req.user = { 
+      id: userId,
+      userId: userId,
+      ...decoded 
+    };
+    next();
+  } catch (error) {
+    // Log the error for debugging but return generic message
+    console.error("JWT verification failed:", error.message);
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json({ 
+      status: MESSAGES.ERROR,
+      message: MESSAGES.INVALID_TOKEN 
+    });
+  }
+};
+
 // Middleware ready
