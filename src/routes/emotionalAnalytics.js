@@ -31,8 +31,13 @@ router.post('/submit', protect, async (req, res) => {
       submittedAt: new Date().toISOString()
     };
 
-    // TODO: In production, save to emotions collection
-    // await EmotionEntry.create(emotionData);
+    // Save to user's emotional log for UBPM analysis
+    const User = (await import('../models/User.js')).default;
+    await User.findByIdAndUpdate(userId, {
+      $push: {
+        emotionalLog: emotionData
+      }
+    });
 
     res.json({
       success: true,
