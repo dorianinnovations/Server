@@ -139,6 +139,10 @@ class UBPMService {
       patterns.push(...stressPatterns);
     }
 
+    // 6. Personality Trait Analysis from recent messages
+    const personalityPatterns = this.analyzePersonalityTraits(recentMemories);
+    patterns.push(...personalityPatterns);
+
     // Filter patterns by confidence threshold
     return patterns.filter(pattern => pattern.confidence >= this.analysisThresholds.patternConfidence);
   }
@@ -485,6 +489,85 @@ class UBPMService {
   }
 
   /**
+   * Analyze personality traits from conversation patterns
+   */
+  analyzePersonalityTraits(memories) {
+    const patterns = [];
+    const userMessages = memories.filter(m => m.role === 'user');
+    
+    if (userMessages.length < 3) return patterns;
+
+    // Aggregate message content for analysis
+    const allContent = userMessages.map(m => m.content).join(' ').toLowerCase();
+    
+    // Analytical thinking pattern
+    const analyticalKeywords = /analyze|data|metrics|specific|precise|exact|technical|system|debug|error|function|api|database/g;
+    const analyticalMatches = (allContent.match(analyticalKeywords) || []).length;
+    if (analyticalMatches > 2) {
+      patterns.push({
+        type: 'personality',
+        pattern: 'analytical_thinking',
+        description: 'Demonstrates strong analytical and technical thinking',
+        confidence: Math.min(0.95, 0.7 + (analyticalMatches * 0.05)),
+        frequency: analyticalMatches,
+        contexts: ['problem_solving'],
+        detectedAt: new Date(),
+        evidence: { keywordMatches: analyticalMatches, keywords: 'analytical_technical' }
+      });
+    }
+
+    // Curiosity and learning orientation
+    const curiosityKeywords = /how|why|what|learn|understand|explain|show|tell|help|teach/g;
+    const curiosityMatches = (allContent.match(curiosityKeywords) || []).length;
+    if (curiosityMatches > 3) {
+      patterns.push({
+        type: 'personality',
+        pattern: 'high_curiosity',
+        description: 'Shows strong curiosity and desire to learn',
+        confidence: Math.min(0.9, 0.65 + (curiosityMatches * 0.03)),
+        frequency: curiosityMatches,
+        contexts: ['learning'],
+        detectedAt: new Date(),
+        evidence: { keywordMatches: curiosityMatches, keywords: 'curiosity_learning' }
+      });
+    }
+
+    // Goal-oriented behavior
+    const goalKeywords = /achieve|goal|target|objective|result|outcome|complete|finish|done|success/g;
+    const goalMatches = (allContent.match(goalKeywords) || []).length;
+    if (goalMatches > 1) {
+      patterns.push({
+        type: 'personality',
+        pattern: 'goal_oriented',
+        description: 'Demonstrates goal-oriented and achievement-focused behavior',
+        confidence: Math.min(0.85, 0.6 + (goalMatches * 0.08)),
+        frequency: goalMatches,
+        contexts: ['achievement'],
+        detectedAt: new Date(),
+        evidence: { keywordMatches: goalMatches, keywords: 'goal_achievement' }
+      });
+    }
+
+    // Creative thinking
+    const creativeKeywords = /creative|innovation|new|design|invent|idea|brainstorm|imagine|build|create/g;
+    const creativeMatches = (allContent.match(creativeKeywords) || []).length;
+    if (creativeMatches > 1) {
+      patterns.push({
+        type: 'personality',
+        pattern: 'creative_thinking',
+        description: 'Shows creative and innovative thinking patterns',
+        confidence: Math.min(0.8, 0.6 + (creativeMatches * 0.1)),
+        frequency: creativeMatches,
+        contexts: ['creativity'],
+        detectedAt: new Date(),
+        evidence: { keywordMatches: creativeMatches, keywords: 'creative_innovation' }
+      });
+    }
+
+    return patterns;
+  }
+
+  /**
    * Update user behavior profile with new patterns
    */
   async updateBehaviorProfile(userId, newPatterns) {
@@ -518,10 +601,46 @@ class UBPMService {
       }
     }
 
+    // Extract and save personality traits from personality patterns
+    const personalityPatterns = newPatterns.filter(p => p.type === 'personality');
+    for (const personalityPattern of personalityPatterns) {
+      // Map pattern to trait
+      const traitMapping = {
+        'analytical_thinking': 'analytical',
+        'high_curiosity': 'curiosity',
+        'goal_oriented': 'conscientiousness',
+        'creative_thinking': 'creativity'
+      };
+      
+      const traitName = traitMapping[personalityPattern.pattern];
+      if (traitName) {
+        const existingTraitIndex = profile.personalityTraits.findIndex(t => t.trait === traitName);
+        
+        if (existingTraitIndex >= 0) {
+          // Update existing trait with higher confidence
+          if (personalityPattern.confidence > profile.personalityTraits[existingTraitIndex].confidence) {
+            profile.personalityTraits[existingTraitIndex].score = personalityPattern.confidence;
+            profile.personalityTraits[existingTraitIndex].confidence = personalityPattern.confidence;
+            profile.personalityTraits[existingTraitIndex].lastUpdated = personalityPattern.detectedAt;
+          }
+        } else {
+          // Add new personality trait
+          profile.personalityTraits.push({
+            trait: traitName,
+            score: personalityPattern.confidence,
+            confidence: personalityPattern.confidence,
+            evidence: personalityPattern.evidence,
+            firstDetected: personalityPattern.detectedAt,
+            lastUpdated: personalityPattern.detectedAt
+          });
+        }
+      }
+    }
+
     // Update profile metadata
     profile.lastAnalysisDate = new Date();
     profile.dataQuality.freshness = 1.0; // Fresh data
-    profile.dataQuality.completeness = Math.min(1.0, profile.behaviorPatterns.length / 5);
+    profile.dataQuality.completeness = Math.min(1.0, (profile.behaviorPatterns.length + profile.personalityTraits.length) / 8);
 
     await profile.save();
     return profile;

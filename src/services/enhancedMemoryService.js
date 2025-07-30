@@ -484,10 +484,11 @@ class EnhancedMemoryService {
    */
   async saveConversation(userId, userMessage, assistantResponse, metadata = {}) {
     try {
-      // Save to short-term memory
+      // Save to short-term memory with explicit timestamps
+      const now = new Date();
       await ShortTermMemory.insertMany([
-        { userId, content: userMessage, role: "user" },
-        { userId, content: assistantResponse, role: "assistant" }
+        { userId, content: userMessage, role: "user", timestamp: now },
+        { userId, content: assistantResponse, role: "assistant", timestamp: new Date(now.getTime() + 1) }
       ]);
 
       // Analyze and update constants
