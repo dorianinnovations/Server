@@ -230,7 +230,7 @@ class DeletionQueueService {
       task.markAsCompleted(result);
       await task.save();
       
-      log.info(`Completed deletion task ${task.taskId}:`, result);
+      log.debug(`Completed deletion task ${task.taskId}:`, result);
       
     } catch (error) {
       log.error(`Failed to process task ${task.taskId}:`, error);

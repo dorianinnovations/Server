@@ -35,7 +35,7 @@ class ConversationService {
       if (conversationId) {
         // Skip temporary IDs and invalid ObjectIds - treat as new conversation
         if (conversationId.startsWith('temp_') || !mongoose.Types.ObjectId.isValid(conversationId)) {
-          log.info(`Temporary or invalid conversationId: ${conversationId}, creating new conversation`);
+          log.debug(`Temporary or invalid conversationId: ${conversationId}, creating new conversation`);
           conversationId = null; // Force creation of new conversation
         } else {
           conversation = await Conversation.findOne({ _id: conversationId, userId });
@@ -224,7 +224,7 @@ class ConversationService {
    */
   async deleteAllConversations(userId) {
     try {
-      log.info(`Starting bulk deletion of conversations for user ${userId}`);
+      log.debug(`Starting bulk deletion of conversations for user ${userId}`);
       
       // Get count first for validation
       const conversationCount = await Conversation.countDocuments({ userId });
@@ -251,7 +251,7 @@ class ConversationService {
         
         await session.endSession();
         
-        log.info(`Successfully deleted ${conversationResult.deletedCount} conversations and ${memoryResult.deletedCount} memory entries for user ${userId}`);
+        log.debug(`Successfully deleted ${conversationResult.deletedCount} conversations and ${memoryResult.deletedCount} memory entries for user ${userId}`);
         
         // Force garbage collection after bulk deletion
         if (global.gc && (conversationResult.deletedCount > 10 || memoryResult.deletedCount > 50)) {
