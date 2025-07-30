@@ -15,6 +15,10 @@ router.post(
     body("password")
       .isLength({ min: 8 })
       .withMessage("Password must be at least 8 characters long."),
+    body("name")
+      .optional()
+      .isLength({ min: 1, max: 100 })
+      .withMessage("Name must be between 1 and 100 characters."),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -26,7 +30,7 @@ router.post(
       });
     }
 
-    const { email, password } = req.body;
+    const { email, password, name } = req.body;
     try {
       const existingUser = await User.findOne({ email });
       if (existingUser) {
@@ -36,11 +40,16 @@ router.post(
         });
       }
 
-      const user = await User.create({ email, password });
+      const userData = { email, password };
+      if (name && name.trim()) {
+        userData.name = name.trim();
+      }
+
+      const user = await User.create(userData);
       console.log("New user created:", user.email);
 
       // Send welcome email (non-blocking) - NOW ENABLED WITH RESEND
-      const emailPromise = emailService.sendWelcomeEmail(user.email, user.displayName || user.email.split('@')[0])
+      const emailPromise = emailService.sendWelcomeEmail(user.email, user.name || user.email.split('@')[0])
         .then(result => {
           if (result.success) {
             console.log('✅ Welcome email sent via', result.service, 'to:', user.email);
@@ -62,7 +71,7 @@ router.post(
       let emailMessageId = null;
 
       try {
-        const emailResult = await emailService.sendWelcomeEmail(user.email, user.displayName || user.email.split('@')[0]);
+        const emailResult = await emailService.sendWelcomeEmail(user.email, user.name || user.email.split('@')[0]);
         emailSent = emailResult.success;
         emailService_used = emailResult.service;
         emailMessageId = emailResult.messageId;
@@ -79,7 +88,13 @@ router.post(
       res.status(HTTP_STATUS.CREATED).json({
         status: MESSAGES.SUCCESS,
         token: signToken(user._id),
-        data: { user: { id: user._id, email: user.email } },
+        data: { 
+          user: { 
+            id: user._id, 
+            email: user.email,
+            ...(user.name && { name: user.name })
+          } 
+        },
         welcomeEmail: {
           sent: emailSent,
           service: emailService_used,
@@ -128,7 +143,13 @@ router.post(
       res.json({
         status: MESSAGES.SUCCESS,
         token: signToken(user._id),
-        data: { user: { id: user._id, email: user.email } },
+        data: { 
+          user: { 
+            id: user._id, 
+            email: user.email,
+            ...(user.name && { name: user.name })
+          } 
+        },
       });
     } catch (err) {
       console.error("Login error:", err);
