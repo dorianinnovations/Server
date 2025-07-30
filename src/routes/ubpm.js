@@ -43,12 +43,18 @@ router.get('/context', protect, async (req, res) => {
       confidence: communicationPatterns.length > 0 ? communicationPatterns[0].confidence : 0.1
     };
 
+    // Get raw emotion count from user data
+    const User = (await import('../models/User.js')).default;
+    const userData = await User.findById(userId).select('emotionalLog');
+    const rawEmotionCount = userData?.emotionalLog?.length || 0;
+
     const emotionalContext = {
       emotionalPatterns: emotionalPatterns.map(p => ({
         pattern: p.pattern,
         description: p.description,
         confidence: p.confidence
-      }))
+      })),
+      rawEmotionCount
     };
 
     const temporalContext = {
