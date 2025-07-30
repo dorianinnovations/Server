@@ -483,14 +483,31 @@ async function populateRealBehavioralData(userId, userMessage, recentMemory, str
 // Real-time emotional data population - now handled by AI-driven analysis
 async function populateEmotionalData(userId, userMessage, recentMemory, recentEmotions) {
   try {
-    // Emotion detection is now handled by AI analysis of conversation patterns
-    // No manual logging needed - emotions are detected from conversation context
-    
+    // Emotion detection from conversation patterns
     const detectedEmotion = detectEmotionAdvanced(userMessage);
     const intensity = calculateEmotionalIntensity(userMessage);
     
-    // Log for debugging but don't store in separate collection
-    console.log(`🧠 AI-detected emotion: ${detectedEmotion.emotion} (intensity: ${intensity}, confidence: ${detectedEmotion.confidence})`);
+    // Only save if confidence is high enough and emotion is meaningful
+    if (detectedEmotion.confidence > 0.6 && intensity > 3) {
+      // Save to user's emotional log for UBPM analysis
+      const User = (await import('../models/User.js')).default;
+      await User.findByIdAndUpdate(userId, {
+        $push: {
+          emotionalLog: {
+            emotion: detectedEmotion.emotion,
+            intensity: intensity,
+            context: userMessage.substring(0, 100), // First 100 chars as context
+            timestamp: new Date(),
+            confidence: detectedEmotion.confidence,
+            source: 'ai_chat_analysis'
+          }
+        }
+      });
+      
+      console.log(`🧠 Emotion saved: ${detectedEmotion.emotion} (intensity: ${intensity}, confidence: ${detectedEmotion.confidence})`);
+    } else {
+      console.log(`🧠 AI-detected emotion: ${detectedEmotion.emotion} (intensity: ${intensity}, confidence: ${detectedEmotion.confidence}) - not saved (low confidence or intensity)`);
+    }
   } catch (error) {
     console.error('Error populating emotional data:', error);
   }
