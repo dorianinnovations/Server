@@ -117,7 +117,7 @@ const REAL_UBPM_TOOL = {
 };
 
 // OPTIMIZED ADAPTIVE CHAT ENDPOINT
-router.post('/adaptive-chat', protect, checkTierLimits, fileUpload.array('files', 5), async (req, res) => {
+router.post('/adaptive-chat', protect, checkTierLimits, fileUpload.any(), async (req, res) => {
   const startTime = Date.now();
   
   try {
@@ -579,7 +579,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
       tool_choice: config.tools.length > 0 ? "auto" : undefined
     });
 
-    streamResponse.data.on('data', (chunk) => {
+    streamResponse.on('data', (chunk) => {
       const lines = chunk.toString().split('\\n').filter(line => line.trim() !== '');
       
       for (const line of lines) {
