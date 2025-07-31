@@ -417,7 +417,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, fileUpload.array('files'
 async function handleOptimizedNonStreaming(res, messages, userMessage, userId, conversationId, startTime, userTier, toolGuidance) {
   // Tier-based optimization with UBPM access
   const tierConfig = {
-    core: { n_predict: 500, temperature: 0.7, tools: [REAL_UBPM_TOOL] },
+    core: { n_predict: 500, temperature: 0.7, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] }, // Temporarily enabled for testing
     pro: { n_predict: 800, temperature: 0.75, tools: [REAL_UBPM_TOOL, ...(toolGuidance.shouldUseTool ? [INSANE_SEARCH_TOOL] : [])] },
     aether: { n_predict: 1200, temperature: 0.8, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] } // Aether gets everything
   };
@@ -567,7 +567,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
 
   try {
     const tierConfig = {
-      core: { n_predict: 500, temperature: 0.7, tools: [] },
+      core: { n_predict: 500, temperature: 0.7, tools: [INSANE_SEARCH_TOOL] }, // Temporarily enabled for testing
       pro: { n_predict: 800, temperature: 0.75, tools: toolGuidance.shouldUseTool ? [INSANE_SEARCH_TOOL] : [] },
       aether: { n_predict: 1200, temperature: 0.8, tools: [INSANE_SEARCH_TOOL] }
     };

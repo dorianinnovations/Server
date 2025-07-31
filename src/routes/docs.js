@@ -1,6 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
-import { AnalyticsService } from "../services/analytics.js";
+// import { AnalyticsService } from "../../archive/unused-services/analytics.js"; // Disabled archived service
 
 const router = express.Router();
 

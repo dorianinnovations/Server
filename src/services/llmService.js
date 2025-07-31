@@ -480,10 +480,10 @@ function extractCognitivePatterns(responseContent, triggerContext) {
   // Split response into analyzable blocks
   const blocks = responseContent.split(/\n\s*\n/).filter(block => block.trim().length > 20);
   
-  for (let i = 0; i < Math.min(blocks.length, 3); i++) {
-    const block = blocks[i].trim();
-    
-    try {
+  try {
+    for (let i = 0; i < Math.min(blocks.length, 3); i++) {
+      const block = blocks[i].trim();
+      
       // Look for structured pattern markers in the response
       const patternMatch = block.match(/\*\*PATTERN:\*\*(.*?)(?=\*\*[A-Z]+:|$)/s);
       const evidenceMatch = block.match(/\*\*EVIDENCE:\*\*(.*?)(?=\*\*[A-Z]+:|$)/s);
@@ -506,7 +506,6 @@ function extractCognitivePatterns(responseContent, triggerContext) {
         });
       }
     }
-    
   } catch (error) {
     console.warn('⚠️ Failed to parse pattern response:', error.message);
     

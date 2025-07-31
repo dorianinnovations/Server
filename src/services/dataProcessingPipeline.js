@@ -2,7 +2,7 @@ import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import personalizationEngine from './personalizationEngine.js';
-import advancedAnalytics from './advancedAnalytics.js';
+// import advancedAnalytics from '../../archive/unused-services/advancedAnalytics.js'; // Disabled archived service
 import connectionEngine from './connectionEngine.js';
 import websocketService from './websocketService.js';
 import logger from '../utils/logger.js';
@@ -290,18 +290,18 @@ class DataProcessingPipeline {
         return;
       }
       
-      const analytics = await advancedAnalytics.generateComprehensiveAnalytics(userId);
+      // const analytics = await advancedAnalytics.generateComprehensiveAnalytics(userId); // Disabled archived service
       
-      if (analytics.success) {
-        // Send updated insights to user if they're online
-        if (websocketService.isUserOnline(userId)) {
-          websocketService.sendToUser(userId, 'analytics_updated', {
-            insights: analytics.analytics.insights,
-            recommendations: analytics.analytics.recommendations,
-            timestamp: new Date()
-          });
-        }
-      }
+      // if (analytics.success) {
+      //   // Send updated insights to user if they're online
+      //   if (websocketService.isUserOnline(userId)) {
+      //     websocketService.sendToUser(userId, 'analytics_updated', {
+      //       insights: analytics.analytics.insights,
+      //       recommendations: analytics.analytics.recommendations,
+      //       timestamp: new Date()
+      //     });
+      //   }
+      // }
 
     } catch (error) {
       logger.error(`Error updating analytics for user ${userId}:`, error);

@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
-import { getBehaviorMetrics } from '../services/behaviorMetricsService.js';
+// import { getBehaviorMetrics } from '../../archive/unused-services/behaviorMetricsService.js'; // Disabled archived service
 import logger from '../utils/logger.js';
 
 const router = express.Router();

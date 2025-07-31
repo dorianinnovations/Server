@@ -1,5 +1,5 @@
 import logger from '../utils/logger.js';
-import { AnalyticsService } from '../services/analytics.js';
+// import { AnalyticsService } from '../../archive/unused-services/analytics.js'; // Disabled archived service
 
 // Performance middleware initializing
 
@@ -90,19 +90,20 @@ export const performanceMiddleware = (req, res, next) => {
     
     // Track analytics for slow operations (only when necessary)
     if (shouldTrackAnalytics) {
-      AnalyticsService.trackEvent(
-        'performance_metric',
-        'performance',
-        {
-          operation: 'request_processing',
-          duration: Math.round(total),
-          path: req.path,
-          operations: operationsObj,
-          memoryUsage: finalMemory,
-          requestSize: metrics.requestSize,
-          responseSize: logData.responseSize
-        }
-      );
+      // AnalyticsService disabled - archived service
+      // AnalyticsService.trackEvent(
+      //   'performance_metric',
+      //   'performance',
+      //   {
+      //     operation: 'request_processing',
+      //     duration: Math.round(total),
+      //     path: req.path,
+      //     operations: operationsObj,
+      //     memoryUsage: finalMemory,
+      //     requestSize: metrics.requestSize,
+      //     responseSize: logData.responseSize
+      //   }
+      // );
     }
   });
   

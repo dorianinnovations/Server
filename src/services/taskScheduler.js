@@ -2,7 +2,7 @@ import cron from "node-cron";
 import Task from "../models/Task.js";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
-import { AnalyticsService } from "./analytics.js";
+// import { AnalyticsService } from "../../archive/unused-services/analytics.js"; // Disabled archived service
 import { createLLMService } from "./llmService.js";
 
 // Initializing task scheduler
