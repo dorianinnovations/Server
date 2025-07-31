@@ -20,6 +20,17 @@ build/
 dist/
 *.tsbuildinfo
 
+# Cache directories
+cache/
+
+# Debug and test files
+*debug*.js
+*test*.js
+!tests/
+comprehensive_test.js
+quick_penetration_test.js
+debug_autonomous.js
+
 # PM2 process files
 pids/
 pidfiles/
