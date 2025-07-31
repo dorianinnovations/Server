@@ -131,7 +131,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
     const { 
       message, 
       prompt, 
-      stream = false, 
+      stream = true, // Default to streaming for better UX
       conversationId = 'default',
       attachments = [] 
     } = req.body;
@@ -563,8 +563,9 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
 }
 
 async function handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance) {
+  // Mobile-friendly streaming: JSON chunks instead of SSE
   res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
+    'Content-Type': 'application/json',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
     'Access-Control-Allow-Origin': '*',
@@ -603,19 +604,22 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
             
             if (choice?.delta?.content) {
               accumulatedContent += choice.delta.content;
-              res.write(`data: ${JSON.stringify({ 
+              // Mobile-friendly JSON streaming
+              res.write(JSON.stringify({ 
+                type: 'chunk',
                 content: choice.delta.content,
                 tier: userTier,
                 cognitiveEngineActive: true
-              })}\n\n`);
+              }) + '\n');
             }
 
             // Enhanced tool call handling for streaming
             if (choice?.delta?.tool_calls) {
-              res.write(`data: ${JSON.stringify({ 
+              res.write(JSON.stringify({ 
+                type: 'chunk',
                 content: userTier === 'aether' ? "\n🔍 Performing advanced search..." : "\n🔍 Searching...",
                 tier: userTier
-              })}\n\n`);
+              }) + '\n');
             }
 
           } catch (error) {
@@ -642,20 +646,19 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
         console.error('⚠️ Streaming save error:', saveError.message);
       }
       
-      res.write('data: [DONE]\n\n');
+      res.write(JSON.stringify({ type: 'done' }) + '\n');
       res.end();
     });
 
     streamResponse.on('error', (err) => {
       console.error('❌ Streaming error:', err);
-      res.write('data: [DONE]\n\n');
+      res.write(JSON.stringify({ type: 'error', error: err.message }) + '\n');
       res.end();
     });
 
   } catch (error) {
     console.error('❌ Streaming setup error:', error);
-    res.write(`data: ${JSON.stringify({ error: 'Streaming failed' })}\n\n`);
-    res.write('data: [DONE]\n\n');  
+    res.write(JSON.stringify({ type: 'error', error: 'Streaming failed' }) + '\n');
     res.end();
   }
 }
