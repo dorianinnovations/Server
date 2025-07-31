@@ -109,11 +109,8 @@ export const requestLogger = (req, res, next) => {
   
   // Only log non-health check requests to reduce noise
   if (!req.url.includes('/health')) {
-    log.api("Request received", {
-      method: req.method,
-      url: req.url,
+    log.api(`${req.method} ${req.url}`, {
       ip: req.ip,
-      userAgent: req.get("User-Agent"),
       userId: req.user?.id
     });
   }

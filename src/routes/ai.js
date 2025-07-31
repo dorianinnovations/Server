@@ -19,7 +19,7 @@ import ShortTermMemory from '../models/ShortTermMemory.js';
 import ubpmCognitiveEngine from '../services/ubpmCognitiveEngine.js';
 import numinaContextBuilder from '../services/numinaContextBuilder.js';
 import insaneWebSearch from '../tools/insaneWebSearch.js';
-import realUBPMAnalysis from '../tools/realUBPMAnalysis.js';
+import ubpmAnalysis from '../tools/ubpmAnalysis.js';
 
 // NOVEL FEATURES: Lightweight optimizations
 import { isSimpleMessage, hasComplexContext, lightweightChat } from '../services/optimizedChat.js';
@@ -238,9 +238,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
     // Trigger cognitive engine analysis in background (non-blocking)
     ubpmCognitiveEngine.analyzeCognitivePatterns(userId, [{ content: userMessage }])
       .then(result => {
-        if (result) {
-          console.log(`🧠 Cognitive Engine: ${result.confidence > 0.7 ? 'High' : 'Medium'} confidence, ${result.processingTime}ms`);
-        }
+        // Cognitive processing completed silently
       })
       .catch(error => console.warn('Cognitive engine error:', error.message));
 
@@ -361,8 +359,13 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       console.log('🔍 VISION DEBUG: Content is array:', Array.isArray(userMessageContent));
     }
 
-    // FORCE STREAMING: All responses use streaming for real-time UX
-    console.log(`🔥 FORCING STREAMING: stream=${stream}, userTier=${userTier}`);
+    // Simple search detection and execution - route to AI with search context
+    if (/search|find|price|news|what's|latest/i.test(userMessage)) {
+      return await handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier);
+    }
+    
+    // Default: Use streaming for better UX
+    console.log(`🔥 USING STREAMING: stream=${stream}, userTier=${userTier}`);
     return await handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance);
 
   } catch (error) {
@@ -454,7 +457,7 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
       } else if (toolCall.function.name === 'real_ubpm_analysis') {
         try {
           const args = JSON.parse(toolCall.function.arguments);
-          const ubpmResult = await realUBPMAnalysis(args, { userId });
+          const ubpmResult = await ubpmAnalysis(args, { userId });
           
           toolResults.push({
             tool: 'real_ubpm_analysis',
@@ -535,16 +538,17 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
 
   try {
     const tierConfig = {
-      core: { n_predict: 500, temperature: 0.7, tools: [INSANE_SEARCH_TOOL] }, // Temporarily enabled for testing
-      pro: { n_predict: 800, temperature: 0.75, tools: toolGuidance.shouldUseTool ? [INSANE_SEARCH_TOOL] : [] },
-      aether: { n_predict: 1200, temperature: 0.8, tools: [INSANE_SEARCH_TOOL] }
+      core: { n_predict: 500, temperature: 0.7, tools: [] }, // Disabled in streaming
+      pro: { n_predict: 800, temperature: 0.75, tools: [] }, // Disabled in streaming  
+      aether: { n_predict: 1200, temperature: 0.8, tools: [] } // Disabled in streaming
     };
 
     const config = tierConfig[userTier] || tierConfig.core;
 
     const streamResponse = await llmService.makeStreamingRequest(messages, {
       ...config,
-      tool_choice: config.tools.length > 0 ? "auto" : undefined
+      tools: [], // Force disable all tools in streaming
+      tool_choice: undefined
     });
 
     streamResponse.on('data', (chunk) => {
@@ -571,13 +575,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
               })}\n\n`);
             }
 
-            // Enhanced tool call handling for streaming
-            if (choice?.delta?.tool_calls) {
-              res.write(`data: ${JSON.stringify({ 
-                content: userTier === 'aether' ? "\n🔍 Performing advanced search..." : "\n🔍 Searching...",
-                tier: userTier
-              })}\n\n`);
-            }
+            // Tool calls disabled in streaming mode
 
           } catch (error) {
             console.error('Stream parse error:', error.message);
@@ -589,13 +587,16 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
     streamResponse.on('end', async () => {
       // Save conversation after streaming completes
       try {
+        // Ensure content is not empty to avoid MongoDB validation errors
+        const finalContent = accumulatedContent.trim() || 'Response incomplete due to technical issues.';
+        
         await Promise.all([
-          enhancedMemoryService.saveConversation(userId, userMessage, accumulatedContent),
+          enhancedMemoryService.saveConversation(userId, userMessage, finalContent),
           conversationService.addMessage(userId, conversationId, 'user', userMessage),
-          conversationService.addMessage(userId, conversationId, 'assistant', accumulatedContent),
+          conversationService.addMessage(userId, conversationId, 'assistant', finalContent),
           ShortTermMemory.insertMany([
             { userId, content: userMessage, role: "user", timestamp: new Date() },
-            { userId, content: accumulatedContent, role: "assistant", timestamp: new Date() }
+            { userId, content: finalContent, role: "assistant", timestamp: new Date() }
           ])
         ]);
         console.log('💾 OPTIMIZED streaming conversation saved');
@@ -616,6 +617,117 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
   } catch (error) {
     console.error('❌ Streaming setup error:', error);
     res.write(`data: ${JSON.stringify({ error: 'Streaming failed' })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
+}
+
+async function handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  try {
+    const query = userMessage.replace(/search for|find|price of|what's|latest/i, '').trim();
+    
+    // Skip fetching message - go straight to results
+
+    // Get search results
+    const searchResult = await insaneWebSearch({ query }, { userId, userTier });
+    
+    if (searchResult.success && searchResult.structure?.results) {
+      // Create context with search results for AI
+      const searchContext = searchResult.structure.results.map(r => 
+        `${r.title}: ${r.snippet} (${r.link})`
+      ).join('\n\n');
+      
+      const enhancedMessages = [
+        ...messages,
+        { 
+          role: 'system', 
+          content: `SEARCH RESULTS for "${query}":\n\n${searchContext}\n\nUse these search results to provide a comprehensive, informative answer to the user's question. Summarize key information, include relevant details, and reference sources when helpful. Do not include links or URLs in your response - they will be provided separately.`
+        }
+      ];
+      
+      // Stream AI response with search context
+      const streamResponse = await llmService.makeStreamingRequest(enhancedMessages, {
+        n_predict: userTier === 'aether' ? 1200 : 800,
+        temperature: 0.7,
+        tools: []
+      });
+
+      let accumulatedContent = '';
+      
+      streamResponse.on('data', (chunk) => {
+        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = line.slice(6);
+              if (data === '[DONE]') return;
+              
+              const parsed = JSON.parse(data);
+              const choice = parsed.choices?.[0];
+              
+              if (choice?.delta?.content) {
+                const content = choice.delta.content;
+                accumulatedContent += content;
+                
+                res.write(`data: ${JSON.stringify({ 
+                  content: content,
+                  tier: userTier,
+                  metadata: { 
+                    searchResults: true, 
+                    query: query,
+                    sources: searchResult.structure.results.slice(0, 3).map(r => ({
+                      title: r.title,
+                      url: r.link,
+                      domain: new URL(r.link).hostname.replace('www.', '')
+                    }))
+                  }
+                })}\n\n`);
+              }
+            } catch (error) {
+              console.error('Stream parse error:', error.message);
+            }
+          }
+        }
+      });
+
+      streamResponse.on('end', () => {
+        res.write('data: [DONE]\n\n');
+        res.end();
+      });
+
+      streamResponse.on('error', (error) => {
+        console.error('Search streaming error:', error);
+        res.write(`data: ${JSON.stringify({ 
+          content: "\n\nError processing your search request.",
+          tier: userTier
+        })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      });
+      
+    } else {
+      res.write(`data: ${JSON.stringify({ 
+        content: "\n\nSorry, I couldn't find search results for that query.",
+        tier: userTier
+      })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
+
+  } catch (error) {
+    console.error('Search error:', error);
+    res.write(`data: ${JSON.stringify({ 
+      content: "\n\nSearch encountered an error. Please try again.",
+      tier: userTier
+    })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   }

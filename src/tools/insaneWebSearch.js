@@ -15,24 +15,102 @@ const CACHE_TTL = 60 * 1000; // 1 minute
 const MAX_CACHE_SIZE = 10;
 
 export default async function insaneWebSearch(args, userContext) {
-  console.log(`🚀 INSANE WEB SEARCH ACTIVATED:`, JSON.stringify(args, null, 2));
-  
-  const { 
-    query,
-    depth = 'deep', // 'quick', 'deep', 'insane'
-    format = 'structured', // 'structured', 'narrative', 'bullet'
-    maxResults = 8,
-    includeImages = false,
-    realTime = false
-  } = args;
+  const { query } = args;
   
   if (!query) {
-    return {
-      success: false,
-      error: 'Search query is required',
-      structure: { query: null, results: [], analysis: null }
-    };
+    return { success: false, structure: { results: [] } };
   }
+
+  console.log(`🔍 Searching for: "${query}"`);
+  
+  // Try SerpAPI first if available
+  if (process.env.SERPAPI_API_KEY) {
+    try {
+      console.log('📡 Using SerpAPI...');
+      const response = await axios.get('https://serpapi.com/search', {
+        params: {
+          api_key: process.env.SERPAPI_API_KEY,
+          engine: 'google',
+          q: query,
+          num: 5
+        },
+        timeout: 5000
+      });
+
+      console.log(`✅ SerpAPI returned ${response.data.organic_results?.length || 0} results`);
+      
+      if (response.data.organic_results) {
+        return {
+          success: true,
+          structure: {
+            query,
+            results: response.data.organic_results.map((item, i) => ({
+              title: item.title,
+              snippet: item.snippet,
+              link: item.link,
+              position: i + 1
+            })),
+            analysis: `SerpAPI found ${response.data.organic_results.length} results for: ${query}`
+          }
+        };
+      }
+    } catch (error) {
+      console.error('❌ SerpAPI failed:', error.message);
+    }
+  }
+
+  // Try Google Custom Search as fallback
+  if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_ENGINE_ID) {
+    try {
+      console.log('📡 Fallback to Google Custom Search...');
+      const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+        params: {
+          key: process.env.GOOGLE_SEARCH_API_KEY,
+          cx: process.env.GOOGLE_SEARCH_ENGINE_ID,
+          q: query,
+          num: 5
+        },
+        timeout: 5000
+      });
+
+      console.log(`✅ Google Custom Search returned ${response.data.items?.length || 0} results`);
+
+      if (response.data.items) {
+        return {
+          success: true,
+          structure: {
+            query,
+            results: response.data.items.map((item, i) => ({
+              title: item.title,
+              snippet: item.snippet,
+              link: item.link,
+              position: i + 1
+            })),
+            analysis: `Google found ${response.data.items.length} results for: ${query}`
+          }
+        };
+      }
+    } catch (error) {
+      console.error('❌ Google Custom Search failed:', error.message);
+    }
+  }
+
+  // Fallback results
+  return {
+    success: true,
+    structure: {
+      query,
+      results: [
+        {
+          title: `Search Results for: ${query}`,
+          snippet: "Web search is currently unavailable. Please try again later or check your internet connection.",
+          link: "https://google.com/search?q=" + encodeURIComponent(query),
+          position: 1
+        }
+      ],
+      analysis: `Search functionality temporarily limited for: ${query}`
+    }
+  };
 
   try {
     const searchStart = Date.now();
@@ -118,6 +196,22 @@ async function performAdvancedSearch(query, maxResults, realTime) {
   
   console.log(`🔍 Starting search with SerpAPI for: "${query}"`);
   
+  // Check if any search API keys are available
+  console.log(`🔑 API Keys Check: SERPAPI=${!!process.env.SERPAPI_API_KEY}, GOOGLE=${!!process.env.GOOGLE_SEARCH_API_KEY}`);
+  
+  if (!process.env.SERPAPI_API_KEY && !process.env.GOOGLE_SEARCH_API_KEY) {
+    console.warn('⚠️ No search API keys configured - returning mock results');
+    return [{
+      title: "Search API Not Configured",
+      link: "https://numina.ai/setup", 
+      snippet: "Web search functionality requires API keys to be configured. Please contact your administrator to enable web search capabilities.",
+      position: 1,
+      source: 'system-message',
+      date: new Date().toISOString()
+    }];
+  }
+  
+  
   // Primary: Use SerpAPI (most reliable)
   if (process.env.SERPAPI_API_KEY) {
     try {
@@ -136,11 +230,11 @@ async function performAdvancedSearch(query, maxResults, realTime) {
         searchParams.tbs = 'qdr:w'; // Past week
       }
 
-      console.log(`📡 SerpAPI search initiated for query: "${query}"`);
+      console.log(`📡 SerpAPI request params:`, searchParams);
 
       const response = await axios.get('https://serpapi.com/search', {
         params: searchParams,
-        timeout: 8000  // Reduced from 15s to 8s
+        timeout: 5000  // Fast timeout for better UX
       });
 
       console.log(`📊 SerpAPI response status: ${response.status}`);
@@ -218,7 +312,15 @@ async function performAdvancedSearch(query, maxResults, realTime) {
   }
 
   if (results.length === 0) {
-    console.warn('⚠️ All search APIs failed, no results available');
+    console.warn('⚠️ All search APIs failed, returning fallback message');
+    return [{
+      title: "Web Search Currently Unavailable",
+      link: "https://numina.ai",
+      snippet: "Web search functionality is temporarily unavailable. This could be due to API limits or network issues. Please try again in a few minutes.",
+      position: 1,
+      source: 'system-fallback',
+      date: new Date().toISOString()
+    }];
   }
 
   const finalResults = results.slice(0, maxResults);

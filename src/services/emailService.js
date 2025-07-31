@@ -153,7 +153,7 @@ class EmailService {
           this.emailStats.sent++;
           this.emailStats.dailyCount++;
           this.emailStats.serviceUsage.gmail++;
-          console.log(`✅ Email sent via Gmail (${this.emailStats.serviceUsage.gmail}/450 today)`);
+          // Email sent via Gmail
           return { ...result, service: 'gmail', attempt: 1 };
         } catch (error) {
           attempts.push({ service: 'gmail', error: error.message });

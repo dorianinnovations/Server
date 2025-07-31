@@ -52,10 +52,8 @@ router.post(
       const emailPromise = emailService.sendWelcomeEmail(user.email, user.name || user.email.split('@')[0])
         .then(result => {
           if (result.success) {
-            console.log('✅ Welcome email sent via', result.service, 'to:', user.email);
-            if (result.messageId) {
-              console.log('📧 Email ID:', result.messageId);
-            }
+            // Welcome email sent
+            // Email sent with ID
             if (result.previewUrl) {
               console.log('📧 Email preview:', result.previewUrl);
             }
@@ -77,7 +75,7 @@ router.post(
         emailMessageId = emailResult.messageId;
         
         if (emailResult.success) {
-          console.log('✅ Welcome email sent via', emailResult.service, 'to:', user.email);
+          // Welcome email sent
         } else {
           console.warn('⚠️ Welcome email failed:', emailResult.error);
         }

@@ -30,6 +30,12 @@ class ConversationService {
    */
   async addMessage(userId, conversationId, role, content, attachments = [], metadata = {}) {
     try {
+      // Validate content before processing
+      if (!content || content.trim() === '') {
+        console.warn(`Empty content for ${role} message, skipping save`);
+        return null;
+      }
+
       let conversation;
       
       if (conversationId) {
@@ -48,7 +54,7 @@ class ConversationService {
       }
       
       // Add to persistent conversation
-      conversation.addMessage(role, content, attachments, metadata);
+      conversation.addMessage(role, content.trim(), attachments, metadata);
       await conversation.save();
       
       // Also add to short-term memory for immediate context
@@ -56,7 +62,7 @@ class ConversationService {
         userId,
         conversationId: conversation._id.toString(),
         role,
-        content,
+        content: content.trim(),
         attachments,
         metadata: {
           ...metadata,

@@ -19,6 +19,8 @@ class UBPMCognitiveEngine {
   constructor() {
     this.analysisQueue = new Map();
     this.metricCollectors = this.initializeMetricCollectors();
+    this.cognitiveCount = 0;
+    this.lastLogTime = Date.now();
     
     // Start background cognitive processing
     this.startBackgroundEngine();
@@ -100,7 +102,15 @@ class UBPMCognitiveEngine {
 
       await redisService.set(`cognitive-engine:${userId}`, cognitiveEngineResult, 300);
       
-      console.log(`🧠 Cognitive Engine: ${userId.toString().slice(-8)} processed in ${Date.now() - startTime}ms`);
+      // Aggregate cognitive logging
+      this.cognitiveCount++;
+      const now = Date.now();
+      if (now - this.lastLogTime > 10000) { // Log every 10 seconds
+        console.log(`Cognitive: ${this.cognitiveCount} processed`);
+        this.cognitiveCount = 0;
+        this.lastLogTime = now;
+      }
+      
       return cognitiveEngineResult;
 
     } catch (error) {

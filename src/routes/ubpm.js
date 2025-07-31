@@ -231,4 +231,60 @@ function extractKeyInsights(pattern) {
   return insights.slice(0, 3); // Top 3 insights
 }
 
+/**
+ * UBPM Cognitive Analysis endpoint
+ */
+router.post('/cognitive-analysis', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { action = 'analyze' } = req.body;
+    
+    // Get user behavior profile
+    const behaviorProfile = await UserBehaviorProfile.findOne({ userId });
+    
+    if (!behaviorProfile) {
+      return res.json({
+        success: true,
+        analysis: 'Building cognitive profile... Continue conversations to unlock detailed analysis.',
+        confidence: 0.1,
+        patterns: [],
+        recommendations: ['Engage in more conversations', 'Ask varied questions', 'Share preferences']
+      });
+    }
+    
+    // Extract cognitive patterns
+    const cognitivePatterns = behaviorProfile.behaviorPatterns.filter(p => 
+      ['cognitive', 'decision_making', 'communication'].includes(p.type)
+    );
+    
+    const analysis = {
+      cognitiveStyle: cognitivePatterns.length > 0 ? cognitivePatterns[0].pattern : 'developing',
+      confidence: cognitivePatterns.length > 0 ? cognitivePatterns[0].confidence : 0.2,
+      patterns: cognitivePatterns.map(p => ({
+        type: p.type,
+        pattern: p.pattern,
+        confidence: p.confidence
+      })),
+      insights: [
+        `Processing style: ${cognitivePatterns.length > 0 ? cognitivePatterns[0].pattern : 'analytical'}`,
+        `Confidence level: ${Math.round((cognitivePatterns[0]?.confidence || 0.2) * 100)}%`,
+        `Data points: ${cognitivePatterns.length}`
+      ]
+    };
+    
+    res.json({
+      success: true,
+      analysis: `## 🧠 Cognitive Analysis\n\n**Style**: ${analysis.cognitiveStyle}\n**Confidence**: ${Math.round(analysis.confidence * 100)}%\n**Patterns Detected**: ${analysis.patterns.length}`,
+      ...analysis
+    });
+    
+  } catch (error) {
+    console.error('UBPM cognitive analysis error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Cognitive analysis failed'
+    });
+  }
+});
+
 export default router;

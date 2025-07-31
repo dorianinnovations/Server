@@ -484,11 +484,21 @@ class EnhancedMemoryService {
    */
   async saveConversation(userId, userMessage, assistantResponse, metadata = {}) {
     try {
+      // Validate content before saving
+      if (!userMessage || userMessage.trim() === '') {
+        console.warn('Empty user message, skipping save');
+        return;
+      }
+      if (!assistantResponse || assistantResponse.trim() === '') {
+        console.warn('Empty assistant response, skipping save');
+        return;
+      }
+
       // Save to short-term memory with explicit timestamps
       const now = new Date();
       await ShortTermMemory.insertMany([
-        { userId, content: userMessage, role: "user", timestamp: now },
-        { userId, content: assistantResponse, role: "assistant", timestamp: new Date(now.getTime() + 1) }
+        { userId, content: userMessage.trim(), role: "user", timestamp: now },
+        { userId, content: assistantResponse.trim(), role: "assistant", timestamp: new Date(now.getTime() + 1) }
       ]);
 
       // Analyze and update constants

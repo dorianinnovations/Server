@@ -2,11 +2,7 @@ import express from "express";
 import { protect } from "../middleware/auth.js";
 import User from "../models/User.js";
 import ShortTermMemory from "../models/ShortTermMemory.js";
-import Task from "../models/Task.js";
 import UserBehaviorProfile from "../models/UserBehaviorProfile.js";
-import SandboxSession from "../models/SandboxSession.js";
-import LockedNode from "../models/LockedNode.js";
-import AnalyticsInsight from "../models/AnalyticsInsight.js";
 import Event from "../models/Event.js";
 import { HTTP_STATUS, MESSAGES } from "../config/constants.js";
 import logger from "../utils/logger.js";
@@ -403,8 +399,6 @@ router.delete("/delete/:userId?", protect, async (req, res) => {
       // Delete user's memories
       ShortTermMemory.deleteMany({ userId: targetUserId }),
       
-      // Delete user's tasks
-      Task.deleteMany({ userId: targetUserId }),
       
       // Delete user's behavioral profile
       UserBehaviorProfile.deleteMany({ userId: targetUserId }),
@@ -479,10 +473,6 @@ router.get("/mongo-data", protect, async (req, res) => {
       User.findById(userId).select("-password -__v"),
       UserBehaviorProfile.findOne({ userId }),
       ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(15).lean(),
-      Task.find({ userId }).sort({ createdAt: -1 }).limit(25).lean(),
-      SandboxSession.find({ userId, isActive: true }).sort({ lastAccessed: -1 }).limit(10).lean(),
-      LockedNode.find({ userId, isActive: true }).sort({ 'usageStats.lastUsed': -1 }).limit(15).lean(),
-      AnalyticsInsight.find({ userId }).sort({ createdAt: -1 }).limit(10).lean(),
       Event.find({ userId }).sort({ timestamp: -1 }).limit(20).lean()
     ]);
 

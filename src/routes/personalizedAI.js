@@ -19,7 +19,7 @@ const llmService = createLLMService();
  */
 router.post('/contextual-chat', protect, async (req, res) => {
   try {
-    const { message, stream = false } = req.body;
+    const { message, stream = true } = req.body;
     const userId = req.user.id;
     const userCache = createUserCache(userId);
     
@@ -373,7 +373,7 @@ async function handleStreamingResponse(res, messages, userId, userMessage, behav
     let fullContent = '';
     let chunkBuffer = ''; // Buffer for natural streaming pace
     
-    streamResponse.data.on('data', (chunk) => {
+    streamResponse.on('data', (chunk) => {
       buffer += chunk.toString();
       const lines = buffer.split('\\n');
       buffer = lines.pop() || '';
@@ -415,13 +415,20 @@ async function handleStreamingResponse(res, messages, userId, userMessage, behav
       }
     });
     
-    streamResponse.data.on("end", () => {
+    streamResponse.on("end", () => {
       // Save conversation to memory
       if (fullContent.trim()) {
         ShortTermMemory.insertMany([
           { userId, content: userMessage, role: "user" },
           { userId, content: fullContent.trim(), role: "assistant" }
         ]).catch(err => logger.error('Error saving conversation:', err));
+      }
+    });
+
+    streamResponse.on('error', (error) => {
+      logger.error('Stream error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Stream error' });
       }
     });
 

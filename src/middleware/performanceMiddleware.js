@@ -66,9 +66,9 @@ export const performanceMiddleware = (req, res, next) => {
     const shouldTrackAnalytics = total > 1000;
     
     if (shouldLogSlow) {
-      logger.warn(`🐌 SLOW REQUEST: ${req.method} ${req.path} - ${Math.round(total)}ms`, logData);
+      logger.warn(`Slow request: ${req.method} ${req.path} - ${Math.round(total)}ms`);
     } else if (shouldLogModerate) {
-      logger.info(`⚠️ MODERATE REQUEST: ${req.method} ${req.path} - ${Math.round(total)}ms`, logData);
+      logger.info(`Request: ${req.method} ${req.path} - ${Math.round(total)}ms`);
     }
     
     // Track specific operation performance with Map.get()

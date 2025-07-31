@@ -1,7 +1,7 @@
 import express from 'express';
 import { protect } from '../middleware/auth.js';
 import User from '../models/User.js';
-import CreditPool from '../models/CreditPool.js';
+// CreditPool model removed - using subscription system instead
 import emailService from '../services/emailService.js';
 
 const router = express.Router();
@@ -87,6 +87,8 @@ router.post('/numina-trace/subscribe', protect, async (req, res) => {
     await user.save();
     
     // Create or activate credit pool for new subscriber
+    // CreditPool functionality replaced by subscription system
+    /*
     let creditPool = await CreditPool.findOne({ userId: user._id });
     if (!creditPool) {
       creditPool = new CreditPool({
@@ -101,6 +103,7 @@ router.post('/numina-trace/subscribe', protect, async (req, res) => {
       creditPool.isVerified = true;
       await creditPool.save();
     }
+    */
 
     // Send payment confirmation email (non-blocking)
     const subscriptionDetails = {

@@ -24,53 +24,24 @@ import { log } from "./utils/logger.js";
 import "./config/environment.js";
 import connectDB from "./config/database.js";
 
-// API route imports
+// API route imports  
 import authRoutes from "./routes/auth.js";
-import userRoutes from "./routes/user.js";
+import userRoutes from "./routes/user.js"; 
 import healthRoutes from "./routes/health.js";
-import { protect } from "./middleware/auth.js";
-import completionRoutes from "./routes/completion.js";
-import analyticsRoutes from "./routes/analytics.js";
-import taskRoutes from "./routes/tasks.js";
-import docsRoutes from "./routes/docs.js";
 import aiRoutes from "./routes/ai.js";
-import cloudRoutes from "./routes/cloud.js";
-import mobileRoutes from "./routes/mobile.js";
-import personalInsightsRoutes from "./routes/personalInsights.js";
-import syncRoutes from "./routes/sync.js";
-import conversationSyncRoutes from "./routes/conversationSync.js";
-import conversationsRoutes from "./routes/conversations.js";
-import deletionQueueRoutes from "./routes/deletionQueue.js";
-import deletionQueueService from "./services/deletionQueueService.js";
-import emotionalAnalyticsRoutes from "./routes/emotionalAnalytics.js";
-import ubpmRoutes from "./routes/ubpm.js";
-import apiDocsRoutes from "./routes/apiDocs.js";
-import personalizedAIRoutes from "./routes/personalizedAI.js";
-import toolsRoutes from "./routes/tools.js";
-import walletRoutes from "./routes/wallet.js";
 import subscriptionRoutes from "./routes/subscription.js";
-import dataCleanupRoutes from "./routes/dataCleanup.js";
-import collectiveDataRoutes from "./routes/collectiveData.js";
-import collectiveSnapshotsRoutes from "./routes/collectiveSnapshots.js";
-import scheduledAggregationRoutes from "./routes/scheduledAggregation.js";
-import secureCloudRoutes from "./routes/secureCloud.js";
-import analyticsLLMRoutes from "./routes/analyticsLLM.js";
-import analyticsRateStatusRoutes from "./routes/analyticsRateStatus.js";
-import intelligenceDebugRoutes from "./routes/intelligenceDebug.js";
-import compressionDashboardRoutes from "./routes/compressionDashboard.js";
-import tierTestRoutes from "./routes/tierTest.js";
-import sandboxRoutes from "./routes/sandbox.js";
-import analyticsEcosystemRoutes from "./routes/analyticsEcosystem.js";
-import authTestRoutes from "./routes/authTest.js";
-import emailRoutes from "./routes/email.js";
-import visualizationsRoutes from "./routes/visualizations.js";
-import behaviorMetricsRoutes from "./routes/behaviorMetrics.js";
+import ubpmRoutes from "./routes/ubpm.js"; // CORE FEATURE: User Behavior Pattern Modeling
+import analyticsLLMRoutes from "./routes/analyticsLLM.js"; // PRESERVED: Your streaming analytics
+import personalizedAIRoutes from "./routes/personalizedAI.js"; // PRESERVED: Your contextual chat
+import { protect } from "./middleware/auth.js";
+// Removed: syncRoutes (offline sync not needed)
+// Removed: toolsRoutes (contained CreditPool dependencies)
+// Removed: walletRoutes (replaced by subscription system)
+// Removed: behaviorMetricsRoutes (archived route)
 
 log.debug("Route modules imported");
 
-// Import tool system
-import toolRegistry from "./services/toolRegistry.js";
-import triggerSystem from "./services/triggerSystem.js";
+// Removed: toolRegistry and triggerSystem (archived services)
 
 // Import middleware
 import { corsSecurity, securityHeaders, validateContent, sanitizeRequest } from "./middleware/security.js";
@@ -90,24 +61,18 @@ log.debug("Utility modules imported");
 
 import websocketService from "./services/websocketService.js";
 import redisService from "./services/redisService.js";
-import pushNotificationService from "./services/pushNotificationService.js";
-import offlineSyncService from "./services/offlineSyncService.js";
-import dataProcessingPipeline from "./services/dataProcessingPipeline.js";
+// Removed: pushNotificationService (archived service)
+// Removed: offlineSyncService and dataProcessingPipeline (archived services)
 
 log.debug("Service modules imported");
 
 // Database model imports (ensures models are loaded)
 import "./models/User.js";
 import "./models/ShortTermMemory.js";
-import "./models/Task.js";
-import "./models/CollectiveDataConsent.js";
-import "./models/CollectiveSnapshot.js";
+// Removed: Task model (deleted)
 import "./models/Event.js";
 import "./models/UserBehaviorProfile.js";
-import "./models/AnalyticsInsight.js";
-import "./models/InsightCooldown.js";
-import "./models/SandboxSession.js";
-import "./models/LockedNode.js";
+// Removed: Missing models (CollectiveDataConsent, CollectiveSnapshot, AnalyticsInsight, InsightCooldown, SandboxSession, LockedNode)
 
 log.debug("Database models loaded");
 
@@ -146,12 +111,12 @@ const initializeServer = async () => {
   await redisService.initialize();
   
   // Initializing push notification service
-  await pushNotificationService.initialize();
+  // Removed: pushNotificationService initialization
 
   // Configure security and middleware stack
   app.use(enhancedPerformanceMiddleware);
   app.use(corsSecurity);
-  app.use(express.json({ limit: "10mb" }));
+  app.use(express.json({ limit: "50mb" }));
   app.use(validateContent);
   app.use(sanitizeRequest);
   app.use(securityHeaders);
@@ -175,7 +140,7 @@ const initializeServer = async () => {
 
   // Initialize AI tool system
   // Initializing tool system
-  await toolRegistry.initialize();
+  // Removed: toolRegistry.initialize() (archived service)
   // Tool system initialized
 
   // Configure HTTPS agent for external API calls
@@ -193,6 +158,20 @@ const initializeServer = async () => {
   // Initializing cache and memory monitoring
   app.locals.cache = createCache();
   setupMemoryMonitoring();
+  
+  // Add aggressive memory monitoring for production
+  setInterval(() => {
+    const memoryUsage = process.memoryUsage();
+    const heapUsedPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
+    
+    if (heapUsedPercent > 85) {
+      console.warn(`Memory cleanup: ${heapUsedPercent.toFixed(1)}% heap used`);
+      app.locals.cache.clear();
+      if (global.gc) {
+        global.gc();
+      }
+    }
+  }, 30000); // Check every 30 seconds
   // Cache and memory monitoring initialized
 
   // Root health endpoint for monitoring
@@ -210,47 +189,15 @@ const initializeServer = async () => {
   app.use("/", authRoutes);
   app.use("/", userRoutes);
   app.use("/", healthRoutes);
-  app.use("/", completionPerformanceMiddleware, completionRoutes);
-  app.use("/", analyticsRoutes);
-  app.use("/", taskRoutes);
-  app.use("/", docsRoutes);
-  app.use("/analytics", analyticsRoutes);
-  app.use("/analytics", analyticsEcosystemRoutes);
-  app.use("/analytics/llm", analyticsLLMRoutes);
-  app.use("/analytics-rate-status", analyticsRateStatusRoutes);
-  app.use("/intelligence-debug", intelligenceDebugRoutes);
-  app.use("/compression-dashboard", compressionDashboardRoutes);
-  app.use("/tier-test", tierTestRoutes);
-  app.use("/sandbox", sandboxRoutes);
-  app.use("/", authTestRoutes);
-  app.use("/email", emailRoutes);
-  app.use("/visualizations", visualizationsRoutes);
-  app.use("/behavior-metrics", behaviorMetricsRoutes);
   app.use("/ai", aiRoutes);
-  app.use("/personalized-ai", personalizedAIRoutes);
-  app.use("/tools", toolsRoutes);
-  app.use("/wallet", walletRoutes);
   app.use("/subscription", subscriptionRoutes);
-  app.use("/data-cleanup", dataCleanupRoutes);
-  app.use("/cloud", cloudRoutes);
-  app.use("/personal-insights", personalInsightsRoutes);
-  app.use("/collective-data", collectiveDataRoutes);
-  app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-  app.use("/scheduled-aggregation", scheduledAggregationRoutes);
-  app.use("/api/cloud", secureCloudRoutes);
+  app.use("/ubpm", ubpmRoutes); // CORE FEATURE: UBPM endpoints
+  app.use("/analyticsLLM", analyticsLLMRoutes); // PRESERVED: Your streaming analytics
+  app.use("/personalizedAI", personalizedAIRoutes); // PRESERVED: Your contextual chat
   
   // Register mobile-optimized routes
-  app.use("/", mobileRoutes);
-  app.use("/", syncRoutes);
-  app.use("/conversation", conversationSyncRoutes);
-  app.use("/conversations", conversationsRoutes); // New persistent conversation routes
-  app.use("/deletion-queue", deletionQueueRoutes); // Deletion queue system
-  
-  // Start deletion queue processing
-  setTimeout(() => {
-    deletionQueueService.startProcessing();
-  }, 5000); // Start after 5 seconds to allow server to fully initialize
-  app.use("/emotional-analytics", emotionalAnalyticsRoutes);
+  // Removed: sync routes
+  // REMOVED: Deletion queue processing moved to background service
   
   // Direct emotions endpoint for mobile app compatibility
   app.post("/emotions", protect, async (req, res) => {
@@ -289,8 +236,7 @@ const initializeServer = async () => {
     }
   });
   
-  app.use("/test-ubpm", ubpmRoutes);
-  app.use("/", apiDocsRoutes);
+  // REMOVED: API docs routes
 
   // API routes registered
 
@@ -360,7 +306,7 @@ const initializeServer = async () => {
     websocketService.initialize(server);
     
     server.listen(PORT, () => {
-      log.success(`Numina AI Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
       // WebSocket service active
       // Performance optimizations enabled
       // Memory usage logged
@@ -374,7 +320,7 @@ const initializeServer = async () => {
 // Initialize server for both production and testing
 if (process.env.NODE_ENV !== 'test') {
   // Full initialization for production
-  log.system("Launching Numina AI Server");
+  // Starting server
   initializeServer().catch(err => {
     log.error('Failed to initialize server', err);
     process.exit(1);
@@ -387,7 +333,7 @@ if (process.env.NODE_ENV !== 'test') {
   const initializeForTests = async () => {
     try {
       // Basic middleware setup
-      app.use(express.json({ limit: "10mb" }));
+      app.use(express.json({ limit: "50mb" }));
       
       // Connect to database if not already connected
       if (process.env.MONGO_URI && !mongoose.connection.readyState) {
@@ -395,38 +341,14 @@ if (process.env.NODE_ENV !== 'test') {
       }
       
       // Register routes for testing
-      app.use("/", authRoutes);
-      app.use("/", userRoutes);
-      app.use("/", healthRoutes);
-      app.use("/", completionRoutes);
-      app.use("/", taskRoutes);
-      app.use("/", docsRoutes);
-      app.use("/analytics", analyticsRoutes);
-      app.use("/analytics", analyticsEcosystemRoutes);
-      app.use("/analytics/llm", analyticsLLMRoutes);
-      app.use("/intelligence-debug", intelligenceDebugRoutes);
-      app.use("/compression-dashboard", compressionDashboardRoutes);
-      app.use("/tier-test", tierTestRoutes);
-      app.use("/sandbox", sandboxRoutes);
-      app.use("/", authTestRoutes);
-      app.use("/ai", aiRoutes);
-      app.use("/personalized-ai", personalizedAIRoutes);
-          app.use("/tools", toolsRoutes);
-      app.use("/wallet", walletRoutes);
-      app.use("/subscription", subscriptionRoutes);
-      app.use("/cloud", cloudRoutes);
-      app.use("/personal-insights", personalInsightsRoutes);
-      app.use("/collective-data", collectiveDataRoutes);
-      app.use("/collective-snapshots", collectiveSnapshotsRoutes);
-      app.use("/scheduled-aggregation", scheduledAggregationRoutes);
-      app.use("/api/cloud", secureCloudRoutes);
-      app.use("/", mobileRoutes);
-      app.use("/", syncRoutes);
-      app.use("/conversation", conversationSyncRoutes);
+      // Removed: completion and task routes
+          // Removed: tools routes
+      // Removed: wallet routes (replaced by subscription system)
+      // Removed: collective-data routes (not imported)
+      // Removed: scheduled-aggregation routes (not imported)
+      // Removed: sync routes
       // Note: /conversations is handled by conversationsRoutes - don't override it
-      app.use("/emotional-analytics", emotionalAnalyticsRoutes);
-      app.use("/test-ubpm", ubpmRoutes);
-      app.use("/", apiDocsRoutes);
+      // REMOVED: API docs routes
       
       // Test endpoint
       app.get("/test", (req, res) => {

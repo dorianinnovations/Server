@@ -1,487 +1,413 @@
-# Numina AI Server
+# Numina AI Server 2.0
 
-A comprehensive Express.js backend API for the Numina AI platform, featuring personalized AI experiences, emotional analytics, collective intelligence, and advanced tool integration with 25+ specialized AI tools.
+Production-ready Express.js backend featuring advanced AI personalization, UBPM cognitive modeling, and comprehensive tool integration.
 
-## 🚀 Quick Start
-
-```bash
-# Install dependencies
-npm install
-
-# Set up environment variables (see .env.example)
-cp .env.example .env
-
-# Start development server
-npm run dev
-
-# Run tests
-npm test
-
-# Run linting
-npm run lint
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 numina-server/
-├── src/                          # Main application source
-│   ├── config/                   # App configuration
-│   │   ├── constants.js          # HTTP status codes & messages
-│   │   ├── database.js           # MongoDB connection
-│   │   └── environment.js        # Environment variable management
-│   ├── models/                   # Mongoose schemas
-│   │   ├── User.js                    # User auth & profile
-│   │   ├── UserBehaviorProfile.js     # Behavioral analytics
-│   │   ├── [Removed] EmotionalAnalyticsSession.js # Replaced with AI-driven emotion detection
-│   │   ├── ShortTermMemory.js         # Conversation memory
-│   │   ├── CollectiveDataConsent.js   # Privacy consent
-│   │   ├── CollectiveSnapshot.js      # Collective insights
-│   │   ├── CreditPool.js              # Credit system
-│   │   ├── Task.js                    # Background tasks
-│   │   ├── Tool.js                    # AI tool definitions
-│   │   ├── Event.js                   # Event tracking
-│   │   ├── UserConstants.js           # User preferences
-│   │   └── UserEvent.js               # User events
-│   ├── routes/                   # API endpoints
-│   │   ├── auth.js                    # Authentication
-│   │   ├── ai.js                      # AI chat & completions
-│   │   ├── mobile.js                  # Mobile endpoints & file upload
-│   │   ├── health.js                  # Health checks
-│   │   ├── analytics.js               # Analytics endpoints
-│   │   ├── emotions.js                # Emotional analytics
-│   │   ├── tools.js                   # AI tool execution
-│   │   ├── subscription.js            # Stripe subscriptions
-│   │   ├── wallet.js                  # Credit management
-│   │   ├── cloud.js                   # Social features
-│   │   ├── personalInsights.js        # Personal analytics
-│   │   ├── personalizedAI.js          # AI personalization
-│   │   ├── collectiveData.js          # Collective insights
-│   │   ├── user.js                    # User management
-│   │   ├── sync.js                    # Data sync
-│   │   ├── tasks.js                   # Task management
-│   │   ├── debug.js                   # Debug endpoints
-│   │   ├── docs.js                    # API documentation
-│   │   └── testGPT4o.js               # GPT-4o testing
-│   ├── services/                 # Business logic
-│   │   ├── llmService.js              # OpenRouter LLM integration
-│   │   ├── websocketService.js        # Real-time WebSocket
-│   │   ├── redisService.js            # Redis caching
-│   │   ├── personalizationEngine.js   # AI personalization
-│   │   ├── advancedAnalytics.js       # Deep analytics engine
-│   │   ├── collectiveDataService.js   # Collective intelligence
-│   │   ├── connectionEngine.js        # Social connections
-│   │   ├── stripeService.js           # Payment processing
-│   │   ├── pushNotificationService.js # Push notifications
-│   │   ├── taskScheduler.js           # Background tasks
-│   │   ├── toolExecutor.js            # Tool execution
-│   │   ├── toolRegistry.js            # Tool management
-│   │   ├── offlineSyncService.js      # Offline sync
-│   │   ├── dataProcessingPipeline.js  # Data processing
-│   │   ├── enhancedMemoryService.js   # Memory management
-│   │   ├── snapshotAnalysisService.js # Snapshot analysis
-│   │   ├── scheduledAggregationService.js # Scheduled tasks
-│   │   ├── requestCacheService.js     # Request caching
-│   │   ├── triggerSystem.js           # Event triggers
-│   │   └── analytics.js               # Basic analytics
-│   ├── middleware/               # Express middleware
-│   │   ├── auth.js                    # JWT authentication
-│   │   ├── security.js                # CORS & security headers
-│   │   ├── rateLimiter.js             # Rate limiting
-│   │   ├── cacheMiddleware.js         # Response caching
-│   │   ├── performanceMiddleware.js   # Performance monitoring
-│   │   └── subscriptionGate.js        # Subscription validation
-│   ├── tools/                    # 25+ AI tools
-│   │   ├── webSearch.js               # Web search
-│   │   ├── weatherCheck.js            # Weather information
-│   │   ├── calculator.js              # Math calculations
-│   │   ├── academicSearch.js          # Academic research
-│   │   ├── codeGenerator.js           # Code generation
-│   │   ├── cryptoLookup.js            # Cryptocurrency data
-│   │   ├── currencyConverter.js       # Currency conversion
-│   │   ├── emailAssistant.js          # Email assistance
-│   │   ├── fitnessTracker.js          # Fitness tracking
-│   │   ├── imageSearch.js             # Image search
-│   │   ├── musicRecommendations.js    # Music recommendations
-│   │   ├── newsSearch.js              # News search
-│   │   ├── stockLookup.js             # Stock information
-│   │   ├── translation.js             # Language translation
-│   │   ├── passwordGenerator.js       # Password generation
-│   │   ├── qrGenerator.js             # QR code generation
-│   │   ├── timezoneConverter.js       # Timezone conversion
-│   │   ├── textGenerator.js           # Text generation
-│   │   ├── spotifyPlaylist.js         # Spotify integration
-│   │   ├── socialSearch.js            # Social media search
-│   │   ├── reservationBooking.js      # Booking assistance
-│   │   ├── nutritionLookup.js         # Nutrition information
-│   │   ├── linkedinHelper.js          # LinkedIn assistance
-│   │   ├── locationService.js         # Location services
-│   │   ├── itineraryGenerator.js      # Travel planning
-│   │   ├── creditManagement.js        # Credit system tools
-│   │   ├── ubpmAnalysis.js            # UBPM analysis
-│   │   └── [additional tools...]      # More specialized tools
-│   ├── utils/                    # Utility functions
-│   │   ├── logger.js                  # Winston logging
-│   │   ├── errorHandler.js            # Error handling
-│   │   ├── cache.js                   # Caching utilities
-│   │   ├── sanitize.js                # Input sanitization
-│   │   ├── memory.js                  # Memory management
-│   │   ├── analyticsHelper.js         # Analytics utilities
-│   │   ├── imageCompression.js        # Image processing
-│   │   ├── imageCompressionBasic.js   # Basic image compression
-│   │   ├── collectiveDataHelper.js    # Collective data utilities
-│   │   ├── incrementalMemory.js       # Incremental memory system
-│   │   ├── memoryAnalytics.js         # Memory analytics
-│   │   └── memoryImportance.js        # Memory importance scoring
-│   └── server.js                 # Main application entry
-├── tests/                        # Test suites
-│   ├── integration/              # API integration tests
-│   │   ├── test_credit_setup.js      # Credit system tests
-│   │   ├── test_endpoints.js         # Endpoint testing
-│   │   ├── test_secure_cloud.js      # Cloud security tests
-│   │   ├── test_stripe_wallet.js     # Payment tests
-│   │   └── test_tools.js             # Tool execution tests
-│   ├── unit/                     # Unit tests
-│   ├── e2e/                      # End-to-end tests
-│   │   └── complete-user-journey.test.js # Full user journey tests
-│   ├── middleware/               # Middleware tests
-│   │   └── security.test.js          # Security middleware tests
-│   ├── routes/                   # Route-specific tests
-│   │   ├── auth.test.js              # Authentication tests
-│   │   ├── collectiveData.test.js    # Collective data tests
-│   │   ├── collectiveSnapshots.test.js # Snapshot tests
-│   │   ├── health.test.js            # Health check tests
-│   │   ├── scheduledAggregation.test.js # Aggregation tests
-│   │   └── user.test.js              # User management tests
-│   ├── utils/                    # Utility tests
-│   │   ├── cache.test.js             # Cache utility tests
-│   │   ├── sanitize.test.js          # Sanitization tests
-│   │   ├── globalTestSetup.js        # Test setup utilities
-│   │   ├── globalTestTeardown.js     # Test teardown utilities
-│   │   ├── testSetup.js              # Test configuration
-│   │   └── successRateMonitor.js     # Success rate monitoring
-│   ├── scripts/                   # Test utilities & scripts
-│   │   ├── checkSnapshots.js         # Snapshot verification
-│   │   ├── cleanupAndRegenerate.js   # Test data cleanup
-│   │   ├── clearCache.js             # Cache clearing
-│   │   ├── continuousMonitoring.js    # Continuous monitoring
-│   │   ├── create_test_user.js       # Test user creation
-│   │   ├── createTestUsers.js        # Bulk test user creation
-│   │   ├── performance-test.js       # Performance testing
-│   │   ├── runE2EWithMetrics.js      # E2E with metrics
-│   │   ├── seed_events.js            # Event seeding
-│   │   ├── seedTestData.js           # Test data seeding
-│   │   ├── setup_test_user.js        # Test user setup
-│   │   ├── setup_verified_account.js # Verified account setup
-│   │   ├── simpleWSTest.js           # WebSocket testing
-│   │   ├── testAPI.js                # API testing
-│   │   ├── testWebSocket.js          # WebSocket testing
-│   │   ├── test-final-email.js       # Email testing
-│   │   └── quick-email-test.js       # Quick email tests
-│   ├── metrics/                    # Test metrics
-│   │   ├── accuracy-test.json        # Accuracy metrics
-│   │   ├── historical-test.json      # Historical test data
-│   │   └── success-rates.json        # Success rate data
-│   ├── setup.js                     # Test setup configuration
-│   ├── test-server.js               # Test server instance
-│   ├── test-payload.json            # Test payloads
-│   └── signup-payload.json          # Signup test data
-├── scripts/                        # Development & deployment scripts
-│   ├── deploy.sh                    # Deployment script
-│   ├── optimizeDatabase.js          # Database optimization
-│   ├── performanceTest.js           # Performance testing
-│   ├── realWorldStressTest.sh       # Real-world stress testing
-│   ├── stressTest.sh                # Stress testing
-│   ├── testOptimizations.js         # Optimization testing
-│   ├── testResendEmail.js           # Email service testing
-│   ├── testRealEmail.js             # Real email testing
-│   ├── testEmailFixed.js            # Fixed email testing
-│   ├── testEmail.js                 # Basic email testing
-│   ├── testCloudFeatures.js         # Cloud feature testing
-│   ├── seedTestUsers.js             # Test user seeding
-│   ├── seedCloudEvents.js           # Cloud event seeding
-│   └── wipeData.js                  # Data cleanup
-├── logs/                           # Application logs
-├── coverage/                       # Test coverage reports
-├── .expo/                          # Expo configuration
-├── .claude/                        # Claude AI configuration
-├── server.js                       # Render deployment wrapper
-├── package.json                    # Dependencies & scripts
-├── package-lock.json               # Locked dependencies
-├── eslint.config.js                # ESLint configuration
-├── jest.config.js                  # Jest test configuration
-├── babel.config.js                 # Babel configuration
-├── app.json                        # App configuration
-├── Procfile                        # Heroku deployment
-├── railway.json                    # Railway deployment
-├── render.yaml                     # Render deployment
-├── deploy-email-update.sh          # Email deployment script
-├── server.log                      # Server log file
-├── .gitignore                      # Git ignore rules
-├── LICENSE                         # License file
-└── README.md                       # This file
+├── src/
+│   ├── config/
+│   │   ├── constants.js              # HTTP status & messages
+│   │   ├── database.js               # MongoDB connection
+│   │   ├── environment.js            # Environment management
+│   │   └── tiers.js                  # Subscription tier config
+│   ├── models/
+│   │   ├── User.js                   # User accounts & profiles
+│   │   ├── Conversation.js           # Chat history storage
+│   │   ├── ShortTermMemory.js        # AI conversation context
+│   │   ├── UserBehaviorProfile.js    # UBPM psychological data
+│   │   ├── Event.js                  # User activity tracking
+│   │   ├── Tool.js                   # AI tools registry
+│   │   ├── UserConstants.js          # User preferences
+│   │   ├── UserEvent.js              # User events
+│   │   └── DeletionTask.js           # Data cleanup management
+│   ├── routes/
+│   │   ├── auth.js                   # Authentication & JWT
+│   │   ├── user.js                   # User management
+│   │   ├── ai.js                     # AI chat & UBPM integration
+│   │   ├── health.js                 # System health monitoring
+│   │   ├── subscription.js           # Stripe subscription management
+│   │   ├── ubpm.js                   # UBPM behavioral analytics
+│   │   ├── analyticsLLM.js           # LLM-powered analytics
+│   │   ├── analyticsEcosystem.js     # System-wide analytics
+│   │   ├── analyticsRateStatus.js    # Rate limiting analytics
+│   │   └── personalizedAI.js         # Contextual AI responses
+│   ├── services/
+│   │   ├── llmService.js             # OpenRouter LLM integration
+│   │   ├── ubpmCognitiveEngine.js    # Advanced cognitive modeling
+│   │   ├── cognitiveArchitectureEngine.js # Cognitive architecture
+│   │   ├── aiInsightService.js       # AI-powered insights
+│   │   ├── enhancedMemoryService.js  # Advanced memory management
+│   │   ├── conversationService.js    # Chat persistence
+│   │   ├── contextInjectionService.js # Dynamic context injection
+│   │   ├── numinaContextBuilder.js   # Context generation
+│   │   ├── optimizedChat.js          # Performance-optimized chat
+│   │   ├── personalizationEngine.js  # AI personalization
+│   │   ├── webSearchService.js       # Advanced web search
+│   │   ├── emailService.js           # Multi-provider email
+│   │   ├── stripeService.js          # Payment processing
+│   │   ├── websocketService.js       # Real-time communication
+│   │   ├── redisService.js           # Caching & sessions
+│   │   ├── toolRegistry.js           # AI tools management
+│   │   ├── imageDisplayService.js    # Image processing
+│   │   ├── richContentService.js     # Rich media handling
+│   │   ├── connectionEngine.js       # Social connections
+│   │   ├── ubpmService.js            # UBPM analysis
+│   │   └── autonomousUBPM.js         # Autonomous UBPM
+│   ├── middleware/
+│   │   ├── auth.js                   # JWT authentication
+│   │   ├── security.js               # CORS & security headers
+│   │   ├── performanceMiddleware.js  # Performance monitoring
+│   │   ├── cacheMiddleware.js        # Response caching
+│   │   └── tierLimiter.js            # Subscription tier limits
+│   ├── tools/
+│   │   ├── insaneWebSearch.js        # Advanced web search
+│   │   ├── realUBPMAnalysis.js       # Real-time UBPM analysis
+│   │   └── [other tools...]          # Additional specialized tools
+│   ├── utils/
+│   │   ├── logger.js                 # Winston logging system
+│   │   ├── errorHandler.js           # Error handling
+│   │   ├── cache.js                  # Caching utilities
+│   │   └── sanitize.js               # Input sanitization
+│   └── server.js                     # Main application entry
+├── archive/
+│   └── unused-services/              # Legacy services (archived)
+├── tests/                            # Comprehensive test suite
+├── scripts/                          # Development scripts
+├── package.json                      # Dependencies & scripts
+├── .env                              # Environment configuration
+├── CLAUDE.md                         # Development documentation
+└── README.md                         # This documentation
 ```
 
-## ✨ Core Features
+## Quick Start
 
-### 🤖 AI & Personalization
-- **Advanced AI Chat**: OpenRouter integration with GPT-4o, Claude, and other models
-- **Tool Ecosystem**: 25+ specialized AI tools organized by category:
-  - **Search & Information**: Web search, news, academic research, image search
-  - **Financial**: Stock lookup, cryptocurrency, currency conversion, credit management
-  - **Productivity**: Calculator, code generation, password generation, QR generation
-  - **Travel & Location**: Weather, timezone conversion, location services, itinerary generation
-  - **Entertainment**: Music recommendations, Spotify integration, text generation
-  - **Health & Fitness**: Fitness tracking, nutrition lookup, email assistance
-  - **Social & Professional**: LinkedIn helper, social search, reservation booking
-  - **Specialized**: Translation, UBPM analysis, collective data tools
-- **Personalization Engine**: Adaptive AI personality based on user behavior
-- **Emotional Intelligence**: Deep emotional analytics and pattern recognition
-- **Memory System**: Conversation memory with intelligent importance scoring
+### Prerequisites
+- Node.js 18+
+- MongoDB 8.0+
+- Redis (optional, for caching)
 
-### 📱 Mobile & Real-time
-- **File Upload**: Support for images, text files, and PDFs with processing
-- **Offline Sync**: Queue system for offline mobile functionality
-- **WebSocket**: Real-time chat updates and notifications
-- **Push Notifications**: Smart notification system
-- **Batch API**: Mobile-optimized batch request processing
-
-### 🧠 Analytics & Intelligence
-- **Behavioral Analytics**: Deep user behavior pattern analysis
-- **Collective Intelligence**: Anonymized insights from user patterns
-- **Predictive Analytics**: Growth trajectory and behavioral predictions
-- **Personal Insights**: Customized analytics and recommendations
-- **Emotional Tracking**: Comprehensive emotion analysis and insights
-
-### 💳 Subscription & Credits
-- **Stripe Integration**: Subscription management and payment processing
-- **Credit System**: Usage-based credit tracking and management
-- **Subscription Tiers**: Multiple subscription levels with feature gates
-
-### 🔒 Security & Performance
-- **JWT Authentication**: Secure token-based authentication
-- **Rate Limiting**: API protection and abuse prevention
-- **Input Sanitization**: Comprehensive security validation
-- **Redis Caching**: High-performance caching layer
-- **Performance Monitoring**: Real-time performance metrics
-
-## 🛠️ Technology Stack
-
-- **Runtime**: Node.js 18+ with ES6 modules
-- **Framework**: Express.js with comprehensive middleware
-- **Database**: MongoDB with Mongoose ODM
-- **Caching**: Redis for sessions and data caching
-- **Real-time**: Socket.io WebSockets
-- **AI**: OpenRouter API (GPT-4o, Claude, etc.)
-- **Payment**: Stripe for subscriptions and payments
-- **File Processing**: Multer + Sharp for image handling
-- **Testing**: Jest for unit and integration tests
-- **Code Quality**: ESLint for linting and standards
-- **Deployment**: Railway, Render, Heroku support
-
-## 📡 Key API Endpoints
-
-### Authentication & User
-```
-POST /api/auth/login        # User authentication
-POST /api/auth/signup       # User registration
-GET  /api/user/profile      # Get user profile
-PUT  /api/user/profile      # Update user profile
-```
-
-### AI & Chat
-```
-POST /api/ai/chat           # AI chat with streaming
-POST /api/ai/tools/execute  # Execute AI tools
-POST /api/ai/personalized   # Personalized AI responses
-```
-
-### Mobile & Files
-```
-POST /api/mobile/upload     # File upload (images, text, PDF)
-POST /api/mobile/sync       # Data synchronization
-POST /api/mobile/batch      # Batch API requests
-```
-
-### Analytics & Insights
-```
-GET  /api/analytics/insights    # Personal insights
-GET  /api/emotions/history      # Emotional analytics
-GET  /api/collective-data/insights # Collective insights
-```
-
-### Health & Monitoring
-```
-GET  /api/health/health     # Server health check
-GET  /api/health/llm        # LLM service health
-```
-
-## 🚀 Development
-
-### Environment Setup
+### Installation
 ```bash
-# Required environment variables
-MONGO_URI=your_mongodb_connection_string_here
-JWT_SECRET=your-jwt-secret
-OPENROUTER_API_KEY=sk-or-your-key
-REDIS_URL=redis://localhost:6379
-STRIPE_SECRET_KEY=sk_test_your-key
-PORT=5001
+git clone <repository-url>
+cd numina-server
+npm install
+cp .env.template .env
+# Edit .env with your configuration
+npm run dev
+```
+
+### Environment Configuration
+```bash
+# Core (Required)
+MONGO_URI=mongodb://localhost:27017/numina-ai
+JWT_SECRET=your-super-secure-jwt-secret-here
 NODE_ENV=development
+PORT=5000
+
+# AI Services (Required)
+OPENROUTER_API_KEY=sk-or-your-openrouter-api-key
+
+# Payment Processing (Production)
+STRIPE_SECRET_KEY=sk_test_your-stripe-secret-key
+STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
+
+# Email Services (Multi-provider fallback)
+EMAIL_USER=your-gmail@gmail.com
+EMAIL_APP_PASSWORD=your-gmail-app-password
+BREVO_API_KEY=your-brevo-api-key
+SENDGRID_API_KEY=your-sendgrid-api-key
+
+# External APIs (Optional)
+GOOGLE_SEARCH_API_KEY=your-google-search-api-key
+GOOGLE_SEARCH_ENGINE_ID=your-search-engine-id
+SPOTIFY_CLIENT_ID=your-spotify-client-id
+SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
+```
+
+## API Endpoints
+
+### Authentication
+```http
+POST /signup              # User registration with email verification
+POST /login               # User authentication & JWT token
+POST /refresh             # JWT token refresh
+POST /spotify/connect     # Spotify account integration
+POST /spotify/disconnect  # Spotify disconnection
+```
+
+### User Management
+```http
+GET    /profile             # User profile with tier information
+POST   /profile/picture     # Profile picture upload (50MB limit)
+DELETE /profile/picture     # Profile picture removal
+GET    /settings            # User settings retrieval
+POST   /settings            # Settings configuration
+GET    /preferences         # User preferences
+POST   /preferences         # Preferences update
+PUT    /emotional-profile   # Emotional profile configuration
+DELETE /delete/:userId?     # Complete account deletion
+GET    /mongo-data          # Comprehensive user data export
+```
+
+### AI & Intelligence
+```http
+POST   /ai/chat             # Main AI chat with UBPM integration
+POST   /ai/upload           # File upload for AI processing (50MB, 10 files)
+GET    /ai/conversation/:id # Retrieve specific conversation
+DELETE /ai/conversation/:id # Delete conversation
+
+GET    /ubpm/profile        # User behavior profile
+POST   /ubpm/analyze        # Behavioral pattern analysis
+GET    /ubpm/insights       # Personalized insights
+
+POST   /analyticsLLM/chat   # LLM-powered analytics
+GET    /analyticsEcosystem  # System-wide analytics
+POST   /personalizedAI/chat # Contextual AI responses
+```
+
+### Subscription & Billing
+```http
+GET  /subscription/status                    # Current subscription status
+POST /subscription/create-checkout-session   # Stripe checkout session
+POST /subscription/webhook                   # Stripe webhook handler
+POST /subscription/cancel                    # Subscription cancellation
+```
+
+### Monitoring & Health
+```http
+GET /health    # Comprehensive system health check
+GET /          # Basic server status
+GET /test      # Operational status verification
+```
+
+## Key Features
+
+### UBPM (User Behavior Pattern Modeling)
+Advanced cognitive architecture that learns and adapts to individual users:
+- Psychological profiling with deep behavioral pattern analysis
+- Dynamic system prompts with AI personality adaptation
+- Cognitive architecture with advanced reasoning and context integration
+- Personalized responses with tailored AI communication style
+
+### AI Chat Engine
+Next-generation conversational AI:
+- Multi-model support via OpenRouter integration (GPT-4o, Claude, etc.)
+- Enhanced memory with intelligent conversation context retention
+- Tool integration with advanced web search and processing capabilities
+- Streaming responses with real-time typing indicators and updates
+- File processing supporting images, documents, and rich media
+
+### Mobile-First Architecture
+Optimized for cross-platform mobile applications:
+- File upload support for 50MB files, 10 files per request
+- Real-time sync via WebSocket-based communication
+- Offline support with robust offline data handling
+- Performance optimized API responses
+- Enterprise-grade security for mobile clients
+
+### Subscription Management
+Comprehensive billing and tier management:
+- Stripe integration with full payment processing
+- Multiple tiers: Core, Pro, Aether subscription levels
+- Usage tracking with real-time usage monitoring
+- Feature gating with tier-based feature access
+
+## Technology Stack
+
+### Core Technologies
+- Runtime: Node.js 18+ with ES6 modules
+- Framework: Express.js 4.21+ with comprehensive middleware
+- Database: MongoDB 8.16+ with Mongoose ODM
+- Caching: Redis with ioredis client
+- Real-time: Socket.io WebSocket integration
+- Authentication: JWT with bcrypt password hashing
+
+### AI & Integration
+- AI Provider: OpenRouter API (multi-model support)
+- Payment: Stripe for subscription management
+- Email: Multi-provider (Gmail, Brevo, SendGrid)
+- File Processing: Multer + Sharp for media handling
+- Search: Advanced web search capabilities
+- Analytics: Real-time behavioral analytics
+
+### Development & Quality
+- Testing: Jest with comprehensive test suite
+- Code Quality: ESLint with custom configuration
+- Documentation: Comprehensive API documentation
+- Deployment: Railway, Render, Heroku support
+- Monitoring: Winston logging with performance metrics
+
+## Testing & Development
+
+### Test Suite
+```bash
+npm test                    # Run full test suite
+npm run test:coverage       # Test with coverage reports
+npm run test:watch          # Watch mode for development
+npm run test:e2e           # End-to-end testing
+npm run test:monitor       # Continuous monitoring
+```
+
+### Performance Testing
+```bash
+npm run test-performance    # Performance benchmarks
+npm run test-optimizations # Optimization validation
+npm run test-api           # API endpoint testing
+npm run test-websocket     # WebSocket functionality
 ```
 
 ### Development Commands
 ```bash
-npm run dev          # Start development server with nodemon
-npm test             # Run Jest test suite
-npm run test:watch   # Run tests in watch mode
-npm run test:coverage # Run tests with coverage
-npm run lint         # Run ESLint
-npm run lint:fix     # Fix linting issues
+npm run dev                 # Development server with nodemon
+npm run start              # Production server
+npm run lint               # Code quality check
+npm run lint:errors        # Error-only linting
 ```
 
-### Production Deployment
-```bash
-npm start            # Production server
-npm run build        # Build for production (if applicable)
-```
+## Authentication Guide
 
-### File Organization
-
-The project follows a clean, organized structure:
-
-- **`src/`**: Main application source code
-  - **`config/`**: Configuration files (database, constants, environment)
-  - **`models/`**: Mongoose schemas and data models
-  - **`routes/`**: API endpoint handlers
-  - **`services/`**: Business logic and external service integrations
-  - **`middleware/`**: Express middleware (auth, security, caching)
-  - **`tools/`**: 25+ specialized AI tools
-  - **`utils/`**: Utility functions and helpers
-
-- **`tests/`**: Comprehensive test suite
-  - **`integration/`**: API integration tests
-  - **`unit/`**: Unit tests for individual components
-  - **`e2e/`**: End-to-end user journey tests
-  - **`scripts/`**: Test utilities and automation scripts
-  - **`metrics/`**: Test performance and accuracy metrics
-
-- **`scripts/`**: Development and deployment scripts
-  - Performance testing and optimization
-  - Database management and seeding
-  - Email service testing
-  - Stress testing and monitoring
-
-### Key Files
-
-- **`server.js`**: Render deployment wrapper (main server in `src/server.js`)
-- **`package.json`**: Dependencies and npm scripts
-- **`eslint.config.js`**: Code quality and linting rules
-- **`jest.config.js`**: Test configuration
-- **Deployment configs**: `railway.json`, `render.yaml`, `Procfile`
-
-## 🧪 Testing
-
-Comprehensive test suite with Jest organized into logical categories:
-
-### Test Structure
-- **Unit Tests** (`tests/unit/`): Individual service and utility testing
-- **Integration Tests** (`tests/integration/`): API endpoint and service integration testing
-- **E2E Tests** (`tests/e2e/`): Complete user journey testing
-- **Route Tests** (`tests/routes/`): Specific endpoint testing
-- **Middleware Tests** (`tests/middleware/`): Security and middleware testing
-- **Utility Tests** (`tests/utils/`): Helper function testing
-
-### Test Scripts
-- **Performance Testing**: `tests/scripts/performance-test.js`
-- **Email Testing**: `tests/scripts/test-final-email.js`, `tests/scripts/quick-email-test.js`
-- **WebSocket Testing**: `tests/scripts/testWebSocket.js`
-- **User Setup**: `tests/scripts/createTestUsers.js`, `tests/scripts/setup_test_user.js`
-- **Data Seeding**: `tests/scripts/seedTestData.js`, `tests/scripts/seed_events.js`
-
-### Test Metrics
-- **Accuracy Tracking**: `tests/metrics/accuracy-test.json`
-- **Historical Data**: `tests/metrics/historical-test.json`
-- **Success Rates**: `tests/metrics/success-rates.json`
+### JWT Authentication
+The authentication system is reliable when used correctly:
 
 ```bash
-npm test                    # Run all tests
-npm run test:coverage      # Test with coverage report
-npm run test:watch         # Run tests in watch mode
+# Create fresh user and get token
+FRESH_TOKEN=$(curl -s -X POST http://localhost:5000/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test-'$(date +%s)'@test.com","password":"TestPassword123"}' | \
+  jq -r '.token')
+
+# Use token for any protected endpoint
+curl -s -H "Authorization: Bearer $FRESH_TOKEN" http://localhost:5000/profile | jq .
+
+# Login with existing credentials
+LOGIN_TOKEN=$(curl -s -X POST http://localhost:5000/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"your@email.com","password":"YourPassword123"}' | \
+  jq -r '.token')
 ```
 
-## 📊 Performance Features
+### Common Authentication Issues
+1. Password Requirements: Minimum 8 characters (use `TestPassword123`)
+2. Header Format: Always use `"Authorization: Bearer $TOKEN"`
+3. Token Persistence: Extract and use tokens in same command for reliability
+4. Fresh Tokens: Always create fresh tokens for testing
 
-- **Redis Caching**: Session and data caching for fast responses
-- **Connection Pooling**: Optimized database connections
-- **Request Caching**: Intelligent API response caching
-- **Performance Monitoring**: Real-time metrics and logging
-- **Memory Management**: Efficient resource usage tracking
+## Performance & Monitoring
 
-## 🛠️ Development Scripts
+### Health Monitoring
+```bash
+# Quick health check
+curl -s http://localhost:5000/health | jq .
 
-The project includes comprehensive development and testing scripts:
+# System status
+curl -s http://localhost:5000/ | jq .
 
-### Performance & Optimization
-- **`scripts/performanceTest.js`**: Comprehensive performance testing
-- **`scripts/optimizeDatabase.js`**: Database optimization utilities
-- **`scripts/testOptimizations.js`**: Optimization testing and validation
-- **`scripts/stressTest.sh`**: Stress testing for API endpoints
-- **`scripts/realWorldStressTest.sh`**: Real-world scenario stress testing
+# Test operational status
+curl -s http://localhost:5000/test | jq .
+```
 
-### Email & Communication
-- **`scripts/testResendEmail.js`**: Email service testing
-- **`scripts/testRealEmail.js`**: Real email delivery testing
-- **`scripts/testEmailFixed.js`**: Fixed email configuration testing
-- **`scripts/testEmail.js`**: Basic email functionality testing
+### Performance Features
+- Redis caching for session and response caching
+- Connection pooling with optimized database connections
+- Memory management with automatic garbage collection and monitoring
+- Request optimization with intelligent API response optimization
+- Real-time metrics with performance monitoring and alerting
 
-### Data Management
-- **`scripts/seedTestUsers.js`**: Bulk test user creation
-- **`scripts/seedCloudEvents.js`**: Cloud event data seeding
-- **`scripts/wipeData.js`**: Data cleanup and reset utilities
+## Security Features
 
-### Deployment
-- **`scripts/deploy.sh`**: Automated deployment script
-- **`deploy-email-update.sh`**: Email service deployment updates
+### Enterprise Security Standards
+- JWT authentication with secure token-based authentication and refresh
+- Rate limiting for API protection against abuse and attacks
+- CORS configuration with secure cross-origin resource sharing
+- Input validation with comprehensive request sanitization
+- Security headers via Helmet.js security headers
+- Environment protection with secure environment variable management
 
-## 🔐 Security Features
+### Data Protection
+- Encryption with Bcrypt password hashing using 12 rounds
+- Sanitization with input sanitization and validation
+- Authorization with role-based access control
+- Privacy with GDPR-compliant data handling
 
-- **JWT Authentication**: Secure token-based auth with middleware
-- **Rate Limiting**: Protection against API abuse
-- **CORS Configuration**: Secure cross-origin resource sharing
-- **Input Validation**: Comprehensive request sanitization
-- **Security Headers**: Helmet.js security headers
-- **Admin Controls**: Role-based access control
+## Deployment
 
-## 📈 Analytics Capabilities
+### Supported Platforms
+- Railway: `railway.json` configuration
+- Render: `render.yaml` configuration
+- Heroku: `Procfile` configuration
+- Docker: Container-ready architecture
 
-- **User Behavior**: Comprehensive behavioral pattern analysis
-- **Emotional Intelligence**: Advanced emotion tracking and insights
-- **Predictive Analytics**: Growth trajectory predictions
-- **Collective Insights**: Anonymized user pattern analysis
-- **Performance Metrics**: Real-time server and API metrics
+### Production Configuration
+```bash
+NODE_ENV=production
+PORT=5000
+# Configure all required environment variables
+# Set up MongoDB Atlas or production database
+# Configure Redis for production caching
+# Set up Stripe for payment processing
+```
 
-## 🤝 Contributing
+## Analytics & Insights
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Run tests (`npm test`)
-4. Run linting (`npm run lint`)
-5. Commit changes (`git commit -m 'Add amazing feature'`)
-6. Push to branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+### Behavioral Analytics
+- UBPM analysis with advanced user behavior pattern modeling
+- Emotional intelligence with comprehensive emotion tracking
+- Predictive analytics with user growth trajectory predictions
+- Performance metrics with real-time system performance analytics
 
-## 📄 License
+### User Insights
+- Conversation analytics with chat pattern analysis
+- Usage patterns with feature usage and engagement metrics
+- Personalization metrics with AI adaptation effectiveness
+- Subscription analytics with billing and tier usage analysis
 
-Licensed under the Apache 2.0 License - see [LICENSE](LICENSE) for details.
+## Contributing
 
-## 🆘 Support
+### Development Workflow
+1. Fork repository and create feature branch
+2. Follow existing code patterns and conventions
+3. Write comprehensive tests for new features
+4. Run linting and ensure code quality
+5. Update documentation as needed
+6. Submit pull request with detailed description
 
-- **Documentation**: Check the API docs at `/api/docs`
-- **Health Check**: Monitor server status at `/api/health/health`
-- **Issues**: Report bugs and feature requests on GitHub
-- **Performance**: Monitor real-time metrics and logs
+### Code Standards
+- ES6+ JavaScript with modern syntax
+- Comprehensive error handling
+- Security-first development practices
+- Performance optimization focus
+- Mobile-first API design
+
+## License & Support
+
+**License**: Apache 2.0 - see [LICENSE](LICENSE) for details
+
+### Getting Help
+- Documentation: Complete API documentation in CLAUDE.md
+- Health Monitoring: Real-time status at `/health`
+- Issues: GitHub issue tracking
+- Performance: Built-in monitoring and logging
+
+## Roadmap
+
+### Completed (v2.0)
+- Major architecture overhaul
+- UBPM cognitive engine integration
+- Enhanced authentication system
+- Advanced memory management
+- Mobile-optimized APIs
+- Comprehensive testing suite
+
+### Upcoming Features
+- Advanced AI tool ecosystem expansion
+- Enhanced real-time collaboration features
+- Advanced analytics dashboard
+- Multi-language support expansion
 
 ---
 
-Built with ❤️ for the Numina AI platform - Empowering personalized AI experiences.
+Built for the Numina AI Platform - Production Ready v2.0
+
+*Last Updated: July 31, 2025*

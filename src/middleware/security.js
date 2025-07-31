@@ -213,7 +213,6 @@ export const corsSecurity = cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) {
-      console.log("CORS: Allowing request with no origin");
       return callback(null, true);
     }
     

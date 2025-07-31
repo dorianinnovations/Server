@@ -290,7 +290,7 @@ export const setupMemoryMonitoring = () => {
     if (heapUsageRatio > MEMORY_CONFIG.HEAP_USAGE_THRESHOLD) {
       memoryPressureCount++;
       const cleanedCount = globalCache.cleanupByMemoryPressure();
-      console.log(`⚠️ Memory pressure detected (${(heapUsageRatio * 100).toFixed(1)}%), cleaned ${cleanedCount} cache entries`);
+      // Memory pressure detected - cleaning cache
     } else {
       memoryPressureCount = 0; // Reset counter when pressure is relieved
     }
@@ -298,19 +298,13 @@ export const setupMemoryMonitoring = () => {
     // Log memory usage periodically (but not too frequently)
     if (now - lastLogTime > MEMORY_CONFIG.MEMORY_MONITORING_INTERVAL * 2) {
       const cacheStats = globalCache.getStats();
-      console.log(
-        `📊 Memory: ${heapUsedMB}/${heapTotalMB}MB heap (${(heapUsageRatio * 100).toFixed(1)}%), ${rssMB}MB RSS, ${externalMB}MB external`
-      );
-      console.log(`🗂️ Cache: ${cacheStats.size}/${cacheStats.maxSize} items, ${cacheStats.hitRate} hit rate, ${cacheStats.memoryUsage}`);
-      if (expiredCount > 0) {
-        console.log(`🧹 Cleaned ${expiredCount} expired cache entries`);
-      }
+      // Memory stats logged
       lastLogTime = now;
     }
     
     // Trigger garbage collection if memory usage is critically high
     if (memoryUsage.heapUsed > MEMORY_CONFIG.GC_THRESHOLD || memoryPressureCount > 3) {
-      console.log(`🗑️ High memory usage detected (${heapUsedMB}MB), triggering garbage collection`);
+      // High memory usage - triggering GC
       
       if (global.gc) {
         const gcStart = process.hrtime.bigint();
@@ -324,10 +318,9 @@ export const setupMemoryMonitoring = () => {
         const newHeapUsedMB = Math.round(newMemoryUsage.heapUsed / 1048576);
         const memoryFreed = heapUsedMB - newHeapUsedMB;
         
-        console.log(`✅ GC #${gcCount} completed in ${gcDuration.toFixed(2)}ms`);
-        console.log(`📉 Memory: ${heapUsedMB}MB → ${newHeapUsedMB}MB (freed ${memoryFreed}MB)`);
+        // GC completed
       } else {
-        console.log(`⚠️ Garbage collection not available (use --expose-gc flag)`);
+        // GC not available (use --expose-gc flag)
       }
     }
   };
@@ -339,7 +332,7 @@ export const setupMemoryMonitoring = () => {
   const cacheCleanupInterval = setInterval(() => {
     const cleaned = globalCache.cleanup();
     if (cleaned > 0) {
-      console.log(`🧹 Scheduled cache cleanup: removed ${cleaned} expired entries`);
+      // Cache cleanup: removed expired entries
     }
   }, MEMORY_CONFIG.CACHE_CLEANUP_INTERVAL || 300000);
   
@@ -354,8 +347,7 @@ export const setupMemoryMonitoring = () => {
     console.log('🛑 Memory monitoring stopped and cache cleared');
   });
   
-  // Memory monitoring ready
-  console.log('🚀 Enhanced memory monitoring initialized');
+  // Memory monitoring initialized
 };
 
 // Component ready

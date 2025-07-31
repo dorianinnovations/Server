@@ -70,19 +70,19 @@ export const TASK_CONFIG = {
   }
 };
 
-// Memory and Performance Configuration (Fixed for GC storm)
+// Memory and Performance Configuration (Fixed for critical memory leaks)
 export const MEMORY_CONFIG = {
-  CACHE_TTL: 900000, // 15 minutes
-  GC_THRESHOLD: 128000000, // 128MB (stop GC storm - much higher threshold)
-  MEMORY_MONITORING_INTERVAL: 30000, // 30 seconds (reduce monitoring overhead)
+  CACHE_TTL: 300000, // 5 minutes (reduced from 15 to prevent buildup)
+  GC_THRESHOLD: 80000000, // 80MB (reduced from 128MB for earlier cleanup)
+  MEMORY_MONITORING_INTERVAL: 10000, // 10 seconds (more frequent monitoring)
   MAX_RESPONSE_SIZE: 25000, // 25KB
-  MAX_CACHE_SIZE: 500, // Reduced cache size
-  CACHE_CLEANUP_INTERVAL: 300000, // 5 minutes (reduce cleanup frequency)
-  HEAP_USAGE_THRESHOLD: 0.97, // 97% before cleanup (stop false alarms)
+  MAX_CACHE_SIZE: 200, // Reduced cache size further (from 500 to 200)
+  CACHE_CLEANUP_INTERVAL: 120000, // 2 minutes (more frequent cleanup)
+  HEAP_USAGE_THRESHOLD: 0.85, // 85% before cleanup (much lower threshold)
   COMPRESSION_THRESHOLD: 512, // 512B compression
-  FORCE_GC_THRESHOLD: 0.95, // Only force GC at 95% (last resort)
-  LOW_MEMORY_MODE: false, // Disable aggressive mode causing thrashing
-  GC_COOLDOWN_MS: 60000 // 1 minute cooldown between forced GCs
+  FORCE_GC_THRESHOLD: 0.90, // Force GC at 90% (earlier intervention)
+  LOW_MEMORY_MODE: true, // Enable memory conservation mode
+  GC_COOLDOWN_MS: 30000 // 30 seconds cooldown (shorter for faster response)
 };
 
 // Security Configuration
