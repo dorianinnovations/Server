@@ -136,6 +136,9 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       attachments = [] 
     } = req.body;
     
+    console.log(`🔍 STREAMING DEBUG: message="${message}", prompt="${prompt}", stream=${stream}, userMessage="${message || prompt}"`);
+    console.log(`🔍 REQUEST BODY:`, JSON.stringify(req.body, null, 2));
+    
     const userMessage = message || prompt;
     const userId = req.user.id;
     const userTier = req.user.subscription?.plan || 'core';
@@ -149,52 +152,11 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       });
     }
 
-    // NOVEL FEATURE: Fast path for simple messages (saves API costs)
-    if (!attachments.length && !hasFiles && userMessage && isSimpleMessage(userMessage) && !(await hasComplexContext(userId))) {
-      const fastStartTime = Date.now();
-      const fastResponse = await lightweightChat(userMessage, userId, conversationId);
-      if (fastResponse.response) {
-        console.log(`🚀 FAST PATH: Simple message handled in ${Date.now() - fastStartTime}ms (saved LLM cost)`);
-        return res.json({
-          success: true,
-          data: {
-            response: fastResponse.response,
-            tone: fastResponse.tone || 'adaptive',
-            hasMemory: true,
-            hasTools: false,
-            toolsUsed: 0,
-            tier: userTier,
-            responseTime: Date.now() - fastStartTime,
-            fastPath: true,
-            cognitiveEngineUsed: false
-          }
-        });
-      }
-    }
+    // DISABLED: All responses must use streaming for real-time UX
+    // Fast path disabled - everything goes through streaming
 
-    // NOVEL FEATURE: Simple direct data queries (basic implementation)
-    if (userMessage && typeof userMessage === 'string') {
-      const lowerMessage = userMessage.toLowerCase();
-      
-      // Quick data responses without LLM
-      if (lowerMessage.includes('ubpm') && lowerMessage.includes('what') && lowerMessage.length < 50) {
-        console.log(`📊 DIRECT DATA: UBPM query handled without LLM`);
-        return res.json({
-          success: true,
-          data: {
-            response: "UBPM stands for User Behavior Pattern Modeling - it's our cognitive engine that analyzes your communication patterns, decision-making style, and preferences to provide personalized insights and recommendations.",
-            tone: 'informative',
-            hasMemory: false,
-            hasTools: false,
-            toolsUsed: 0,
-            tier: userTier,
-            responseTime: Date.now() - startTime,
-            directData: true,
-            cognitiveEngineUsed: false
-          }
-        });
-      }
-    }
+    // DISABLED: All responses must use streaming
+    // Direct data queries disabled - everything goes through streaming
 
     console.log(`🚀 OPTIMIZED Chat [${userTier.toUpperCase()}]: ${userId.slice(-8)} - "${userMessage.slice(0, 50)}..."`);
 
@@ -399,12 +361,9 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       console.log('🔍 VISION DEBUG: Content is array:', Array.isArray(userMessageContent));
     }
 
-    // Handle streaming vs non-streaming with tier optimization
-    if (stream) {
-      return await handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance);
-    } else {
-      return await handleOptimizedNonStreaming(res, messages, userMessage, userId, conversationId, startTime, userTier, toolGuidance);
-    }
+    // FORCE STREAMING: All responses use streaming for real-time UX
+    console.log(`🔥 FORCING STREAMING: stream=${stream}, userTier=${userTier}`);
+    return await handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance);
 
   } catch (error) {
     console.error('❌ OPTIMIZED Chat error:', error);
