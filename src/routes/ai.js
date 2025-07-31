@@ -37,6 +37,8 @@ const fileUpload = multer({
     fieldSize: 50 * 1024 * 1024 // 50MB field size for large text content
   },
   fileFilter: (req, file, cb) => {
+    console.log(`📁 File upload attempt: ${file.fieldname} - ${file.mimetype} - ${file.originalname}`);
+    
     const allowedMimes = [
       'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff',
       'application/pdf', 'text/plain', 'application/json', 'text/markdown', 'text/csv',
@@ -117,10 +119,15 @@ const REAL_UBPM_TOOL = {
 };
 
 // OPTIMIZED ADAPTIVE CHAT ENDPOINT
-router.post('/adaptive-chat', protect, checkTierLimits, fileUpload.any(), async (req, res) => {
+router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
+  console.log(`📱 Mobile request received - Content-Type: ${req.get('Content-Type')}`);
+  console.log(`📱 Request fields: ${Object.keys(req.body).join(', ')}`);
+  fileUpload.any()(req, res, next);
+}, async (req, res) => {
   const startTime = Date.now();
   
   try {
+    console.log(`📱 After multer - Files: ${req.files?.length || 0}, Body keys: ${Object.keys(req.body).join(', ')}`);
     const { 
       message, 
       prompt, 
@@ -557,10 +564,11 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
 
 async function handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance) {
   res.writeHead(200, {
-    'Content-Type': 'text/plain',
+    'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
   });
 
   let accumulatedContent = '';
@@ -580,7 +588,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
     });
 
     streamResponse.on('data', (chunk) => {
-      const lines = chunk.toString().split('\\n').filter(line => line.trim() !== '');
+      const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
       
       for (const line of lines) {
         if (line.startsWith('data: ')) {
@@ -599,15 +607,15 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
                 content: choice.delta.content,
                 tier: userTier,
                 cognitiveEngineActive: true
-              })}\\n\\n`);
+              })}\n\n`);
             }
 
             // Enhanced tool call handling for streaming
             if (choice?.delta?.tool_calls) {
               res.write(`data: ${JSON.stringify({ 
-                content: userTier === 'aether' ? "\\n🔍 Performing advanced search..." : "\\n🔍 Searching...",
+                content: userTier === 'aether' ? "\n🔍 Performing advanced search..." : "\n🔍 Searching...",
                 tier: userTier
-              })}\\n\\n`);
+              })}\n\n`);
             }
 
           } catch (error) {
@@ -617,7 +625,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
       }
     });
 
-    streamResponse.data.on('end', async () => {
+    streamResponse.on('end', async () => {
       // Save conversation after streaming completes
       try {
         await Promise.all([
@@ -634,20 +642,20 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
         console.error('⚠️ Streaming save error:', saveError.message);
       }
       
-      res.write('data: [DONE]\\n\\n');
+      res.write('data: [DONE]\n\n');
       res.end();
     });
 
-    streamResponse.data.on('error', (err) => {
+    streamResponse.on('error', (err) => {
       console.error('❌ Streaming error:', err);
-      res.write('data: [DONE]\\n\\n');
+      res.write('data: [DONE]\n\n');
       res.end();
     });
 
   } catch (error) {
     console.error('❌ Streaming setup error:', error);
-    res.write(`data: ${JSON.stringify({ error: 'Streaming failed' })}\\n\\n`);
-    res.write('data: [DONE]\\n\\n');  
+    res.write(`data: ${JSON.stringify({ error: 'Streaming failed' })}\n\n`);
+    res.write('data: [DONE]\n\n');  
     res.end();
   }
 }
