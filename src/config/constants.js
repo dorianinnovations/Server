@@ -78,9 +78,9 @@ export const MEMORY_CONFIG = {
   MAX_RESPONSE_SIZE: 25000, // 25KB
   MAX_CACHE_SIZE: 200, // Reduced cache size further (from 500 to 200)
   CACHE_CLEANUP_INTERVAL: 120000, // 2 minutes (more frequent cleanup)
-  HEAP_USAGE_THRESHOLD: 0.10, // 10% before cleanup (ultra low for starter plan)
+  HEAP_USAGE_THRESHOLD: 0.75, // 75% before cleanup (reasonable for 256MB limit)
   COMPRESSION_THRESHOLD: 512, // 512B compression
-  FORCE_GC_THRESHOLD: 0.15, // Force GC at 15% (ultra aggressive for starter plan)
+  FORCE_GC_THRESHOLD: 0.85, // Force GC at 85% (reasonable threshold)
   LOW_MEMORY_MODE: true, // Enable memory conservation mode
   GC_COOLDOWN_MS: 30000 // 30 seconds cooldown (shorter for faster response)
 };
