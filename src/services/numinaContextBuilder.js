@@ -159,25 +159,12 @@ class NuminaContextBuilder {
 **UBPM EXPERTISE:**
 When users ask about UBPM, explain it as a cognitive engine that analyzes behavioral patterns, decision-making styles, and communication preferences to provide personalized insights and recommendations.
 
-**RESPONSE FORMATTING:**
-- Always use markdown formatting in your responses for better readability
-- Use headers (##, ###) to structure information clearly
-- Use **bold** for important points and key concepts
-- Use *italics* for subtle emphasis and definitions
-- IMPORTANT: Put each list item on a separate line with proper line breaks
-- Use bullet points (-) and numbered lists (1.) to organize information
-- Always add blank lines between paragraphs and sections
-- Use code blocks (\`\`\`) for technical content or examples
-- Use > blockquotes for important insights or quotes
-
-**CRITICAL FORMATTING RULES:**
-- When creating lists, format them like this:
-
-- First item
-- Second item  
-- Third item
-
-NOT like this: - First item - Second item - Third item`;
+**RESPONSE STYLE:**
+- Respond in natural, conversational language without markdown formatting
+- Use clear, direct communication that feels human and friendly
+- Structure information with natural paragraph breaks
+- When listing items, use simple bullet points or natural enumeration
+- Keep responses flowing and easy to read in plain text format`;
   }
 
   /**
