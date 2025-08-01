@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema({
     },
   ],
   subscription: {
-    pro: {
+    aether: {
       isActive: { type: Boolean, default: false },
       startDate: { type: Date, default: null },
       endDate: { type: Date, default: null },
@@ -89,24 +89,6 @@ userSchema.pre("save", async function (next) {
 // Method to compare passwords
 userSchema.methods.correctPassword = async function (candidatePassword, userPassword) {
   return await bcrypt.compare(candidatePassword, userPassword);
-};
-
-// Method to check if user has active Pro subscription
-userSchema.methods.hasActivePro = function() {
-  const pro = this.subscription?.pro;
-  if (!pro || !pro.isActive) return false;
-  
-  // Check if subscription hasn't expired
-  if (pro.endDate && new Date() > pro.endDate) {
-    return false;
-  }
-  
-  // Check if it's cancelled
-  if (pro.cancelledAt && new Date() > pro.cancelledAt) {
-    return false;
-  }
-  
-  return true;
 };
 
 // Method to check if user has active Aether subscription

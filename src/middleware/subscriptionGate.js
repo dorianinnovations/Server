@@ -24,7 +24,7 @@ const FEATURE_LIMITS = {
     customPersonality: false,
     prioritySpeed: true
   },
-  pro: {
+  aether: {
     contextualChat: { daily: -1, monthly: -1 }, // unlimited
     recommendations: { daily: -1, monthly: -1 },
     historicalInsights: { daily: -1, monthly: -1 },
@@ -37,8 +37,7 @@ const FEATURE_LIMITS = {
 
 const TIER_NAMES = {
   0: 'free',
-  1: 'premium', 
-  2: 'pro'
+  1: 'aether'
 };
 
 /**
@@ -98,7 +97,7 @@ export const checkFeatureAccess = (featureName, usageType = 'daily') => {
           limit,
           usage,
           resetTime,
-          upgradeAvailable: userTier !== 'pro',
+          upgradeAvailable: userTier !== 'aether',
           currentTier: userTier
         });
       }
@@ -213,7 +212,7 @@ export const addSubscriptionInfo = async (req, res, next) => {
         data.subscription = {
           tier: userTier,
           limits: FEATURE_LIMITS[userTier],
-          upgradeAvailable: userTier !== 'pro'
+          upgradeAvailable: userTier !== 'aether'
         };
       }
       return originalJson.call(this, data);

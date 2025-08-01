@@ -162,7 +162,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       const proactiveContext = await proactiveMemoryService.getProactiveContext(
         userId, 
         userMessage, 
-        userTier === 'aether' ? 15 : 8
+        userTier === 'aether' ? 5 : 3
       );
       
       conversationContext = proactiveContext.recentExchanges;
@@ -178,7 +178,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       
     } catch (memoryError) {
       console.warn('Proactive memory error, using standard memory:', memoryError.message);
-      const userContext = await enhancedMemoryService.getUserContext(userId, userTier === 'aether' ? 12 : 3);
+      const userContext = await enhancedMemoryService.getUserContext(userId, userTier === 'aether' ? 5 : 3);
       conversationContext = userContext.conversation?.recentMessages || [];
     }
 
@@ -270,7 +270,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       .catch(() => {});
 
     // Build messages with tier-appropriate context and attachment support
-    const contextLimit = userTier === 'aether' ? 10 : userTier === 'pro' ? 8 : 3;
+    const contextLimit = userTier === 'aether' ? 5 : 3;
     let systemPromptWithFiles = systemPrompt;
     
     // Add text file content to system prompt if present
@@ -355,7 +355,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
                 type: "image_url",
                 image_url: { 
                   url: img.url,
-                  detail: userTier === 'aether' ? 'high' : (userTier === 'pro' ? 'auto' : 'low')
+                  detail: userTier === 'aether' ? 'high' : 'low'
                 }
               }))
             ];
@@ -424,7 +424,6 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
   // Tier-based optimization with UBPM access
   const tierConfig = {
     core: { n_predict: 1500, temperature: 0.7, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] }, // Increased for in-depth responses
-    pro: { n_predict: 2000, temperature: 0.75, tools: [REAL_UBPM_TOOL, ...(toolGuidance.shouldUseTool ? [INSANE_SEARCH_TOOL] : [])] },
     aether: { n_predict: 3000, temperature: 0.8, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] } // Aether gets everything with extended responses
   };
 
@@ -478,7 +477,7 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
             
             if (searchResult.structure.results.length > 0) {
               assistantResponse += `\n\n**Sources:**\n`;
-              const sourceLimit = userTier === 'aether' ? 5 : userTier === 'pro' ? 3 : 2;
+              const sourceLimit = userTier === 'aether' ? 5 : 2;
               searchResult.structure.results.slice(0, sourceLimit).forEach((result, i) => {
                 assistantResponse += `${i+1}. [${result.title}](${result.url})\n`;
               });
@@ -576,7 +575,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
   try {
     const tierConfig = {
       core: { n_predict: 1500, temperature: 0.7, tools: [] }, // Increased for in-depth responses
-      pro: { n_predict: 2000, temperature: 0.75, tools: [] }, // Increased for in-depth responses  
+  
       aether: { n_predict: 3000, temperature: 0.8, tools: [] } // Increased for in-depth responses
     };
 
@@ -736,7 +735,7 @@ async function handleSearchWithAI(res, messages, userMessage, userId, conversati
       
       // Stream AI response with search context
       const streamResponse = await llmService.makeStreamingRequest(enhancedMessages, {
-        n_predict: userTier === 'aether' ? 3000 : (userTier === 'pro' ? 2000 : 1500),
+        n_predict: userTier === 'aether' ? 3000 : 1500,
         temperature: 0.7,
         tools: []
       });

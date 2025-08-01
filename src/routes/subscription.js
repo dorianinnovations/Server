@@ -22,7 +22,7 @@ router.get('/status', protect, async (req, res) => {
           endDate: subscription.endDate,
           autoRenew: subscription.autoRenew || false,
           nextBillingDate: subscription.nextBillingDate,
-          hasActiveSubscription: subscription.isActive && ['pro', 'aether'].includes(subscription.plan)
+          hasActiveSubscription: subscription.isActive && subscription.plan === 'aether'
         }
       }
     });
@@ -40,10 +40,10 @@ router.post('/numina-trace/subscribe', protect, async (req, res) => {
   try {
     const { plan, paymentMethodId } = req.body;
     
-    if (!['core', 'pro', 'aether'].includes(plan)) {
+    if (!['core', 'aether'].includes(plan)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid subscription plan. Must be core, pro, or aether.'
+        error: 'Invalid subscription plan. Must be core or aether.'
       });
     }
 
@@ -108,7 +108,7 @@ router.post('/numina-trace/subscribe', protect, async (req, res) => {
     // Send payment confirmation email (non-blocking)
     const subscriptionDetails = {
       plan: plan,
-      price: plan === 'pro' ? 29.99 : plan === 'aether' ? 99.99 : 0,
+      price: plan === 'aether' ? 99.99 : 0,
       currency: 'USD',
       nextBillingDate: nextBillingDate
     };
