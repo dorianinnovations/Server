@@ -562,6 +562,11 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
           }
 
           try {
+            // Skip empty or malformed data chunks
+            if (!data || data.trim() === '') {
+              continue;
+            }
+            
             const parsed = JSON.parse(data);
             const choice = parsed.choices?.[0];
             
@@ -578,7 +583,14 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
             // Tool calls disabled in streaming mode
 
           } catch (error) {
-            console.error('Stream parse error:', error.message);
+            // Log detailed parse error info for debugging
+            console.error('Stream parse error:', {
+              message: error.message,
+              data: data.substring(0, 100),
+              dataLength: data.length
+            });
+            // Continue processing other chunks instead of failing
+            continue;
           }
         }
       }
@@ -670,6 +682,11 @@ async function handleSearchWithAI(res, messages, userMessage, userId, conversati
               const data = line.slice(6);
               if (data === '[DONE]') return;
               
+              // Skip empty or malformed data chunks
+              if (!data || data.trim() === '') {
+                continue;
+              }
+              
               const parsed = JSON.parse(data);
               const choice = parsed.choices?.[0];
               
@@ -692,7 +709,12 @@ async function handleSearchWithAI(res, messages, userMessage, userId, conversati
                 })}\n\n`);
               }
             } catch (error) {
-              console.error('Stream parse error:', error.message);
+              console.error('Stream parse error:', {
+                message: error.message,
+                data: data.substring(0, 100),
+                dataLength: data.length
+              });
+              continue;
             }
           }
         }
