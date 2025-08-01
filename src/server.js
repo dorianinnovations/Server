@@ -33,6 +33,7 @@ import subscriptionRoutes from "./routes/subscription.js";
 import ubpmRoutes from "./routes/ubpm.js"; // CORE FEATURE: User Behavior Pattern Modeling
 import analyticsLLMRoutes from "./routes/analyticsLLM.js"; // PRESERVED: Your streaming analytics
 import personalizedAIRoutes from "./routes/personalizedAI.js"; // PRESERVED: Your contextual chat
+import conversationRoutes from "./routes/conversation.js"; // CRITICAL: Conversation management
 import { protect } from "./middleware/auth.js";
 // Removed: syncRoutes (offline sync not needed)
 // Removed: toolsRoutes (contained CreditPool dependencies)
@@ -194,6 +195,7 @@ const initializeServer = async () => {
   app.use("/ubpm", ubpmRoutes); // CORE FEATURE: UBPM endpoints
   app.use("/analyticsLLM", analyticsLLMRoutes); // PRESERVED: Your streaming analytics
   app.use("/personalizedAI", personalizedAIRoutes); // PRESERVED: Your contextual chat
+  app.use("/", conversationRoutes); // CRITICAL: Conversation management endpoints
   
   // Register mobile-optimized routes
   // Removed: sync routes
