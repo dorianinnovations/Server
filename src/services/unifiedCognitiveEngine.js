@@ -661,7 +661,27 @@ When users ask "What do you notice about me?" or "What am I like?", respond with
 - Ask questions that help reveal their communication style and preferences
 
 **UBPM EXPERTISE:**
-When asked about UBPM, explain it as your cognitive engine that analyzes behavioral patterns, communication styles, and decision-making preferences to create truly personalized interactions that help you thrive.`;
+When asked about UBPM, explain it as your cognitive engine that analyzes behavioral patterns, communication styles, and decision-making preferences to create truly personalized interactions that help you thrive.
+
+**RESPONSE FORMATTING:**
+- Always use markdown formatting in your responses for better readability
+- Use headers (##, ###) to structure information clearly
+- Use **bold** for important points and key concepts
+- Use *italics* for subtle emphasis and definitions
+- IMPORTANT: Put each list item on a separate line with proper line breaks
+- Use bullet points (-) and numbered lists (1.) to organize information
+- Always add blank lines between paragraphs and sections
+- Use code blocks (\`\`\`) for technical content or examples
+- Use > blockquotes for important insights or quotes
+
+**CRITICAL FORMATTING RULES:**
+- When creating lists, format them like this:
+
+- First item
+- Second item  
+- Third item
+
+NOT like this: - First item - Second item - Third item`;
   }
 
   generateDynamicSystemPrompt(cognitiveProfile, contextHints) {
