@@ -159,19 +159,19 @@ const initializeServer = async () => {
   app.locals.cache = createCache();
   setupMemoryMonitoring();
   
-  // Add aggressive memory monitoring for production
+  // Conservative memory monitoring for small instances
   setInterval(() => {
     const memoryUsage = process.memoryUsage();
     const heapUsedPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
     
-    if (heapUsedPercent > 85) {
+    if (heapUsedPercent > 10) {
       console.warn(`Memory cleanup: ${heapUsedPercent.toFixed(1)}% heap used`);
       app.locals.cache.clear();
       if (global.gc) {
         global.gc();
       }
     }
-  }, 30000); // Check every 30 seconds
+  }, 15000); // Check every 15 seconds
   // Cache and memory monitoring initialized
 
   // Root health endpoint for monitoring

@@ -3,10 +3,16 @@ services:
     name: numina-server
     env: node
     region: oregon
-    buildCommand: npm ci && ls -la src/ && node --check src/server.js
-    startCommand: node src/server.js
+    plan: starter
+    instanceCount: 1
+    buildCommand: npm ci --production && node --check src/server.js
+    startCommand: node --max-old-space-size=256 --optimize-for-size src/server.js
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 10000 
+        value: 10000
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=256 --optimize-for-size" 

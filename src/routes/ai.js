@@ -28,13 +28,13 @@ import { processContextInjection } from '../services/contextInjectionService.js'
 const router = express.Router();
 const llmService = createLLMService();
 
-// Configure multer for file uploads with generous Aether limits
+// Configure multer for file uploads with memory-optimized limits
 const fileUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB per file - generous for Aether users
-    files: 10, // Up to 10 files per request
-    fieldSize: 50 * 1024 * 1024 // 50MB field size for large text content
+    fileSize: 5 * 1024 * 1024, // 5MB per file - memory optimized
+    files: 3, // Max 3 files per request
+    fieldSize: 5 * 1024 * 1024 // 5MB field size
   },
   fileFilter: (req, file, cb) => {
     console.log(`📁 File upload attempt: ${file.fieldname} - ${file.mimetype} - ${file.originalname}`);
@@ -163,13 +163,13 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
     // Get conversation context with optimized memory retrieval
     let conversationContext = [];
     try {
-      const userContext = await enhancedMemoryService.getUserContext(userId, userTier === 'aether' ? 12 : 8);
+      const userContext = await enhancedMemoryService.getUserContext(userId, userTier === 'aether' ? 12 : 3);
       conversationContext = userContext.conversation?.recentMessages || [];
     } catch (memoryError) {
       console.warn('Memory service error, using fallback:', memoryError.message);
       const fallbackMemory = await ShortTermMemory.find({ userId })
         .sort({ timestamp: -1 })
-        .limit(userTier === 'aether' ? 10 : 6)
+        .limit(userTier === 'aether' ? 10 : 3)
         .lean();
       conversationContext = fallbackMemory.reverse().map(msg => ({
         role: msg.role,
@@ -243,7 +243,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       .catch(error => console.warn('Cognitive engine error:', error.message));
 
     // Build messages with tier-appropriate context and attachment support
-    const contextLimit = userTier === 'aether' ? 10 : userTier === 'pro' ? 8 : 6;
+    const contextLimit = userTier === 'aether' ? 10 : userTier === 'pro' ? 8 : 3;
     let systemPromptWithFiles = systemPrompt;
     
     // Add text file content to system prompt if present
@@ -379,6 +379,23 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
         success: false,
         error: error.message || 'Chat processing failed'
       });
+    }
+  } finally {
+    // Aggressive memory cleanup after processing
+    if (req.files) {
+      req.files.forEach(file => {
+        if (file.buffer) {
+          file.buffer = null;
+        }
+      });
+      req.files = null;
+    }
+    if (req.body) {
+      req.body = null;
+    }
+    // Force garbage collection if available
+    if (global.gc) {
+      setImmediate(() => global.gc());
     }
   }
 });
