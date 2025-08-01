@@ -205,6 +205,30 @@ router.get('/conversations', protect, async (req, res) => {
 });
 
 /**
+ * DELETE /conversations/all
+ * Delete all conversations for user
+ */
+router.delete('/conversations/all', protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const result = await conversationService.deleteAllConversations(userId);
+
+    res.json({
+      success: true,
+      data: result,
+      message: 'All conversations deleted successfully'
+    });
+  } catch (error) {
+    log.error('Error deleting all conversations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete conversations'
+    });
+  }
+});
+
+/**
  * DELETE /conversations/:id
  * Delete specific conversation
  */
@@ -238,30 +262,6 @@ router.delete('/conversations/:id', protect, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to delete conversation'
-    });
-  }
-});
-
-/**
- * DELETE /conversations/all
- * Delete all conversations for user
- */
-router.delete('/conversations/all', protect, async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const result = await conversationService.deleteAllConversations(userId);
-
-    res.json({
-      success: true,
-      data: result,
-      message: 'All conversations deleted successfully'
-    });
-  } catch (error) {
-    log.error('Error deleting all conversations:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete conversations'
     });
   }
 });
