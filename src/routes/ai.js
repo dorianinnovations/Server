@@ -16,7 +16,7 @@ import { createLLMService } from '../services/llmService.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 import conversationService from '../services/conversationService.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
-import ubpmCognitiveEngine from '../services/ubpmCognitiveEngine.js';
+import unifiedCognitiveEngine from '../services/unifiedCognitiveEngine.js';
 import numinaContextBuilder from '../services/numinaContextBuilder.js';
 import insaneWebSearch from '../tools/insaneWebSearch.js';
 import ubpmAnalysis from '../tools/ubpmAnalysis.js';
@@ -236,7 +236,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
     console.log(`🔧 Tool guidance: ${toolGuidance.shouldUseTool ? 'USE' : 'SKIP'} (${Math.round(toolGuidance.confidence * 100)}% confidence)`);
     
     // Trigger cognitive engine analysis in background (non-blocking)
-    ubpmCognitiveEngine.analyzeCognitivePatterns(userId, [{ content: userMessage }])
+    unifiedCognitiveEngine.analyzeCognitiveProfile(userId, [{ content: userMessage }])
       .then(result => {
         // Cognitive processing completed silently
       })
@@ -436,23 +436,23 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
           });
 
           if (searchResult.success) {
-            assistantResponse += `\\n\\n**Search Results for "${args.query}":**\\n`;
+            assistantResponse += `\n\n**Search Results for "${args.query}":\n`;
             assistantResponse += searchResult.structure.analysis;
             
             if (searchResult.structure.results.length > 0) {
-              assistantResponse += `\\n\\n**Sources:**\\n`;
+              assistantResponse += `\n\n**Sources:**\n`;
               const sourceLimit = userTier === 'aether' ? 5 : userTier === 'pro' ? 3 : 2;
               searchResult.structure.results.slice(0, sourceLimit).forEach((result, i) => {
-                assistantResponse += `${i+1}. [${result.title}](${result.url})\\n`;
+                assistantResponse += `${i+1}. [${result.title}](${result.url})\n`;
               });
             }
           } else {
-            assistantResponse += `\\n\\nI searched for "${args.query}" but encountered an issue: ${searchResult.error}`;
+            assistantResponse += `\n\nI searched for "${args.query}" but encountered an issue: ${searchResult.error}`;
           }
 
         } catch (toolError) {
           console.error('❌ Web search tool error:', toolError);
-          assistantResponse += `\\n\\nI tried to search for information but encountered an error: ${toolError.message}`;
+          assistantResponse += `\n\nI tried to search for information but encountered an error: ${toolError.message}`;
         }
       } else if (toolCall.function.name === 'real_ubpm_analysis') {
         try {
@@ -467,14 +467,14 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
           });
 
           if (ubpmResult.success) {
-            assistantResponse += `\\n\\n${ubpmResult.analysis}`;
+            assistantResponse += `\n\n${ubpmResult.analysis}`;
           } else {
-            assistantResponse += `\\n\\nI tried to analyze your behavioral patterns but encountered an issue: ${ubpmResult.error}`;
+            assistantResponse += `\n\nI tried to analyze your behavioral patterns but encountered an issue: ${ubpmResult.error}`;
           }
 
         } catch (toolError) {
           console.error('❌ UBPM analysis tool error:', toolError);
-          assistantResponse += `\\n\\nI tried to analyze your patterns but encountered an error: ${toolError.message}`;
+          assistantResponse += `\n\nI tried to analyze your patterns but encountered an error: ${toolError.message}`;
         }
       }
     }

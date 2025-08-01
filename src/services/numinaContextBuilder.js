@@ -5,7 +5,7 @@
  * This ELIMINATES expensive LLM inference and provides Numina with perfect context.
  */
 
-import ubpmCognitiveEngine from './ubpmCognitiveEngine.js';
+import unifiedCognitiveEngine from './unifiedCognitiveEngine.js';
 import redisService from './redisService.js';
 
 class NuminaContextBuilder {
@@ -17,12 +17,23 @@ class NuminaContextBuilder {
    */
   async buildOptimizedSystemPrompt(userId, conversationContext = []) {
     try {
+      // Use unified cognitive engine for optimized prompts
+      return await unifiedCognitiveEngine.buildOptimizedSystemPrompt(userId, conversationContext);
+    } catch (error) {
+      console.error('Context builder error:', error);
+      return this.buildMinimalSystemPrompt();
+    }
+  }
+
+  // Legacy method for compatibility - now delegates to unified engine
+  async buildOptimizedSystemPromptLegacy(userId, conversationContext = []) {
+    try {
       // Get pre-computed cognitive engine data (cached)
-      let cognitiveData = await redisService.get(`cognitive-engine:${userId}`);
+      let cognitiveData = await redisService.get(`unified-cognitive:${userId}`);
       
       // If no cache, trigger background analysis (non-blocking)
       if (!cognitiveData) {
-        ubpmCognitiveEngine.analyzeCognitivePatterns(userId, conversationContext.slice(-5))
+        unifiedCognitiveEngine.analyzeCognitiveProfile(userId, conversationContext.slice(-5))
           .catch(error => console.warn('Background cognitive analysis failed:', error));
         
         // Use minimal fallback context

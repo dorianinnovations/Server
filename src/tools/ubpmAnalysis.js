@@ -1,4 +1,4 @@
-import ubpmCognitiveEngine from '../services/ubpmCognitiveEngine.js';
+import unifiedCognitiveEngine from '../services/unifiedCognitiveEngine.js';
 import UserBehaviorProfile from '../models/UserBehaviorProfile.js';
 import enhancedMemoryService from '../services/enhancedMemoryService.js';
 
@@ -21,7 +21,7 @@ export default async function ubpmAnalysis(args, userContext) {
     
     // Real-time cognitive analysis (from realUBPMAnalysis.js)
     if (type === 'cognitive') {
-      const cognitiveData = await ubpmCognitiveEngine.analyzeCognitivePatterns(userId, []);
+      const cognitiveData = await unifiedCognitiveEngine.analyzeCognitiveProfile(userId, []);
       
       if (!cognitiveData) {
         return {
@@ -93,7 +93,7 @@ ${includeRawData ? '**Raw Scores**: ' + JSON.stringify(cognitiveData.cognitivePr
 
     // Full comprehensive analysis (from realUBPMAnalysis.js)
     if (type === 'full') {  
-      const userAnalysis = await ubpmCognitiveEngine.getUserAnalysis(userId);
+      const userAnalysis = await unifiedCognitiveEngine.getUserAnalysis(userId);
       
       return {
         success: true,

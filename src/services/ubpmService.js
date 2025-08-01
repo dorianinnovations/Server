@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import ShortTermMemory from '../models/ShortTermMemory.js';
 import logger from '../utils/logger.js';
 import websocketService from './websocketService.js';
+import unifiedCognitiveEngine from './unifiedCognitiveEngine.js';
 
 /**
  * UBPM (User Behavior Profile Model) Service
@@ -735,14 +736,21 @@ class UBPMService {
   }
 
   /**
-   * Get current UBPM context for AI conversations
+   * Get current UBPM context for AI conversations - Enhanced with unified engine
    */
   async getUBPMContextForAI(userId) {
     try {
+      // Try unified cognitive engine first (faster, cached)
+      const cognitiveAnalysis = await unifiedCognitiveEngine.analyzeCognitiveProfile(userId, []);
+      
+      if (cognitiveAnalysis && cognitiveAnalysis.confidence > 0.5) {
+        return this.generateEnhancedAIContext(cognitiveAnalysis);
+      }
+
+      // Fallback to traditional UBPM analysis
       const profile = await UserBehaviorProfile.findOne({ userId });
       if (!profile) return null;
 
-      // Get most recent and confident patterns
       const recentPatterns = profile.behaviorPatterns
         .filter(p => p.confidence > 0.7)
         .sort((a, b) => new Date(b.lastObserved) - new Date(a.lastObserved))
@@ -755,6 +763,55 @@ class UBPMService {
       logger.error('🧠 UBPM: Failed to get AI context', error);
       return null;
     }
+  }
+
+  /**
+   * Generate enhanced AI context from unified cognitive analysis
+   */
+  generateEnhancedAIContext(cognitiveAnalysis) {
+    const { cognitiveProfile, contextHints, confidence } = cognitiveAnalysis;
+    
+    const ubpmDefinition = `**UBPM (User Behavior Pattern Modeling)** is Numina's advanced behavioral analysis system that tracks and analyzes user interaction patterns, communication styles, emotional responses, and temporal behaviors to create personalized AI experiences.`;
+
+    let contextString = ubpmDefinition;
+    
+    // Enhanced cognitive insights
+    if (cognitiveProfile) {
+      const insights = [];
+      
+      if (cognitiveProfile.decisionMaking?.primary) {
+        insights.push(`Decision Making: ${cognitiveProfile.decisionMaking.primary} (${Math.round(cognitiveProfile.decisionMaking.confidence * 100)}% confidence)`);
+      }
+      
+      if (cognitiveProfile.communication?.primary) {
+        insights.push(`Communication: ${cognitiveProfile.communication.primary} style`);
+      }
+      
+      if (cognitiveProfile.cognitiveLoad?.loadLevel) {
+        insights.push(`Cognitive Load: ${cognitiveProfile.cognitiveLoad.loadLevel}`);
+      }
+      
+      if (insights.length > 0) {
+        contextString += `\n\n**Current Cognitive Profile**: ${insights.join('; ')}`;
+      }
+    }
+
+    // Response optimization hints
+    if (contextHints) {
+      const hints = [];
+      if (contextHints.preferredLength) hints.push(`Preferred length: ${contextHints.preferredLength}`);
+      if (contextHints.technicalLevel) hints.push(`Technical level: ${contextHints.technicalLevel}`);
+      if (contextHints.motivationalApproach) hints.push(`Motivational approach: ${contextHints.motivationalApproach}`);
+      
+      if (hints.length > 0) {
+        contextString += `\n\n**Response Optimization**: ${hints.join(', ')}`;
+      }
+    }
+
+    contextString += `\n\n**Overall Confidence**: ${Math.round(confidence * 100)}%`;
+    contextString += `\n\n**UBPM Instructions**: Use this behavioral analysis to personalize your responses. Reference specific patterns naturally when relevant. When asked about UBPM, explain it as your built-in system for understanding user behavior patterns.`;
+
+    return contextString;
   }
 
   /**
