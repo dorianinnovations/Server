@@ -289,7 +289,6 @@ export const setupMemoryMonitoring = () => {
     // Memory pressure detection and cleanup
     if (heapUsageRatio > MEMORY_CONFIG.HEAP_USAGE_THRESHOLD) {
       memoryPressureCount++;
-      console.log(`🔍 DEBUG: Threshold=${MEMORY_CONFIG.HEAP_USAGE_THRESHOLD}, Current=${heapUsageRatio.toFixed(3)}`);
       const cleanedCount = globalCache.cleanupByMemoryPressure();
       // Memory pressure detected - cleaning cache
     } else {

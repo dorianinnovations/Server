@@ -164,7 +164,7 @@ const initializeServer = async () => {
     const memoryUsage = process.memoryUsage();
     const heapUsedPercent = (memoryUsage.heapUsed / memoryUsage.heapTotal) * 100;
     
-    if (heapUsedPercent > 75) {
+    if (heapUsedPercent > 90) {
       console.warn(`Memory cleanup: ${heapUsedPercent.toFixed(1)}% heap used (${Math.round(memoryUsage.heapUsed/1024/1024)}MB/${Math.round(memoryUsage.heapTotal/1024/1024)}MB)`);
       app.locals.cache.clear();
       if (global.gc) {

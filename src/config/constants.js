@@ -78,7 +78,7 @@ export const MEMORY_CONFIG = {
   MAX_RESPONSE_SIZE: 25000, // 25KB
   MAX_CACHE_SIZE: 200, // Reduced cache size further (from 500 to 200)
   CACHE_CLEANUP_INTERVAL: 120000, // 2 minutes (more frequent cleanup)
-  HEAP_USAGE_THRESHOLD: 0.75, // 75% before cleanup (reasonable for 256MB limit)
+  HEAP_USAGE_THRESHOLD: 0.90, // 90% before cleanup (normal Node.js usage)
   COMPRESSION_THRESHOLD: 512, // 512B compression
   FORCE_GC_THRESHOLD: 0.85, // Force GC at 85% (reasonable threshold)
   LOW_MEMORY_MODE: true, // Enable memory conservation mode
