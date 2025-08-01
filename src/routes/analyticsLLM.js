@@ -46,12 +46,12 @@ router.post('/', protect, analyticsRateLimiters.llmAnalytics, async (req, res) =
     // Generate insight for specific category
     const result = await aiInsightService.generateCategoryInsight(userId, category, forceGenerate);
     
-    if (!result.success && result.reason === 'cooldown_active') {
+    if (!result.success && result.error === 'User is on cooldown') {
       return res.status(429).json({
         success: false,
         reason: 'cooldown_active',
         message: `Insight generation is on cooldown for ${category}`,
-        cooldown: result.cooldown,
+        cooldownEndTime: result.cooldownEndTime,
         category
       });
     }
@@ -132,15 +132,14 @@ router.post('/insights', protect, analyticsRateLimiters.llmAnalytics, async (req
           res.write(`data: ${JSON.stringify({ 
             type: 'error', 
             error: result.error,
-            reason: result.reason,
-            cooldown: result.cooldown 
+            cooldownEndTime: result.cooldownEndTime 
           })}\n\n`);
         } else {
           // Send the complete insight
           res.write(`data: ${JSON.stringify({ 
             type: 'insight', 
             insight: result.insight,
-            processingTime: result.processingTime,
+            confidence: result.confidence,
             category 
           })}\n\n`);
         }
@@ -160,12 +159,12 @@ router.post('/insights', protect, analyticsRateLimiters.llmAnalytics, async (req
       // Standard JSON response
       const result = await aiInsightService.generateCategoryInsight(userId, category, forceGenerate);
       
-      if (!result.success && result.reason === 'cooldown_active') {
+      if (!result.success && result.error === 'User is on cooldown') {
         return res.status(429).json({
           success: false,
           reason: 'cooldown_active',
           message: `Insight generation is on cooldown for ${category}`,
-          cooldown: result.cooldown
+          cooldownEndTime: result.cooldownEndTime
         });
       }
 
@@ -180,7 +179,7 @@ router.post('/insights', protect, analyticsRateLimiters.llmAnalytics, async (req
       res.json({
         success: true,
         insight: result.insight,
-        processingTime: result.processingTime,
+        confidence: result.confidence,
         category,
         timestamp: Date.now()
       });
@@ -496,9 +495,7 @@ router.post('/real-time-insights', protect, analyticsRateLimiters.llmAnalytics, 
 
     res.json({
       success: true,
-      currentState: result.state,
-      insights: result.insights,
-      recommendations: result.recommendations,
+      insight: result.insight,
       confidence: result.confidence,
       timeWindow,
       analysisType,
@@ -518,29 +515,34 @@ router.post('/real-time-insights', protect, analyticsRateLimiters.llmAnalytics, 
  * Helper function to generate recommendations
  */
 async function generateRecommendations(userData, category, type) {
-  const { categorizedData, userContext } = userData;
-  
+  // userData now contains real database structure from getUserAnalyticsData
   const recommendations = [];
   
-  // Generate category-specific recommendations
+  // Generate category-specific recommendations based on real data
   switch (category) {
     case 'communication':
+      const commPatterns = userData.patterns?.communication || [];
       recommendations.push({
         type: 'communication_improvement',
         title: 'Enhance Your Communication Style',
-        description: 'Based on your interaction patterns, consider varying your response length for different contexts.',
+        description: commPatterns.length > 0 
+          ? `Based on your ${commPatterns.join(', ')} patterns, consider exploring new communication approaches.`
+          : 'Continue engaging in conversations to develop your communication patterns.',
         priority: 'medium',
         actionable: true
       });
       break;
       
     case 'growth':
+      const totalInteractions = userData.totalInteractions || 0;
       recommendations.push({
         type: 'goal_setting',
         title: 'Structured Goal Framework',
-        description: 'Your growth trajectory suggests you would benefit from a more structured approach to goal setting.',
+        description: totalInteractions > 10 
+          ? 'Your engagement history suggests you would benefit from a more structured approach to goal setting.'
+          : 'Keep engaging to unlock personalized growth recommendations.',
         priority: 'high',
-        actionable: true
+        actionable: totalInteractions > 10
       });
       break;
       
@@ -548,7 +550,7 @@ async function generateRecommendations(userData, category, type) {
       recommendations.push({
         type: 'general_insight',
         title: 'Continue Your Journey',
-        description: 'Your engagement patterns show consistent growth and self-awareness.',
+        description: `Based on ${userData.totalInteractions || 0} interactions, your engagement shows ${userData.confidence > 0.5 ? 'strong' : 'developing'} patterns.`,
         priority: 'low',
         actionable: false
       });
@@ -561,23 +563,26 @@ async function generateRecommendations(userData, category, type) {
  * Helper function to analyze user patterns
  */
 async function analyzeUserPatterns(userData, timeframe, categories) {
-  const { categorizedData, userContext } = userData;
-  
+  // userData now contains real database structure
   const patterns = {
     temporal: {
-      mostActiveTime: userContext.mostActiveTimeOfDay,
-      sessionFrequency: userContext.sessionFrequency,
-      consistency: 0.8
+      mostActiveTime: 'evening', // Could be derived from conversation timestamps
+      sessionFrequency: userData.recentActivity > 5 ? 'high' : 'moderate',
+      consistency: Math.min(userData.confidence || 0.5, 0.9)
     },
     behavioral: {
-      communicationStyle: userContext.communicationStyle,
-      averageMessageLength: userContext.avgMessageLength,
-      engagementLevel: 'high'
+      communicationPatterns: userData.patterns?.behavioral || [],
+      totalInteractions: userData.totalInteractions || 0,
+      engagementLevel: userData.totalInteractions > 10 ? 'high' : userData.totalInteractions > 3 ? 'moderate' : 'developing'
+    },
+    emotional: {
+      patterns: userData.patterns?.emotional || [],
+      confidence: userData.confidence || 0.5
     },
     growth: {
-      trajectory: 'upward',
-      learningRate: 'steady',
-      adaptability: 'high'
+      trajectory: userData.confidence > 0.7 ? 'strong' : userData.confidence > 0.4 ? 'developing' : 'emerging',
+      dataPoints: userData.totalInteractions || 0,
+      profileCompleteness: userData.profileCompleteness || 0
     }
   };
   
@@ -590,7 +595,7 @@ async function analyzeUserPatterns(userData, timeframe, categories) {
 router.post('/insights/creativity', protect, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { message = 'general creativity analysis' } = req.body;
+    // Creativity analysis request
     
     // Get user analytics data
     const analyticsData = await aiInsightService.getUserAnalyticsData(userId);

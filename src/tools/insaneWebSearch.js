@@ -200,15 +200,8 @@ async function performAdvancedSearch(query, maxResults, realTime) {
   console.log(`🔑 API Keys Check: SERPAPI=${!!process.env.SERPAPI_API_KEY}, GOOGLE=${!!process.env.GOOGLE_SEARCH_API_KEY}`);
   
   if (!process.env.SERPAPI_API_KEY && !process.env.GOOGLE_SEARCH_API_KEY) {
-    console.warn('⚠️ No search API keys configured - returning mock results');
-    return [{
-      title: "Search API Not Configured",
-      link: "https://numina.ai/setup", 
-      snippet: "Web search functionality requires API keys to be configured. Please contact your administrator to enable web search capabilities.",
-      position: 1,
-      source: 'system-message',
-      date: new Date().toISOString()
-    }];
+    console.error('⚠️ No search API keys configured - web search unavailable');
+    throw new Error('Web search functionality requires API keys to be configured. Please set SERPAPI_API_KEY or GOOGLE_SEARCH_API_KEY environment variables.');
   }
   
   

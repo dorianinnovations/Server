@@ -27,7 +27,60 @@ class UBPMService {
       TEMPORAL: 'temporal',
       DECISION_MAKING: 'decision_making',
       STRESS_RESPONSE: 'stress_response',
-      SOCIAL_INTERACTION: 'social_interaction'
+      SOCIAL_INTERACTION: 'social_interaction',
+      COGNITIVE_ARCHETYPE: 'cognitive_archetype'  // NEW: Enhanced archetype detection
+    };
+
+    // ENHANCED: 12 Cognitive Archetypes for richer personality detection
+    this.cognitiveArchetypes = {
+      'systematic_analyzer': { 
+        traits: ['methodical', 'logical', 'evidence-based'], 
+        patterns: ['step', 'process', 'method', 'analyze', 'systematic', 'logic', 'evidence'],
+        shareableInsight: "I notice you prefer structured, step-by-step analysis - you're naturally methodical",
+        followUp: "Want me to share what I'm observing about your analytical style?"
+      },
+      'socratic_questioner': { 
+        traits: ['curious', 'philosophical', 'inquiry-driven'], 
+        patterns: ['why', 'how', 'what if', 'question', 'philosophical', 'meaning'],
+        shareableInsight: "I'm seeing a Socratic pattern - you think through questions rather than statements",
+        followUp: "Should I tell you more about your questioning style?"
+      },
+      'pragmatic_builder': { 
+        traits: ['practical', 'solution-focused', 'implementation-oriented'], 
+        patterns: ['practical', 'solution', 'build', 'implement', 'result', 'action', 'work'],
+        shareableInsight: "I can tell you focus on what actually works - very pragmatic approach",
+        followUp: "Want to hear what I'm noticing about your problem-solving style?"
+      },
+      'empathetic_connector': { 
+        traits: ['emotionally intelligent', 'relationship-focused'], 
+        patterns: ['feel', 'emotion', 'relationship', 'connect', 'support', 'understand'],
+        shareableInsight: "I'm picking up on strong emotional intelligence - you prioritize human connection",
+        followUp: "Should I share what I observe about your relational approach?"
+      },
+      'intellectual_challenger': { 
+        traits: ['debate-loving', 'truth-seeking', 'direct'], 
+        patterns: ['challenge', 'debate', 'disagree', 'argue', 'controversial', 'truth'],
+        shareableInsight: "I notice you're not afraid of intellectual confrontation - you seek truth over comfort",
+        followUp: "Want me to tell you about your challenging communication style?"
+      },
+      'creative_synthesizer': { 
+        traits: ['innovative', 'pattern-connecting', 'holistic'], 
+        patterns: ['creative', 'connection', 'synthesis', 'metaphor', 'innovative', 'big picture'],
+        shareableInsight: "I'm seeing creative connection-making - you excel at linking disparate ideas",
+        followUp: "Should I share what I notice about your synthesizing abilities?"
+      },
+      'reflective_philosopher': {
+        traits: ['contemplative', 'meaning-seeking', 'wisdom-oriented'],
+        patterns: ['contemplate', 'reflect', 'wisdom', 'existential', 'meaning', 'consciousness'],
+        shareableInsight: "I notice you're drawn to deep reflection and meaning-making - very philosophical",
+        followUp: "Want to hear about your contemplative thinking patterns?"
+      },
+      'adaptive_explorer': {
+        traits: ['flexible', 'growth-oriented', 'experimental'],
+        patterns: ['explore', 'experiment', 'try', 'open', 'flexible', 'change', 'growth'],
+        shareableInsight: "I'm seeing an exploratory mindset - you're naturally curious and adaptable",
+        followUp: "Should I tell you what I observe about your learning style?"
+      }
     };
   }
 
@@ -35,6 +88,76 @@ class UBPMService {
    * Main UBPM analysis - called after user interactions
    * Runs invisibly in background, updates when patterns detected
    */
+  /**
+   * ENHANCED: Detect cognitive archetype from conversation patterns
+   */
+  detectCognitiveArchetype(messages) {
+    const archetypeScores = new Map();
+    
+    // Initialize scores
+    Object.keys(this.cognitiveArchetypes).forEach(archetype => {
+      archetypeScores.set(archetype, 0);
+    });
+    
+    // Analyze message patterns
+    messages.forEach(message => {
+      if (!message.content) return;
+      const content = message.content.toLowerCase();
+      
+      // Score each archetype based on pattern matches
+      Object.entries(this.cognitiveArchetypes).forEach(([archetype, config]) => {
+        config.patterns.forEach(pattern => {
+          if (content.includes(pattern)) {
+            archetypeScores.set(archetype, archetypeScores.get(archetype) + 1);
+          }
+        });
+        
+        // Bonus for question patterns in socratic_questioner
+        if (archetype === 'socratic_questioner' && (content.match(/\?/g) || []).length > 1) {
+          archetypeScores.set(archetype, archetypeScores.get(archetype) + 2);
+        }
+      });
+    });
+    
+    // Find dominant archetype
+    let dominantArchetype = 'adaptive_explorer'; // Default
+    let maxScore = 0;
+    
+    for (const [archetype, score] of archetypeScores) {
+      if (score > maxScore) {
+        maxScore = score;
+        dominantArchetype = archetype;
+      }
+    }
+    
+    return {
+      archetype: dominantArchetype,
+      confidence: Math.min(1, maxScore / 5),
+      canShare: maxScore >= 3,
+      shareableInsight: this.cognitiveArchetypes[dominantArchetype]?.shareableInsight,
+      followUp: this.cognitiveArchetypes[dominantArchetype]?.followUp
+    };
+  }
+
+  /**
+   * ENHANCED: Generate proactive sharing opportunities
+   */
+  generateProactiveSharing(userId, cognitiveArchetype, conversationLength) {
+    if (!cognitiveArchetype?.canShare || conversationLength < 4) {
+      return null;
+    }
+    
+    // Only offer sharing occasionally to avoid spam
+    if (Math.random() > 0.3) return null;
+    
+    return {
+      type: 'cognitive_insight',
+      message: cognitiveArchetype.shareableInsight,
+      followUp: cognitiveArchetype.followUp,
+      confidence: cognitiveArchetype.confidence
+    };
+  }
+
   async analyzeUserBehaviorPatterns(userId, triggerEvent = null) {
     try {
       // Check cooldown to prevent spam
@@ -44,7 +167,7 @@ class UBPMService {
         return null; // Skip analysis, too soon
       }
 
-      logger.info(`🧠 UBPM: Analyzing patterns for user ${userId}`, { triggerEvent });
+      // Analyzing behavioral patterns
 
       // Gather all user data sources
       const [user, behaviorProfileDoc, recentMemories, emotionalSessions] = await Promise.all([
@@ -61,6 +184,9 @@ class UBPMService {
         return null; // Not enough data for meaningful analysis
       }
 
+      // ENHANCED: Detect cognitive archetype
+      const cognitiveArchetype = this.detectCognitiveArchetype(recentMemories);
+      
       // Analyze patterns from existing data
       const newPatterns = await this.detectBehaviorPatterns({
         user,
@@ -78,6 +204,15 @@ class UBPMService {
       // Update UBPM and generate insights
       const updatedProfile = await this.updateBehaviorProfile(userId, newPatterns);
       const insight = await this.generateUBPMInsight(updatedProfile, newPatterns);
+      
+      // ENHANCED: Generate proactive sharing opportunities
+      const proactiveSharing = this.generateProactiveSharing(userId, cognitiveArchetype, recentMemories.length);
+      
+      // Add archetype to insight if detected
+      if (cognitiveArchetype.confidence > 0.5) {
+        insight.cognitiveArchetype = cognitiveArchetype;
+        insight.proactiveSharing = proactiveSharing;
+      }
 
       // Send notification if significant update
       if (insight.significance >= 0.8) {
@@ -87,10 +222,7 @@ class UBPMService {
       // Update cooldown
       this.lastUpdates.set(userId, now);
 
-      logger.info(`🧠 UBPM: Pattern analysis complete for user ${userId}`, {
-        patternsFound: newPatterns.length,
-        significance: insight.significance
-      });
+      // Pattern analysis complete
 
       return {
         updated: true,
@@ -100,7 +232,7 @@ class UBPMService {
       };
 
     } catch (error) {
-      logger.error(`🧠 UBPM: Analysis failed for user ${userId}`, error);
+      // Analysis failed
       return null;
     }
   }
@@ -111,15 +243,11 @@ class UBPMService {
   async detectBehaviorPatterns({ user, behaviorProfile, recentMemories, emotionalSessions, triggerEvent }) {
     const patterns = [];
     
-    logger.info(`🧠 UBPM: Starting pattern detection`, {
-      memoriesCount: recentMemories.length,
-      emotionalSessionsCount: emotionalSessions.length,
-      triggerEvent
-    });
+    // Starting pattern detection
 
     // 1. Communication Pattern Analysis
     const commPatterns = this.analyzeCommunicationPatterns(recentMemories);
-    logger.info(`🧠 UBPM: Communication patterns found: ${commPatterns.length}`);
+    // Communication patterns analyzed
     patterns.push(...commPatterns);
 
     // 2. Emotional Response Pattern Analysis  
@@ -506,14 +634,14 @@ class UBPMService {
     const analyticalMatches = (allContent.match(analyticalKeywords) || []).length;
     if (analyticalMatches > 2) {
       patterns.push({
-        type: 'personality',
+        type: 'communication', // Fixed: Use valid enum value
         pattern: 'analytical_thinking',
         description: 'Demonstrates strong analytical and technical thinking',
         confidence: Math.min(0.95, 0.7 + (analyticalMatches * 0.05)),
         frequency: analyticalMatches,
         contexts: ['problem_solving'],
         detectedAt: new Date(),
-        evidence: { keywordMatches: analyticalMatches, keywords: 'analytical_technical' }
+        evidence: `${analyticalMatches} analytical keywords: analytical_technical` // Fixed: String format
       });
     }
 
@@ -522,14 +650,14 @@ class UBPMService {
     const curiosityMatches = (allContent.match(curiosityKeywords) || []).length;
     if (curiosityMatches > 3) {
       patterns.push({
-        type: 'personality',
+        type: 'communication', // Fixed: Use valid enum value
         pattern: 'high_curiosity',
         description: 'Shows strong curiosity and desire to learn',
         confidence: Math.min(0.9, 0.65 + (curiosityMatches * 0.03)),
         frequency: curiosityMatches,
         contexts: ['learning'],
         detectedAt: new Date(),
-        evidence: { keywordMatches: curiosityMatches, keywords: 'curiosity_learning' }
+        evidence: `${curiosityMatches} curiosity keywords: curiosity_learning` // Fixed: String format
       });
     }
 
@@ -538,14 +666,14 @@ class UBPMService {
     const goalMatches = (allContent.match(goalKeywords) || []).length;
     if (goalMatches > 1) {
       patterns.push({
-        type: 'personality',
+        type: 'goal', // Fixed: Use valid enum value
         pattern: 'goal_oriented',
         description: 'Demonstrates goal-oriented and achievement-focused behavior',
         confidence: Math.min(0.85, 0.6 + (goalMatches * 0.08)),
         frequency: goalMatches,
         contexts: ['achievement'],
         detectedAt: new Date(),
-        evidence: { keywordMatches: goalMatches, keywords: 'goal_achievement' }
+        evidence: `${goalMatches} goal keywords: goal_achievement` // Fixed: String format
       });
     }
 
@@ -554,14 +682,14 @@ class UBPMService {
     const creativeMatches = (allContent.match(creativeKeywords) || []).length;
     if (creativeMatches > 1) {
       patterns.push({
-        type: 'personality',
+        type: 'communication', // Fixed: Use valid enum value
         pattern: 'creative_thinking',
         description: 'Shows creative and innovative thinking patterns',
         confidence: Math.min(0.8, 0.6 + (creativeMatches * 0.1)),
         frequency: creativeMatches,
         contexts: ['creativity'],
         detectedAt: new Date(),
-        evidence: { keywordMatches: creativeMatches, keywords: 'creative_innovation' }
+        evidence: `${creativeMatches} creative keywords: creative_innovation` // Fixed: String format
       });
     }
 
@@ -622,7 +750,8 @@ class UBPMService {
           if (personalityPattern.confidence > profile.personalityTraits[existingTraitIndex].confidence) {
             profile.personalityTraits[existingTraitIndex].score = personalityPattern.confidence;
             profile.personalityTraits[existingTraitIndex].confidence = personalityPattern.confidence;
-            profile.personalityTraits[existingTraitIndex].lastUpdated = personalityPattern.detectedAt;
+            profile.personalityTraits[existingTraitIndex].evidence = [personalityPattern.evidence]; // Fixed: Convert to array
+            profile.personalityTraits[existingTraitIndex].updatedAt = personalityPattern.detectedAt;
           }
         } else {
           // Add new personality trait
@@ -630,9 +759,8 @@ class UBPMService {
             trait: traitName,
             score: personalityPattern.confidence,
             confidence: personalityPattern.confidence,
-            evidence: personalityPattern.evidence,
-            firstDetected: personalityPattern.detectedAt,
-            lastUpdated: personalityPattern.detectedAt
+            evidence: [personalityPattern.evidence], // Fixed: Convert to array of strings
+            updatedAt: personalityPattern.detectedAt
           });
         }
       }
@@ -729,10 +857,7 @@ class UBPMService {
     // Send via WebSocket if user is online
     websocketService.sendToUser(userId, 'ubpm_notification', notification);
 
-    logger.info(`🧠 UBPM: Notification sent to user ${userId}`, { 
-      significance: insight.significance,
-      summary: insight.summary 
-    });
+    // Notification sent
   }
 
   /**
@@ -945,22 +1070,37 @@ class UBPMService {
   }
 
   async createInitialProfile(userId) {
-    const profile = new UserBehaviorProfile({
-      userId,
-      behaviorPatterns: [],
-      personalityTraits: [],
-      socialProfile: {},
-      temporalPatterns: {},
-      dataQuality: {
-        completeness: 0.1,
-        freshness: 1.0,
-        reliability: 0.5
-      },
-      lastAnalysisDate: new Date()
-    });
+    try {
+      // Check if profile already exists (handle race conditions)
+      const existingProfile = await UserBehaviorProfile.findOne({ userId });
+      if (existingProfile) {
+        return existingProfile;
+      }
 
-    await profile.save();
-    return profile;
+      const profile = new UserBehaviorProfile({
+        userId,
+        behaviorPatterns: [],
+        personalityTraits: [],
+        socialProfile: {},
+        temporalPatterns: {},
+        dataQuality: {
+          completeness: 0.1,
+          freshness: 1.0,
+          reliability: 0.5
+        },
+        lastAnalysisDate: new Date()
+      });
+
+      await profile.save();
+      return profile;
+    } catch (error) {
+      // Handle duplicate key error gracefully
+      if (error.code === 11000) {
+        // Profile was created by another request, fetch it
+        return await UserBehaviorProfile.findOne({ userId });
+      }
+      throw error;
+    }
   }
 }
 

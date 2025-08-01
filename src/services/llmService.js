@@ -40,7 +40,7 @@ export const createLLMService = () => {
   const makeLLMRequest = async (promptOrMessages, options = {}) => {
     const {
       stop = null,
-      n_predict = 500,
+      n_predict = 1500,
       temperature = 0.8,
       tools = null,
       tool_choice = "auto",
@@ -201,7 +201,7 @@ export const createLLMService = () => {
   const makeStreamingRequest = async (promptOrMessages, options = {}) => {
     const {
       stop = null,
-      n_predict = 500,
+      n_predict = 1500,
       temperature = 0.8,
       tools = null,
       tool_choice = "auto",

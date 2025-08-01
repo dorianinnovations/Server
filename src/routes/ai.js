@@ -20,6 +20,10 @@ import unifiedCognitiveEngine from '../services/unifiedCognitiveEngine.js';
 import numinaContextBuilder from '../services/numinaContextBuilder.js';
 import insaneWebSearch from '../tools/insaneWebSearch.js';
 import ubpmAnalysis from '../tools/ubpmAnalysis.js';
+import ubpmService from '../services/ubpmService.js';
+import cognitiveSignatureEngine from '../services/cognitiveSignatureEngine.js';
+import dynamicPromptBuilder from '../services/dynamicPromptBuilder.js';
+import proactiveMemoryService from '../services/proactiveMemoryService.js';
 
 // NOVEL FEATURES: Lightweight optimizations
 import { isSimpleMessage, hasComplexContext, lightweightChat } from '../services/optimizedChat.js';
@@ -118,16 +122,14 @@ const REAL_UBPM_TOOL = {
   }
 };
 
-// OPTIMIZED ADAPTIVE CHAT ENDPOINT
+// COGNITIVE SIGNATURE CHAT ENDPOINT - The Heart of Numina
 router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
-  console.log(`📱 Mobile request received - Content-Type: ${req.get('Content-Type')}`);
-  console.log(`📱 Request fields: ${Object.keys(req.body).join(', ')}`);
+  // Minimal logging for chat requests
   fileUpload.any()(req, res, next);
 }, async (req, res) => {
   const startTime = Date.now();
   
   try {
-    console.log(`📱 After multer - Files: ${req.files?.length || 0}, Body keys: ${Object.keys(req.body).join(', ')}`);
     const { 
       message, 
       prompt, 
@@ -135,9 +137,6 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       conversationId = 'default',
       attachments = [] 
     } = req.body;
-    
-    console.log(`🔍 STREAMING DEBUG: message="${message}", prompt="${prompt}", stream=${stream}, userMessage="${message || prompt}"`);
-    console.log(`🔍 REQUEST BODY:`, JSON.stringify(req.body, null, 2));
     
     const userMessage = message || prompt;
     const userId = req.user.id;
@@ -152,29 +151,35 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       });
     }
 
-    // DISABLED: All responses must use streaming for real-time UX
-    // Fast path disabled - everything goes through streaming
+    // All responses use streaming for real-time UX
 
-    // DISABLED: All responses must use streaming
-    // Direct data queries disabled - everything goes through streaming
-
-    console.log(`🚀 OPTIMIZED Chat [${userTier.toUpperCase()}]: ${userId.slice(-8)} - "${userMessage.slice(0, 50)}..."`);
-
-    // Get conversation context with optimized memory retrieval
+    // Get proactive conversation context with pattern recognition
     let conversationContext = [];
+    let proactiveInsights = null;
+    
     try {
+      // Use proactive memory service for rich context
+      const proactiveContext = await proactiveMemoryService.getProactiveContext(
+        userId, 
+        userMessage, 
+        userTier === 'aether' ? 15 : 8
+      );
+      
+      conversationContext = proactiveContext.recentExchanges;
+      proactiveInsights = {
+        breakthroughs: proactiveContext.breakthroughMoments,
+        themes: proactiveContext.emergingThemes,
+        emotionalState: proactiveContext.emotionalJourney.currentState,
+        connectionPoints: proactiveContext.connectionOpportunities,
+        proactivePrompts: proactiveContext.proactivePrompts
+      };
+      
+      // Proactive insights available
+      
+    } catch (memoryError) {
+      console.warn('Proactive memory error, using standard memory:', memoryError.message);
       const userContext = await enhancedMemoryService.getUserContext(userId, userTier === 'aether' ? 12 : 3);
       conversationContext = userContext.conversation?.recentMessages || [];
-    } catch (memoryError) {
-      console.warn('Memory service error, using fallback:', memoryError.message);
-      const fallbackMemory = await ShortTermMemory.find({ userId })
-        .sort({ timestamp: -1 })
-        .limit(userTier === 'aether' ? 10 : 3)
-        .lean();
-      conversationContext = fallbackMemory.reverse().map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
     }
 
     // NOVEL FEATURE: Context injection for ambiguous queries
@@ -183,7 +188,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       const contextResult = await processContextInjection(userMessage, conversationContext);
       if (contextResult.wasEnriched) {
         processedMessage = contextResult.enrichedMessage;
-        console.log(`🔗 CONTEXT INJECTION: Enhanced ambiguous query`);
+        // Context injection applied
       }
     } catch (contextError) {
       console.warn('Context injection error (non-critical):', contextError.message);
@@ -225,22 +230,44 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       }
     }
 
-    // Build optimized system prompt using cognitive engine
-    const systemPrompt = await numinaContextBuilder.buildOptimizedSystemPrompt(
-      userId, 
-      [...conversationContext, { role: 'user', content: userMessage }]
-    );
+    // Build dynamic system prompt using cognitive signature
+    let systemPrompt;
+    try {
+      // Generate cognitive signature-based prompt
+      systemPrompt = await dynamicPromptBuilder.buildDynamicPrompt(
+        userId,
+        conversationContext,
+        userMessage
+      );
+      
+      // Enhance with proactive insights if available
+      if (proactiveInsights && proactiveInsights.themes.length > 0) {
+        systemPrompt += `\n\n## Emerging Patterns to Address:\n`;
+        proactiveInsights.themes.forEach(theme => {
+          systemPrompt += `- ${theme.theme} (strength: ${theme.strength.toFixed(2)})\n`;
+        });
+      }
+      
+      console.log(`🧬 Dynamic prompt generated with cognitive signature`);
+      
+    } catch (promptError) {
+      console.warn('Dynamic prompt error, using standard prompt:', promptError.message);
+      systemPrompt = await numinaContextBuilder.buildOptimizedSystemPrompt(
+        userId, 
+        [...conversationContext, { role: 'user', content: userMessage }]
+      );
+    }
     
     // Get smart tool usage guidance
     const toolGuidance = await numinaContextBuilder.buildToolUsageGuidance(userId, userMessage);
     console.log(`🔧 Tool guidance: ${toolGuidance.shouldUseTool ? 'USE' : 'SKIP'} (${Math.round(toolGuidance.confidence * 100)}% confidence)`);
     
-    // Trigger cognitive engine analysis in background (non-blocking)
-    unifiedCognitiveEngine.analyzeCognitiveProfile(userId, [{ content: userMessage }])
+    // Trigger UBPM analysis in background (uses existing service - no duplication)
+    ubpmService.analyzeUserBehaviorPatterns(userId, 'chat_interaction')
       .then(result => {
-        // Cognitive processing completed silently
+        // UBPM analysis completed
       })
-      .catch(error => console.warn('Cognitive engine error:', error.message));
+      .catch(() => {});
 
     // Build messages with tier-appropriate context and attachment support
     const contextLimit = userTier === 'aether' ? 10 : userTier === 'pro' ? 8 : 3;
@@ -252,7 +279,6 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       textContent.forEach(file => {
         systemPromptWithFiles += `\n### ${file.filename} (${file.type}, ${(file.size / 1024).toFixed(1)}KB):\n${file.content}\n`;
       });
-      console.log(`📄 TEXT FILES: Processing ${textContent.length} text files totaling ${(textContent.reduce((sum, f) => sum + f.size, 0) / 1024).toFixed(1)}KB`);
     }
     
     const baseMessages = [
@@ -335,8 +361,7 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
             ];
             hasVisionContent = true;
             
-            console.log(`📸 Vision content prepared: ${validImages.length} images with ${userTier} quality`);
-            console.log(`🔍 VISION DEBUG: First image URL preview: ${validImages[0].url.substring(0, 100)}...`);
+                // Vision content prepared
           }
         } catch (visionError) {
           console.error('Vision processing error:', visionError);
@@ -352,21 +377,16 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log(`🧠 Using ${conversationContext.length} context messages (${userTier} tier)`);
-    
-    // Debug vision content structure
-    if (hasVisionContent) {
-      console.log('🔍 VISION DEBUG: Content is array:', Array.isArray(userMessageContent));
-    }
+    // Using conversation context
 
     // Simple search detection and execution - route to AI with search context
     if (/search|find|price|news|what's|latest/i.test(userMessage)) {
-      return await handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier);
+      return await handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier, proactiveInsights);
     }
     
     // Default: Use streaming for better UX
-    console.log(`🔥 USING STREAMING: stream=${stream}, userTier=${userTier}`);
-    return await handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance);
+    // Using streaming response
+    return await handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance, proactiveInsights);
 
   } catch (error) {
     console.error('❌ OPTIMIZED Chat error:', error);
@@ -403,9 +423,9 @@ router.post('/adaptive-chat', protect, checkTierLimits, (req, res, next) => {
 async function handleOptimizedNonStreaming(res, messages, userMessage, userId, conversationId, startTime, userTier, toolGuidance) {
   // Tier-based optimization with UBPM access
   const tierConfig = {
-    core: { n_predict: 500, temperature: 0.7, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] }, // Temporarily enabled for testing
-    pro: { n_predict: 800, temperature: 0.75, tools: [REAL_UBPM_TOOL, ...(toolGuidance.shouldUseTool ? [INSANE_SEARCH_TOOL] : [])] },
-    aether: { n_predict: 1200, temperature: 0.8, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] } // Aether gets everything
+    core: { n_predict: 1500, temperature: 0.7, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] }, // Increased for in-depth responses
+    pro: { n_predict: 2000, temperature: 0.75, tools: [REAL_UBPM_TOOL, ...(toolGuidance.shouldUseTool ? [INSANE_SEARCH_TOOL] : [])] },
+    aether: { n_predict: 3000, temperature: 0.8, tools: [REAL_UBPM_TOOL, INSANE_SEARCH_TOOL] } // Aether gets everything with extended responses
   };
 
   const config = tierConfig[userTier] || tierConfig.core;
@@ -541,7 +561,7 @@ async function handleOptimizedNonStreaming(res, messages, userMessage, userId, c
   });
 }
 
-async function handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance) {
+async function handleOptimizedStreaming(res, messages, userMessage, userId, conversationId, userTier, toolGuidance, proactiveInsights = null) {
   // Proper SSE format for mobile app compatibility
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -555,9 +575,9 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
 
   try {
     const tierConfig = {
-      core: { n_predict: 500, temperature: 0.7, tools: [] }, // Disabled in streaming
-      pro: { n_predict: 800, temperature: 0.75, tools: [] }, // Disabled in streaming  
-      aether: { n_predict: 1200, temperature: 0.8, tools: [] } // Disabled in streaming
+      core: { n_predict: 1500, temperature: 0.7, tools: [] }, // Increased for in-depth responses
+      pro: { n_predict: 2000, temperature: 0.75, tools: [] }, // Increased for in-depth responses  
+      aether: { n_predict: 3000, temperature: 0.8, tools: [] } // Increased for in-depth responses
     };
 
     const config = tierConfig[userTier] || tierConfig.core;
@@ -590,23 +610,48 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
             if (choice?.delta?.content) {
               accumulatedContent += choice.delta.content;
               // Proper SSE format that mobile app expects
-              res.write(`data: ${JSON.stringify({ 
+              // Add cognitive signature metadata periodically
+              const chunkData = { 
                 content: choice.delta.content,
                 tier: userTier,
                 cognitiveEngineActive: true
-              })}\n\n`);
+              };
+              
+              // Include proactive insights ONLY for significant patterns
+              if (proactiveInsights && Math.random() < 0.05 && proactiveInsights.themes.length > 0) {
+                // Filter for high-confidence themes only
+                const significantThemes = proactiveInsights.themes.filter(theme => 
+                  theme.strength > 0.7 && theme.theme.length > 4 && 
+                  !['relationships', 'creativity'].includes(theme.theme) // Remove overly generic themes
+                );
+                
+                if (significantThemes.length > 0) {
+                  chunkData.insight = {
+                    type: 'emerging_theme',
+                    theme: significantThemes[0].theme,
+                    confidence: significantThemes[0].strength
+                  };
+                }
+              }
+              
+              res.write(`data: ${JSON.stringify(chunkData)}\n\n`);
             }
 
-            // Tool calls disabled in streaming mode
+            // Tool calls not supported in streaming mode
 
           } catch (error) {
-            // Log detailed parse error info for debugging
-            console.error('Stream parse error:', {
+            // Handle incomplete JSON gracefully - this is normal for streaming
+            if (error.message.includes('Unexpected end of JSON input')) {
+              // This is expected for incomplete chunks, just continue
+              continue;
+            }
+            
+            // Log only unexpected errors
+            console.warn('Stream parse warning:', {
               message: error.message,
-              data: data.substring(0, 100),
+              data: data.substring(0, 50),
               dataLength: data.length
             });
-            // Continue processing other chunks instead of failing
             continue;
           }
         }
@@ -614,21 +659,29 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
     });
 
     streamResponse.on('end', async () => {
-      // Save conversation after streaming completes
+      // Save conversation with proactive pattern analysis
       try {
         // Ensure content is not empty to avoid MongoDB validation errors
         const finalContent = accumulatedContent.trim() || 'Response incomplete due to technical issues.';
         
+        // Use proactive memory service for pattern-aware saving
+        const saveResult = await proactiveMemoryService.saveWithPatternAnalysis(
+          userId,
+          userMessage,
+          finalContent
+        );
+        
+        // Standard saves for compatibility
         await Promise.all([
-          enhancedMemoryService.saveConversation(userId, userMessage, finalContent),
           conversationService.addMessage(userId, conversationId, 'user', userMessage),
-          conversationService.addMessage(userId, conversationId, 'assistant', finalContent),
-          ShortTermMemory.insertMany([
-            { userId, content: userMessage, role: "user", timestamp: new Date() },
-            { userId, content: finalContent, role: "assistant", timestamp: new Date() }
-          ])
+          conversationService.addMessage(userId, conversationId, 'assistant', finalContent)
         ]);
-        console.log('💾 OPTIMIZED streaming conversation saved');
+        
+        if (saveResult.patterns && saveResult.triggers.length > 0) {
+          console.log(`🎯 Pattern triggers detected: ${saveResult.triggers.map(t => t.type).join(', ')}`);
+        }
+        
+        console.log('💾 Cognitive conversation saved with pattern analysis');
       } catch (saveError) {
         console.error('⚠️ Streaming save error:', saveError.message);
       }
@@ -651,7 +704,7 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
   }
 }
 
-async function handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier) {
+async function handleSearchWithAI(res, messages, userMessage, userId, conversationId, userTier, proactiveInsights = null) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -683,7 +736,7 @@ async function handleSearchWithAI(res, messages, userMessage, userId, conversati
       
       // Stream AI response with search context
       const streamResponse = await llmService.makeStreamingRequest(enhancedMessages, {
-        n_predict: userTier === 'aether' ? 1200 : 800,
+        n_predict: userTier === 'aether' ? 3000 : (userTier === 'pro' ? 2000 : 1500),
         temperature: 0.7,
         tools: []
       });
