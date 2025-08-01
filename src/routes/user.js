@@ -40,6 +40,31 @@ const profilePictureUpload = multer({
   }
 });
 
+// Configure multer for banner image uploads
+const bannerImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for banners
+    files: 1
+  },
+  fileFilter: (req, file, cb) => {
+    // Only allow image files
+    const allowedMimes = [
+      'image/jpeg',
+      'image/jpg', 
+      'image/png',
+      'image/webp',
+      'image/gif'
+    ];
+    
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed for banner images'), false);
+    }
+  }
+});
+
 // Get user profile
 router.get("/profile", protect, async (req, res) => {
   try {
@@ -59,6 +84,7 @@ router.get("/profile", protect, async (req, res) => {
       data: { 
         user,
         profilePicture: user.profile?.get('profilePicture') || null,
+        bannerImage: user.profile?.get('bannerImage') || null,
         tierBadge: {
           tier: userTier,
           name: tierLimits.name,
@@ -197,6 +223,132 @@ router.delete("/profile/picture", protect, async (req, res) => {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       status: MESSAGES.ERROR,
       message: "Failed to delete profile picture"
+    });
+  }
+});
+
+// Upload banner image
+router.post("/profile/banner", protect, bannerImageUpload.single('bannerImage'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: MESSAGES.ERROR,
+        message: "No banner image file provided"
+      });
+    }
+
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: MESSAGES.USER_NOT_FOUND
+      });
+    }
+
+    // Validate file type
+    const fileType = await fileTypeFromBuffer(req.file.buffer);
+    if (!fileType || !fileType.mime.startsWith('image/')) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: MESSAGES.ERROR,
+        message: "Invalid image file"
+      });
+    }
+
+    // Process and compress the banner image (16:9 aspect ratio)
+    const processedImage = await sharp(req.file.buffer)
+      .resize(1200, 675, { 
+        fit: 'cover',
+        position: 'center'
+      })
+      .jpeg({ 
+        quality: 85,
+        progressive: true
+      })
+      .toBuffer();
+
+    // Convert to base64 for storage (in production, upload to cloud storage like AWS S3)
+    const base64Image = processedImage.toString('base64');
+    const bannerImageUrl = `data:image/jpeg;base64,${base64Image}`;
+
+    // Update user profile with banner image URL
+    if (!user.profile) {
+      user.profile = new Map();
+    }
+    
+    user.profile.set('bannerImage', bannerImageUrl);
+    user.profile.set('bannerImageUpdated', new Date().toISOString());
+    user.markModified('profile');
+    
+    await user.save();
+
+    logger.info('Banner image updated successfully', { userId });
+
+    res.json({
+      status: MESSAGES.SUCCESS,
+      message: "Banner image updated successfully",
+      data: {
+        bannerImage: bannerImageUrl,
+        updatedAt: user.profile.get('bannerImageUpdated')
+      }
+    });
+
+  } catch (error) {
+    logger.error('Banner image upload error:', error);
+    
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        status: MESSAGES.ERROR,
+        message: "File size too large. Maximum size is 10MB."
+      });
+    }
+    
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: "Failed to upload banner image"
+    });
+  }
+});
+
+// Delete banner image
+router.delete("/profile/banner", protect, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: MESSAGES.USER_NOT_FOUND
+      });
+    }
+
+    // Remove banner image from user profile
+    if (user.profile && user.profile.has('bannerImage')) {
+      user.profile.delete('bannerImage');
+      user.profile.delete('bannerImageUpdated');
+      user.markModified('profile');
+      await user.save();
+
+      logger.info('Banner image deleted successfully', { userId });
+
+      res.json({
+        status: MESSAGES.SUCCESS,
+        message: "Banner image deleted successfully"
+      });
+    } else {
+      res.status(HTTP_STATUS.NOT_FOUND).json({
+        status: MESSAGES.ERROR,
+        message: "No banner image found"
+      });
+    }
+
+  } catch (error) {
+    logger.error('Banner image deletion error:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      status: MESSAGES.ERROR,
+      message: "Failed to delete banner image"
     });
   }
 });
