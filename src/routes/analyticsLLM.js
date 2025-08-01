@@ -2,6 +2,7 @@ import express from 'express';
 import { protect } from '../middleware/auth.js';
 import logger from '../utils/logger.js';
 import { analyticsRateLimiters } from '../middleware/analyticsRateLimiter.js';
+import aiInsightService from '../services/aiInsightService.js';
 
 const router = express.Router();
 
@@ -323,21 +324,40 @@ router.post('/patterns', protect, analyticsRateLimiters.llmAnalytics, async (req
 
 /**
  * GET /analytics/llm/status
- * Get user's analytics and cooldown status
+ * Get user's analytics and system status
  */
 router.get('/status', protect, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const [cooldownStatus, recentInsights] = await Promise.all([
-      aiInsightService.getUserCooldownStatus(userId),
-      aiInsightService.getUserInsights(userId, 5)
-    ]);
+    // Get basic system status information
+    const systemStatus = {
+      online: true,
+      lastUpdate: Date.now(),
+      activeUsers: 1, // Placeholder - could be enhanced with redis tracking
+      uptime: process.uptime(),
+      memory: {
+        heapUsed: process.memoryUsage().heapUsed,
+        heapTotal: process.memoryUsage().heapTotal,
+        rss: process.memoryUsage().rss
+      }
+    };
     
     res.json({
       success: true,
-      cooldownStatus,
-      recentInsights,
+      data: {
+        memory: {
+          systemUptime: Math.floor(process.uptime()),
+          totalRequests: 0, // Could be tracked with middleware
+          requestsPerHour: 0,
+          totalTokensSaved: 0,
+          totalCostSaved: 0,
+          optimizationStrategies: {},
+          activeUsers: 1,
+          averageSavingsPerRequest: '$0.00'
+        }
+      },
+      systemStatus,
       lastUpdate: Date.now(),
       availableCategories: ['communication', 'personality', 'behavioral', 'emotional', 'growth']
     });
