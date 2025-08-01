@@ -640,17 +640,20 @@ async function handleOptimizedStreaming(res, messages, userMessage, userId, conv
 
           } catch (error) {
             // Handle incomplete JSON gracefully - this is normal for streaming
-            if (error.message.includes('Unexpected end of JSON input')) {
+            if (error.message.includes('Unexpected end of JSON input') || 
+                error.message.includes('Unterminated string in JSON')) {
               // This is expected for incomplete chunks, just continue
               continue;
             }
             
-            // Log only unexpected errors
-            console.warn('Stream parse warning:', {
-              message: error.message,
-              data: data.substring(0, 50),
-              dataLength: data.length
-            });
+            // Log only truly unexpected parsing errors
+            if (!error.message.includes('position')) {
+              console.warn('Stream parse warning:', {
+                message: error.message,
+                data: data.substring(0, 50),
+                dataLength: data.length
+              });
+            }
             continue;
           }
         }

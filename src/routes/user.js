@@ -609,24 +609,25 @@ router.delete("/delete/:userId?", protect, async (req, res) => {
 // Get comprehensive user data from MongoDB collections
 router.get("/mongo-data", protect, async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
 
     // Fetch all relevant user data collections in parallel
     const [
       userData,
       behaviorProfile,
       shortTermMemory,
-      tasks,
-      sandboxSessions,
-      lockedNodes,
-      analyticsInsights,
-      recentEvents
+      tasks
     ] = await Promise.all([
       User.findById(userId).select("-password -__v"),
       UserBehaviorProfile.findOne({ userId }),
       ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(15).lean(),
       Event.find({ userId }).sort({ timestamp: -1 }).limit(20).lean()
     ]);
+
+    // Initialize undefined collections as empty arrays
+    const lockedNodes = [];
+    const analyticsInsights = [];
+    const recentEvents = tasks; // Events were loaded as tasks
 
     // Compile comprehensive data response
     const comprehensiveData = {
@@ -653,28 +654,7 @@ router.get("/mongo-data", protect, async (req, res) => {
         sessionCount: userData?.sessionCount || 0,
         totalInteractions: userData?.totalInteractions || 0
       },
-      sandboxCollection: {
-        sessions: sandboxSessions.map(session => ({
-          sessionId: session.sessionId,
-          userQuery: session.userQuery,
-          nodeCount: session.nodes?.length || 0,
-          connectionCount: session.connections?.length || 0,
-          metadata: session.metadata,
-          lastAccessed: session.lastAccessed,
-          createdAt: session.createdAt
-        })),
-        lockedNodes: lockedNodes.map(node => ({
-          nodeId: node.nodeId,
-          title: node.title,
-          category: node.category,
-          confidence: node.confidence,
-          usageStats: node.usageStats,
-          lockData: node.lockData,
-          createdAt: node.createdAt
-        })),
-        totalSessions: sandboxSessions.length,
-        totalLockedNodes: lockedNodes.length
-      },
+      // sandboxCollection removed - collection no longer exists
       activityCollection: {
         recentEvents: recentEvents,
         eventCount: recentEvents.length
