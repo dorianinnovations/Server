@@ -184,6 +184,9 @@ class WebSocketService {
     
     // Handle emotional state updates
     this.setupEmotionalHandlers(socket);
+    
+    // Handle social posts events
+    this.setupPostsHandlers(socket);
 
     // Handle disconnection
     socket.on('disconnect', () => {
@@ -369,6 +372,100 @@ class WebSocketService {
       }));
 
       socket.emit('online_users', onlineUsers);
+    });
+  }
+
+  /**
+   * Setup social posts event handlers
+   */
+  setupPostsHandlers(socket) {
+    const userId = socket.userId;
+
+    // Join global posts room for live updates
+    socket.join('posts:global');
+
+    // Join community-specific posts rooms
+    socket.on('join_community', (data) => {
+      const { community } = data;
+      if (community) {
+        socket.join(`posts:${community}`);
+        log.debug(`User ${userId} joined community room: ${community}`);
+      }
+    });
+
+    // Leave community posts room
+    socket.on('leave_community', (data) => {
+      const { community } = data;
+      if (community) {
+        socket.leave(`posts:${community}`);
+        log.debug(`User ${userId} left community room: ${community}`);
+      }
+    });
+
+    // Real-time post engagement (likes, reactions)
+    socket.on('post_reaction', (data) => {
+      const { postId, reactionType, action } = data; // action: 'add' or 'remove'
+      
+      const reactionData = {
+        postId,
+        userId,
+        userData: socket.userData,
+        reactionType,
+        action,
+        timestamp: new Date()
+      };
+
+      // Broadcast to all users viewing posts
+      this.io.to('posts:global').emit('post_reaction_update', reactionData);
+      log.debug(`Post reaction ${action} by user ${userId}: ${reactionType} on post ${postId}`);
+    });
+
+    // Real-time comment notifications
+    socket.on('comment_notification', (data) => {
+      const { postId, postAuthorId, commentContent } = data;
+      
+      // Notify the post author if they're online
+      if (postAuthorId && postAuthorId !== userId) {
+        this.sendToUser(postAuthorId, 'new_comment_notification', {
+          postId,
+          commenterId: userId,
+          commenterData: socket.userData,
+          commentContent: commentContent.slice(0, 100) + (commentContent.length > 100 ? '...' : ''),
+          timestamp: new Date()
+        });
+      }
+    });
+
+    // Live post viewing (for real-time engagement metrics)
+    socket.on('view_post', (data) => {
+      const { postId } = data;
+      
+      // Update viewing metrics - could be stored in Redis for real-time analytics
+      const viewData = {
+        postId,
+        userId,
+        timestamp: new Date()
+      };
+
+      // Broadcast view count updates to other users viewing the same post
+      socket.to(`post:${postId}`).emit('post_view_update', {
+        postId,
+        viewerCount: 1 // You could implement actual counting logic
+      });
+    });
+
+    // Join specific post room for detailed view
+    socket.on('join_post', (data) => {
+      const { postId } = data;
+      socket.join(`post:${postId}`);
+      log.debug(`User ${userId} joined post room: ${postId}`);
+    });
+
+    // Leave specific post room
+    socket.on('leave_post', (data) => {
+      const { postId } = data;
+      socket.leave(`post:${postId}`);
+      log.debug(`User ${userId} left post room: ${postId}`);
     });
   }
 
@@ -583,6 +680,14 @@ class WebSocketService {
    */
   broadcast(event, data) {
     this.io.emit(event, data);
+  }
+
+  /**
+   * Emit to all connected users (alias for broadcast)
+   */
+  emitToAll(event, data) {
+    this.broadcast(event, data);
+    log.debug(`Broadcasting event: ${event} to all users`);
   }
 
   /**

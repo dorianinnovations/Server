@@ -34,6 +34,7 @@ import ubpmRoutes from "./routes/ubpm.js"; // CORE FEATURE: User Behavior Patter
 import analyticsLLMRoutes from "./routes/analyticsLLM.js"; // PRESERVED: Your streaming analytics
 // Removed: personalizedAIRoutes (duplicated adaptive-chat functionality)
 import conversationRoutes from "./routes/conversation.js"; // CRITICAL: Conversation management
+import postsRoutes from "./routes/posts.js"; // NEW: Social posts management
 import { protect } from "./middleware/auth.js";
 // Removed: syncRoutes (offline sync not needed)
 // Removed: toolsRoutes (contained CreditPool dependencies)
@@ -73,6 +74,7 @@ import "./models/ShortTermMemory.js";
 // Removed: Task model (deleted)
 import "./models/Event.js";
 import "./models/UserBehaviorProfile.js";
+import "./models/Post.js"; // NEW: Social posts model
 // Removed: Missing models (CollectiveDataConsent, CollectiveSnapshot, AnalyticsInsight, InsightCooldown, SandboxSession, LockedNode)
 
 log.debug("Database models loaded");
@@ -196,6 +198,7 @@ const initializeServer = async () => {
   app.use("/analyticsLLM", analyticsLLMRoutes); // PRESERVED: Your streaming analytics
   // Removed: personalizedAI routes (functionality duplicated in adaptive-chat)
   app.use("/", conversationRoutes); // CRITICAL: Conversation management endpoints
+  app.use("/posts", postsRoutes); // NEW: Social posts endpoints
   
   // Register mobile-optimized routes
   // Removed: sync routes
