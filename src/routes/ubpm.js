@@ -132,7 +132,7 @@ router.get('/context', protect, async (req, res) => {
       // Communication evolution timeline
       communicationStats: communicationPatterns.length > 0 ? {
         style: communicationPatterns[0].pattern.replace('_', ' '),
-        avgResponseLength: communicationPatterns[0].metadata?.avgResponseLength || 150,
+        avgResponseLength: communicationPatterns[0].evidence?.avgLength || communicationPatterns[0].metadata?.avgResponseLength || 150,
         technicalTerms: communicationPatterns[0].metadata?.technicalTerms || ["API", "database", "endpoint", "collection"],
         questionStyle: communicationPatterns[0].metadata?.questionStyle || 'investigative',
         confidence: Math.round(communicationPatterns[0].confidence * 100)

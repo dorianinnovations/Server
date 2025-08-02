@@ -20,7 +20,8 @@ shortTermMemorySchema.index({ userId: 1, role: 1, timestamp: -1 }); // For role-
 
 const ShortTermMemory = mongoose.model(
   "ShortTermMemory",
-  shortTermMemorySchema
+  shortTermMemorySchema,
+  "shorttermmemories"  // Explicitly set collection name to match existing
 );
 // Model ready
 

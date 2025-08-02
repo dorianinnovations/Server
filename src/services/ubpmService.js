@@ -12,9 +12,9 @@ import unifiedCognitiveEngine from './unifiedCognitiveEngine.js';
 class UBPMService {
   constructor() {
     this.analysisThresholds = {
-      minInteractions: 5,        // Minimum interactions to generate insights
+      minInteractions: 3,        // Minimum interactions to generate insights
       patternConfidence: 0.6,    // Lowered for more sensitive pattern detection
-      updateCooldown: 300000,    // 5 minutes between UBPM updates
+      updateCooldown: 10000,     // 10 seconds between UBPM updates (for testing)
       highConfidenceThreshold: 0.85,  // Threshold for high-confidence predictions
       predictionAccuracyTarget: 0.92, // Target accuracy for behavioral predictions
     };
@@ -173,13 +173,15 @@ class UBPMService {
       const [user, behaviorProfileDoc, recentMemories, emotionalSessions] = await Promise.all([
         User.findById(userId).select('emotionalLog profile createdAt'),
         UserBehaviorProfile.findOne({ userId }),
-        ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(100),
+        ShortTermMemory.find({ userId }).sort({ timestamp: -1 }).limit(100).lean(),
         Promise.resolve([])
       ]);
 
       // Create initial profile if none exists
       const behaviorProfile = behaviorProfileDoc || await this.createInitialProfile(userId);
 
+      console.log(`🔍 UBPM DEBUG: User ${userId} has ${recentMemories.length} recent memories, need ${this.analysisThresholds.minInteractions}`);
+      
       if (!user || recentMemories.length < this.analysisThresholds.minInteractions) {
         return null; // Not enough data for meaningful analysis
       }
@@ -314,7 +316,13 @@ class UBPMService {
           consistency,
           predictiveIndicators,
           temporalStability: lengthTrend > -0.1 ? 0.2 : 0
-        }
+        },
+        metadata: new Map([
+          ['avgResponseLength', avgLength],
+          ['technicalTerms', ['API', 'database', 'endpoint', 'collection', 'schema', 'optimization']],
+          ['questionStyle', 'detailed'],
+          ['communicationPreference', 'comprehensive']
+        ])
       });
     }
 
@@ -338,7 +346,13 @@ class UBPMService {
             likelyToAvoidLongExplanations: true,
             prefersQuickResponses: true
           }
-        }
+        },
+        metadata: new Map([
+          ['avgResponseLength', avgLength],
+          ['technicalTerms', ['API', 'database', 'endpoint', 'collection']],
+          ['questionStyle', 'concise'],
+          ['communicationPreference', 'efficiency']
+        ])
       });
     }
 
